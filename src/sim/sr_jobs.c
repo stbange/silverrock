@@ -214,7 +214,7 @@ static SrJobType pick_type(SrRng *r, int max_tier) {
 static bool make_job(const SrCity *c, SrRng *r, int max_tier, uint64_t key, int64_t t, SrJob *j) {
   for (int attempt = 0; attempt < 8; attempt++) {
     SrJobType type = pick_type(r, max_tier);
-    if (!sr_job_generate(c, type, key * 16u + (uint64_t)attempt, t, j)) continue; /* GCOVR_EXCL_LINE */
+    if (!sr_job_generate(c, type, key * 16u + (uint64_t)attempt, t, j)) continue; /* GCOVR_EXCL_LINE reason: generation always binds for these types */
     if (count_bits(j->approaches) < 2) continue; /* never offer a job without a choice */
     if (max_tier >= 3 && j->tier == 2 && sr_rng_chance(r, 400)) { /* Operator-level variant */
       int32_t lo, hi;
@@ -249,7 +249,7 @@ int sr_jobs_fixer_offers(SrJobBoard *b, const SrCity *c, int fixer, int64_t t, i
   for (int k = 0; k < want; k++) {
     SrJob j;
     uint64_t key = sr_hash_combine((uint64_t)fixer * 1000u + (uint64_t)k, (uint64_t)day);
-    if (!make_job(c, &r, max_tier, key, t, &j)) continue; /* GCOVR_EXCL_LINE */
+    if (!make_job(c, &r, max_tier, key, t, &j)) continue; /* GCOVR_EXCL_LINE reason: generation always binds for these types */
     j.source = SR_SRC_FIXER;
     j.client_building = fixer;
     SrJob *s = board_push(b, &j);
@@ -268,7 +268,7 @@ int sr_jobs_board_refresh(SrJobBoard *b, const SrCity *c, int64_t t, int32_t cre
   for (int k = 0; k < 4; k++) {
     SrJob j;
     if (!make_job(c, &r, max_tier, sr_hash_combine(0xB0A2Du, (uint64_t)(day * 8 + k)), t, &j))
-      continue; /* GCOVR_EXCL_LINE */
+      continue; /* GCOVR_EXCL_LINE reason: generation always binds for these types */
     j.source = SR_SRC_BOARD;
     j.client_building = c->home_building; /* report via terminal */
     if (board_push(b, &j)) added++;

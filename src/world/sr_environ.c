@@ -95,7 +95,7 @@ SrSky sr_sky_at(int64_t t, bool pall_removed) {
   s.r = 0.06f;
   s.g = 0.05f;
   s.b = 0.10f;
-  s.ambient = 0.12f;
+  s.ambient = 0.62f;
   s.daylight = false;
   return s;
 }

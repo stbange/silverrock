@@ -114,7 +114,7 @@ SrResult sr_game_new(SrGame *g, uint64_t seed, const SrCityOptions *opt, SrBackg
   g->screen = SR_SCREEN_PLAY;
   g->active_job = -1;
   g->on_ground = true;
-  g->player.yaw = 0;
+  sr_game_teleport_building(g, g->player.home); /* step out onto the sidewalk */
   sr_log(SR_LOG_INFO, "game", "new game in %s (%d districts, %d megacorps)", g->city->name,
          g->city->district_count, g->city->factions.corp_count);
   return SR_OK;

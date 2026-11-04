@@ -1,3 +1,5 @@
 SR_SUITE(suite_core)
 SR_SUITE(suite_world)
 SR_SUITE(suite_sim)
+SR_SUITE(suite_game)
+SR_SUITE(suite_render)
