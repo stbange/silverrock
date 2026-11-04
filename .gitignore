@@ -1,0 +1,25 @@
+# Build output
+/build/
+/out/
+/dist/
+CMakeUserPresets.json
+
+# Coverage and test artefacts
+*.gcda
+*.gcno
+*.gcov
+/coverage/
+/test-results/
+/playwright-report/
+
+# Tooling
+node_modules/
+__pycache__/
+.cache/
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

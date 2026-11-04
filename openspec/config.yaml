@@ -1,0 +1,54 @@
+schema: spec-driven
+
+# Project context: constraints that guide every OpenSpec artifact.
+# The full concept lives in docs/concept/ (game design, technical design, roadmap).
+context: |
+  Silverrock is a single-player, first-person cyberpunk RPG in a procedurally generated,
+  permanently night-time city with a separate, navigable 3D Matrix.
+  Concept documents: docs/concept/01-game-design.md, 02-technical-design.md, 03-roadmap.md.
+
+  Hard technical constraints:
+  - Language C17 only (GCC, Clang, MSVC 2022, Emscripten). No C++ dependencies.
+  - SDL3 for window, input, audio, threads and storage. OpenGL 3.3 Core on desktop,
+    OpenGL ES 3.0 / WebGL 2 on the web. Shaders must use the common subset of both.
+  - Targets: Windows x64, Linux x64, Web via Emscripten (desktop and mobile browsers).
+    The web build must not require pthreads/SharedArrayBuffer.
+  - Mobile browsers must switch to touch controls automatically.
+  - World generation must be bit-exact across all targets for the same seed and generator
+    version (integer / fixed-point math only).
+  - Simulation code must be deterministic for a given binary: no wall clock, seeded RNG streams,
+    ordered iteration.
+  - Only platform/, render/gl/ and app/ may include SDL or OpenGL headers.
+
+  Quality constraints:
+  - Unit tests must keep first-party line coverage at or above 95 % (measured on the unit-test
+    suite alone; exclusions capped at 1.5 % of lines, each with a written reason).
+  - Every spec scenario must be covered by at least one automated test tagged with
+    SR_SPEC("<capability>", "<scenario>") or "@spec <capability>: <scenario>", or be listed in
+    tests/manual-verification.md with a justification.
+  - Automated game tests (headless scenario scripts, autoplayer bots, replays, visual regression,
+    browser end-to-end) run in CI.
+
+rules:
+  proposal:
+    - Map the change to a roadmap milestone (docs/concept/03-roadmap.md).
+    - State explicitly what is out of scope.
+  specs:
+    - Write scenarios so they can be automated in a unit test, a headless scenario script or a
+      browser test; name the measurable threshold where one exists.
+    - Keep scenario names unique within a capability; they are the traceability keys for tests.
+    - Do not name C functions, files or libraries in specs.
+  design:
+    - Address determinism, web constraints (single thread, WebGL 2, memory) and mobile budgets
+      whenever they are affected.
+  tasks:
+    - Every task group lands its own unit tests and keeps coverage at or above 95 %.
+    - Every task names its verification (test, scenario script, CI job or observable behaviour).
+
+operations:
+  apply:
+    guidance:
+      - Run the unit tests, coverage gate and spec traceability report before marking a task done.
+  archive:
+    guidance:
+      - Archive only when CI is green on Windows, Linux and Web and every scenario has a test.
