@@ -1,0 +1,12 @@
+# @spec player-life: New game start
+# @spec world-environment: Default time scale
+seed        42
+newgame     background=netrunner
+expect      clock.weekday == Mon
+expect      clock.hour == 21
+expect      player.unread == 1
+expect      player.rent.due == 604740
+expect      player.skill.netrunning == 3
+expect      city.valid == 1
+steps       3600
+expect      clock.time == 79200

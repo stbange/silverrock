@@ -1,0 +1,8 @@
+# @spec job-system: Starter economy is sustainable
+# Gig worker bot on 50 seeds, four weeks of T0 jobs only. At least 95 % must pass.
+# allow_failures=5%
+seed        random(50)
+newgame     background=any
+autoplay    strategy=gig weeks=4
+expect      player.rent.missed == 0
+expect      player.needs.starving_hours == 0

@@ -1,0 +1,4 @@
+# fixture: a failing expectation must make the runner exit non-zero
+seed 1
+newgame
+expect player.cash == -1

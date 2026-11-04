@@ -1,0 +1,20 @@
+# @spec player-life: Two missed payments lead to eviction
+# @spec player-life: Missed payment
+# @spec player-life: Paying the debt restores access
+seed        1234567
+newgame     background=street_kid
+expect      player.home != none
+expect      player.rent.missed == 0
+set         player.cash = 0
+advance     7d
+expect      player.rent.missed == 1
+expect      player.rent.debt == 350
+expect      player.home.locked == false
+advance     7d
+expect      player.rent.missed == 2
+expect      player.home.locked == true
+set         player.cash = 2000
+paydebt
+expect      player.home.locked == false
+expect      player.rent.debt == 0
+expect      player.cash == 1300

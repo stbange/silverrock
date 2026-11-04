@@ -1,0 +1,204 @@
+#include "sim/sr_crowd.h"
+
+#include "core/sr_rng.h"
+
+#include <math.h>
+#include <string.h>
+
+void sr_crowd_init(SrCrowd *cr) {
+  memset(cr, 0, sizeof *cr);
+  cr->last_slot = -1;
+}
+
+bool sr_camera_sees(const SrCamera *cam, SrVec3 p) {
+  SrVec3 d = sr_v3_sub(p, cam->pos);
+  d.y = 0;
+  float len = sr_v3_len(d);
+  if (len < 0.5f) return true;
+  SrVec3 f = cam->forward;
+  f.y = 0;
+  f = sr_v3_norm(f);
+  return sr_v3_dot(sr_v3_scale(d, 1.0f / len), f) >= cam->cos_half_fov;
+}
+
+static float dist_xz(SrVec3 a, SrVec3 b) {
+  float dx = a.x - b.x, dz = a.z - b.z;
+  return sqrtf(dx * dx + dz * dz);
+}
+
+int sr_crowd_find(const SrCrowd *cr, uint64_t key) {
+  for (int i = 0; i < cr->count; i++)
+    if (cr->agents[i].key == key) return i;
+  return -1;
+}
+
+static bool may_pop(const SrCamera *cam, SrVec3 p) {
+  return !(dist_xz(p, cam->pos) < SR_NO_POP_RADIUS && sr_camera_sees(cam, p));
+}
+
+static void pick_target(SrAgent *a, const SrCity *c) {
+  /* walk to another corner of the block's sidewalk ring */
+  int32_t ox, oy;
+  sr_city_block_origin(a->block < 0 ? 0 : a->block, c->grid, &ox, &oy);
+  SrRng r = sr_rng_stream(a->key, "walk", (uint64_t)(a->pos.x * 7 + a->pos.z), 0);
+  float m = (float)(SR_STREET_CM - 300) / 100.0f;
+  float corners[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+  int k = sr_rng_range(&r, 0, 3);
+  float span = (float)SR_BLOCK_CM / 100.0f;
+  a->target = sr_v3((float)ox / 100.0f + m + corners[k][0] * (span - m),
+                    0, (float)oy / 100.0f + m + corners[k][1] * (span - m));
+}
+
+static void spawn(SrCrowd *cr, const SrCity *c, const SrAmbient *amb, int npc, int block) {
+  if (cr->count >= SR_MAX_AGENTS) return;
+  SrAgent *a = &cr->agents[cr->count++];
+  memset(a, 0, sizeof *a);
+  a->key = amb->key;
+  a->npc = npc;
+  a->look = amb->look;
+  a->role = amb->role;
+  a->faction = amb->faction;
+  a->bravery = amb->bravery;
+  a->umbrella = amb->umbrella;
+  a->pos = sr_v3((float)amb->x / 100.0f, 0, (float)amb->y / 100.0f);
+  a->speed = 1.2f + (float)(amb->key % 5) * 0.08f;
+  a->state = SR_AG_WALK;
+  a->block = block;
+  pick_target(a, c);
+}
+
+void sr_crowd_refresh(SrCrowd *cr, const SrCity *c, const SrPopulation *pop, const SrCamera *cam,
+                      int64_t t, int max_agents) {
+  int64_t slot = t / 1800;
+  bool new_slot = slot != cr->last_slot;
+  cr->last_slot = slot;
+  /* despawn agents far away; never in view nearby */
+  for (int i = cr->count - 1; i >= 0; i--) {
+    SrAgent *a = &cr->agents[i];
+    float d = dist_xz(a->pos, cam->pos);
+    bool far = d > SR_CROWD_RADIUS + 20.0f;
+    bool stale = new_slot && a->npc < 0 && d > SR_CROWD_RADIUS * 0.6f;
+    if ((far || stale) && may_pop(cam, a->pos)) {
+      cr->agents[i] = cr->agents[--cr->count];
+    }
+  }
+  int bx = (int)(cam->pos.x * 100.0f) / SR_BLOCK_CM, by = (int)(cam->pos.z * 100.0f) / SR_BLOCK_CM;
+  int rad = (int)(SR_CROWD_RADIUS * 100.0f) / SR_BLOCK_CM + 1;
+  SrAmbient amb[SR_MAX_AMBIENT_PER_BLOCK];
+  for (int dy = -rad; dy <= rad; dy++) {
+    for (int dx = -rad; dx <= rad; dx++) {
+      int b = sr_city_block_index(c, bx + dx, by + dy);
+      if (b < 0) continue;
+      int n = sr_ambient_generate(c, b, t, amb, SR_MAX_AMBIENT_PER_BLOCK);
+      for (int i = 0; i < n && cr->count < max_agents; i++) {
+        if (sr_crowd_find(cr, amb[i].key) >= 0) continue;
+        SrVec3 p = sr_v3((float)amb[i].x / 100.0f, 0, (float)amb[i].y / 100.0f);
+        if (dist_xz(p, cam->pos) > SR_CROWD_RADIUS) continue;
+        if (!may_pop(cam, p)) continue; /* no pop-in inside the view nearby */
+        int npc = pop ? sr_population_find_by_key(pop, amb[i].key) : -1;
+        spawn(cr, c, &amb[i], npc, b);
+      }
+    }
+  }
+}
+
+void sr_crowd_update(SrCrowd *cr, const SrCity *c, float dt, float rain) {
+  for (int i = 0; i < cr->count; i++) {
+    SrAgent *a = &cr->agents[i];
+    if (a->timer > 0) {
+      a->timer -= dt;
+      if (a->timer <= 0 && a->state != SR_AG_SHELTER) {
+        a->state = SR_AG_WALK;
+        pick_target(a, c);
+      }
+    }
+    if (rain > 0.5f && !a->umbrella && !a->covered && a->state == SR_AG_WALK) {
+      a->state = SR_AG_SHELTER;
+      a->timer = 5.0f + (float)(a->key % 20); /* time to reach an awning */
+    }
+    if (a->state == SR_AG_SHELTER && a->timer <= 0) a->covered = true;
+    if (rain < 0.2f && a->state == SR_AG_SHELTER) {
+      a->state = SR_AG_WALK;
+      a->covered = false;
+      a->timer = 0;
+    }
+    float speed = 0.0f;
+    SrVec3 goal = a->target;
+    switch (a->state) {
+    case SR_AG_WALK: speed = a->speed; break;
+    case SR_AG_FLEE: speed = 4.0f; break;
+    default: speed = 0.0f; break;
+    }
+    if (speed > 0) {
+      SrVec3 d = sr_v3_sub(goal, a->pos);
+      d.y = 0;
+      float len = sr_v3_len(d);
+      if (len < 0.5f) {
+        if (a->state == SR_AG_WALK) pick_target(a, c);
+      } else {
+        a->dir = sr_v3_scale(d, 1.0f / len);
+        float step = speed * dt;
+        if (step > len) step = len;
+        a->pos = sr_v3_add(a->pos, sr_v3_scale(a->dir, step));
+      }
+    }
+  }
+}
+
+int sr_crowd_gunfire(SrCrowd *cr, const SrCity *c, SrVec3 pos, float radius, SrEventLog *log,
+                     int64_t t) {
+  int reacted = 0;
+  bool reported = false;
+  int block = sr_city_block_at(c, (int32_t)(pos.x * 100.0f), (int32_t)(pos.z * 100.0f));
+  SrDistrictType dt = block >= 0 ? c->districts[c->blocks[block].district].type : SR_D_RESIDENTIAL;
+  for (int i = 0; i < cr->count; i++) {
+    SrAgent *a = &cr->agents[i];
+    if (dist_xz(a->pos, pos) > radius) continue;
+    SrResponse r = sr_react_gunfire(a->bravery, dt, a->key);
+    reacted++;
+    switch (r) {
+    case SR_RESP_FLEE: {
+      a->state = SR_AG_FLEE;
+      SrVec3 away = sr_v3_norm(sr_v3_sub(a->pos, pos));
+      if (sr_v3_len(away) < 0.1f) away = sr_v3(1, 0, 0);
+      a->target = sr_v3_add(a->pos, sr_v3_scale(away, 40.0f));
+      a->timer = 10.0f;
+      break;
+    }
+    case SR_RESP_COVER: a->state = SR_AG_COVER; a->timer = 8.0f; break;
+    default: a->state = SR_AG_GAWK; a->timer = 6.0f; a->dir = sr_v3_norm(sr_v3_sub(pos, a->pos)); break;
+    }
+    if (!reported && sr_witness_reports(dt, a->bravery, a->key)) {
+      reported = true;
+      cr->reports++;
+      if (log) {
+        SrWorldEvent ev;
+        memset(&ev, 0, sizeof ev);
+        ev.type = SR_EV_CRIME_REPORT;
+        ev.time = t;
+        ev.district = block >= 0 ? c->blocks[block].district : -1;
+        ev.building = -1;
+        ev.victim_faction = -1;
+        ev.blamed_faction = -2;
+        ev.significant = false;
+        memcpy(ev.text, "shots fired, suspect described", 31);
+        sr_events_add(log, &ev);
+      }
+    }
+  }
+  return reacted;
+}
+
+float sr_crowd_exposed_share(const SrCrowd *cr) {
+  if (cr->count == 0) return 0.0f;
+  int exposed = 0;
+  for (int i = 0; i < cr->count; i++) exposed += !cr->agents[i].umbrella && !cr->agents[i].covered;
+  return (float)exposed / (float)cr->count;
+}
+
+int sr_crowd_visible(const SrCrowd *cr, const SrCamera *cam, float max_dist) {
+  int n = 0;
+  for (int i = 0; i < cr->count; i++)
+    if (dist_xz(cr->agents[i].pos, cam->pos) <= max_dist && sr_camera_sees(cam, cr->agents[i].pos)) n++;
+  return n;
+}
