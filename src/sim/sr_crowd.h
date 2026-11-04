@@ -7,8 +7,8 @@
 #include "core/sr_math.h"
 #include "sim/sr_population.h"
 
-#define SR_MAX_AGENTS 320
-#define SR_CROWD_RADIUS 110.0f
+#define SR_MAX_AGENTS 400
+#define SR_CROWD_RADIUS 160.0f
 #define SR_NO_POP_RADIUS 30.0f
 
 typedef enum SrAgentState {
@@ -36,10 +36,25 @@ typedef struct SrCamera {
   float cos_half_fov;
 } SrCamera;
 
+#define SR_MAX_VEHICLES 16
+
+typedef struct SrVehicle {
+  uint64_t key;
+  SrVec3 pos;
+  SrVec3 dir;   /* unit vector along the lane */
+  float speed;  /* cruise speed m/s */
+  bool stopped;
+  uint8_t color;
+} SrVehicle;
+
 typedef struct SrCrowd {
   int count;
   SrAgent agents[SR_MAX_AGENTS];
+  int vehicle_count;
+  SrVehicle vehicles[SR_MAX_VEHICLES];
+  uint64_t vehicle_serial;
   int64_t last_slot;
+  bool fresh; /* nothing has been shown yet: spawning in view is invisible */
   int spawned_in_view_near; /* diagnostics: must stay 0 */
   int despawned_in_view_near;
   int reports;
@@ -57,5 +72,9 @@ int sr_crowd_gunfire(SrCrowd *cr, const SrCity *c, SrVec3 pos, float radius, SrE
 int sr_crowd_find(const SrCrowd *cr, uint64_t key);
 float sr_crowd_exposed_share(const SrCrowd *cr); /* outdoor, no cover, no umbrella */
 int sr_crowd_visible(const SrCrowd *cr, const SrCamera *cam, float max_dist);
+/* True when a pedestrian is on the crossing in front of the vehicle. */
+bool sr_vehicle_should_stop(const SrVehicle *v, const SrVec3 *peds, int n);
+/* Spawns, moves and despawns traffic around the camera; the player counts as a pedestrian. */
+void sr_crowd_traffic(SrCrowd *cr, const SrCity *c, const SrCamera *cam, SrVec3 player, float dt);
 
 #endif

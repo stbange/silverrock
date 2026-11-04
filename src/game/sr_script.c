@@ -93,7 +93,7 @@ bool sr_game_query(SrGame *g, const char *path, char *out, size_t cap) {
   Q("audio.muted", "%s", g->audio_muted ? "true" : "false")
   Q("context", "%d", (int)sr_game_context(g).kind)
   if (strcmp(path, "screen") == 0) {
-    static const char *const n[] = {"title", "play", "pause", "terminal", "dead"};
+    static const char *const n[] = {"title", "play", "pause", "terminal", "dead", "create"};
     snprintf(out, cap, "%s", n[g->screen]);
     return true;
   }

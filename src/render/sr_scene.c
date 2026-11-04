@@ -333,6 +333,20 @@ void sr_build_characters(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *
     if (dx * dx + dz * dz > max_dist * max_dist) continue;
     sr_build_character(&a->look, a->pos, a->dir, a->umbrella, out);
   }
+  for (int i = 0; i < cr->vehicle_count; i++) {
+    const SrVehicle *v = &cr->vehicles[i];
+    float dx = v->pos.x - cam.x, dz = v->pos.z - cam.z;
+    if (dx * dx + dz * dz > max_dist * max_dist) continue;
+    float lx = fabsf(v->dir.x) > 0.5f ? 2.2f : 0.9f, lz = fabsf(v->dir.x) > 0.5f ? 0.9f : 2.2f;
+    SrColor body = sr_corp_color(v->color);
+    body = shade(body, 45);
+    sr_mesh_box(out, sr_v3(v->pos.x - lx, 0.3f, v->pos.z - lz), sr_v3(v->pos.x + lx, 1.3f, v->pos.z + lz), body, SR_LAYER_METAL, 0.5f, 0);
+    SrVec3 f = sr_v3_add(v->pos, sr_v3_scale(v->dir, 2.25f));
+    SrVec3 b = sr_v3_sub(v->pos, sr_v3_scale(v->dir, 2.25f));
+    sr_mesh_box(out, sr_v3(f.x - 0.4f, 0.6f, f.z - 0.4f), sr_v3(f.x + 0.4f, 0.9f, f.z + 0.4f), (SrColor){255, 250, 220, 255}, SR_LAYER_WHITE, 0, 255);
+    sr_mesh_box(out, sr_v3(b.x - 0.4f, 0.6f, b.z - 0.4f), sr_v3(b.x + 0.4f, 0.9f, b.z + 0.4f),
+                v->stopped ? (SrColor){255, 30, 30, 255} : (SrColor){150, 20, 20, 255}, SR_LAYER_WHITE, 0, 255);
+  }
 }
 
 /* ---- rain, skyline, landmarks ----------------------------------------------------------------- */

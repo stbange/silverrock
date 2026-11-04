@@ -4,6 +4,7 @@
 #include "sr_test.h"
 
 #include <stdlib.h>
+#include <time.h>
 
 static SrGame *new_game(uint64_t seed) {
   SrGame *g = sr_game_create();
@@ -775,7 +776,62 @@ static void test_autoplay_strategies(void) {
   sr_game_destroy(g);
 }
 
+static void test_character_creation(void) {
+  SR_SPEC("player-life", "Randomised appearance");
+  SR_SPEC("player-life", "Background applies starting values");
+  SrGame *g = sr_game_create();
+  sr_game_begin_create(g, 4242);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_CREATE);
+  SrAppearance a = sr_game_create_preview(g);
+  sr_game_create_randomize(g);
+  SrAppearance b = sr_game_create_preview(g);
+  SR_CHECK(sr_appearance_key(&a) != sr_appearance_key(&b));
+  SR_CHECK(b.skin < 8 && b.hair < 12 && b.body < 4); /* valid parts */
+  sr_game_create_select(g, SR_BG_MEDIC);
+  sr_game_create_select(g, 99); /* ignored */
+  SR_CHECK_EQ(g->create_bg, SR_BG_MEDIC);
+  SR_CHECK_EQ(sr_game_create_confirm(g), SR_OK);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_PLAY);
+  SR_CHECK_EQ(g->player.background, SR_BG_MEDIC);
+  SR_CHECK_EQ(sr_appearance_key(&g->player.look), sr_appearance_key(&b));
+  SR_CHECK_EQ(g->player.prog.skill_rank[SR_SK_MEDICINE], 3);
+  char out[32];
+  g->screen = SR_SCREEN_CREATE;
+  SR_CHECK(sr_game_query(g, "screen", out, sizeof out) && strcmp(out, "create") == 0);
+  sr_game_destroy(g);
+}
+
+static void test_performance_targets(void) {
+  SR_SPEC("city-generation", "Macro generation time");
+  SR_SPEC("population-simulation", "Peak crowd on desktop");
+  /* generation must finish well inside 3 s; measured in CPU time, generous for sanitizer builds */
+  clock_t t0 = clock();
+  SrCity *c = sr_city_create(0xBEEFull, NULL);
+  double secs = (double)(clock() - t0) / CLOCKS_PER_SEC;
+  printf("  macro generation: %.3f s\n", secs);
+  SR_CHECK(secs < 3.0);
+  sr_city_destroy(c);
+  /* busiest street at peak: at least 150 citizens in view */
+  SrGame *g = new_game(0x5EEDC0DEull);
+  int best = -1;
+  for (int k = 0; k < g->city->district_count; k++)
+    if (g->city->districts[k].type == SR_D_ENTERTAINMENT)
+      best = sr_city_block_at(g->city, g->city->districts[k].cx, g->city->districts[k].cy);
+  int32_t ox, oy;
+  sr_city_block_origin(best, g->city->grid, &ox, &oy);
+  g->player.pos = sr_v3((float)ox / 100.0f + 8, 1.7f, (float)oy / 100.0f + 8);
+  sr_clock_set_seconds(&g->clock, 2 * 86400 + 23 * 3600);
+  g->last_minute = sr_game_time(g) / 60;
+  for (int i = 0; i < 60; i++) sr_game_step(g, NULL);
+  int visible = sr_crowd_visible(&g->crowd, &g->cam, 160.0f);
+  printf("  citizens in view at peak: %d\n", visible);
+  SR_CHECK(visible >= 150);
+  sr_game_destroy(g);
+}
+
 void suite_game(void) {
+  SR_RUN(test_character_creation);
+  SR_RUN(test_performance_targets);
   SR_RUN(test_fixed_timestep);
   SR_RUN(test_movement_and_collision);
   SR_RUN(test_pause_focus_terminal);

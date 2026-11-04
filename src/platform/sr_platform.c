@@ -286,7 +286,7 @@ bool sr_app_init(SrApp *a, int argc, char **argv) {
 
 void sr_app_start_game(SrApp *a, uint64_t seed) {
   sr_game_new(a->game, seed, NULL, SR_BG_STREET_KID, "Runner");
-  a->game->max_agents = a->input.coarse_pointer ? 90 : 220;
+  a->game->max_agents = a->input.coarse_pointer ? 120 : 400;
   sr_scene_free(&a->scene);
   sr_scene_init(&a->scene, a->input.coarse_pointer);
 }
@@ -299,6 +299,21 @@ static void autosave_if_needed(SrApp *a) {
   }
 }
 
+static void start_created(SrApp *a) {
+  sr_game_create_confirm(a->game);
+  a->game->max_agents = a->input.coarse_pointer ? 120 : 400;
+  sr_scene_free(&a->scene);
+  sr_scene_init(&a->scene, a->input.coarse_pointer);
+}
+
+/* Creation screen by pointer: left half cycles the background, right half re-rolls the look,
+ * bottom right starts. */
+static void create_tap(SrApp *a, float x, float y) {
+  if (x < 0.5f) sr_game_create_select(a->game, (a->game->create_bg + 1) % SR_BG_COUNT);
+  else if (y > 0.75f) start_created(a);
+  else sr_game_create_randomize(a->game);
+}
+
 void sr_app_event(SrApp *a, const SDL_Event *e) {
   SrGame *g = a->game;
   switch (e->type) {
@@ -306,8 +321,18 @@ void sr_app_event(SrApp *a, const SDL_Event *e) {
   case SDL_EVENT_KEY_DOWN:
   case SDL_EVENT_KEY_UP: {
     bool down = e->type == SDL_EVENT_KEY_DOWN;
-    if (down && e->key.scancode == SDL_SCANCODE_RETURN && g->screen == SR_SCREEN_TITLE)
-      sr_app_start_game(a, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+    if (down && g->screen == SR_SCREEN_CREATE) {
+      SDL_Scancode sc = e->key.scancode;
+      if (sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_5) sr_game_create_select(g, (int)(sc - SDL_SCANCODE_1));
+      if (sc == SDL_SCANCODE_R) sr_game_create_randomize(g);
+      if (sc == SDL_SCANCODE_DOWN) sr_game_create_select(g, (g->create_bg + 1) % SR_BG_COUNT);
+      if (sc == SDL_SCANCODE_RETURN) start_created(a);
+      break;
+    }
+    if (down && e->key.scancode == SDL_SCANCODE_RETURN && g->screen == SR_SCREEN_TITLE) {
+      sr_game_begin_create(g, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+      break;
+    }
     if (down && e->key.scancode == SDL_SCANCODE_F11 && a->window) {
       g->settings.fullscreen = !g->settings.fullscreen;
       SDL_SetWindowFullscreen(a->window, g->settings.fullscreen);
@@ -323,7 +348,12 @@ void sr_app_event(SrApp *a, const SDL_Event *e) {
     bool down = e->type == SDL_EVENT_MOUSE_BUTTON_DOWN;
     if (e->button.which == SDL_TOUCH_MOUSEID) break; /* synthesized from touch */
     if (down && g->screen == SR_SCREEN_TITLE) {
-      sr_app_start_game(a, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+      sr_game_begin_create(g, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+      break;
+    }
+    if (down && g->screen == SR_SCREEN_CREATE) {
+      float mx = a->css_w > 0 ? e->button.x / a->css_w : 0.5f, my = a->css_h > 0 ? e->button.y / a->css_h : 0.5f;
+      create_tap(a, mx, my);
       break;
     }
     if (down && g->screen == SR_SCREEN_PAUSE) sr_game_confirm_resume(g);
@@ -339,8 +369,13 @@ void sr_app_event(SrApp *a, const SDL_Event *e) {
   case SDL_EVENT_FINGER_UP: {
     int phase = e->type == SDL_EVENT_FINGER_DOWN ? 0 : e->type == SDL_EVENT_FINGER_MOTION ? 1 : 2;
     if (phase == 0 && g->screen == SR_SCREEN_TITLE) {
-      sr_app_start_game(a, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+      sr_input_touch(&a->input, (int64_t)e->tfinger.fingerID, e->tfinger.x, e->tfinger.y, 0);
       sr_input_touch(&a->input, (int64_t)e->tfinger.fingerID, e->tfinger.x, e->tfinger.y, 2);
+      sr_game_begin_create(g, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+      break;
+    }
+    if (g->screen == SR_SCREEN_CREATE) {
+      if (phase == 0) create_tap(a, e->tfinger.x, e->tfinger.y);
       break;
     }
     if (phase == 0 && g->screen == SR_SCREEN_PAUSE) sr_game_confirm_resume(g);
@@ -367,7 +402,13 @@ void sr_app_event(SrApp *a, const SDL_Event *e) {
   case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
   case SDL_EVENT_GAMEPAD_BUTTON_UP:
     if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && g->screen == SR_SCREEN_TITLE) {
-      sr_app_start_game(a, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+      sr_game_begin_create(g, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+      break;
+    }
+    if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && g->screen == SR_SCREEN_CREATE) {
+      if (e->gbutton.button == SDL_GAMEPAD_BUTTON_SOUTH) start_created(a);
+      else if (e->gbutton.button == SDL_GAMEPAD_BUTTON_WEST) sr_game_create_randomize(g);
+      else sr_game_create_select(g, (g->create_bg + 1) % SR_BG_COUNT);
       break;
     }
     sr_input_gamepad_button(&a->input, sr_platform_pad_button(e->gbutton.button),

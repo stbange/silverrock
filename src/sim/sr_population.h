@@ -7,7 +7,7 @@
 #include "world/sr_world.h"
 
 #define SR_MAX_NPCS 3000
-#define SR_MAX_AMBIENT_PER_BLOCK 48
+#define SR_MAX_AMBIENT_PER_BLOCK 96
 
 typedef struct SrAppearance {
   uint8_t body, head, skin, face, hair, hair_color, outfit, outfit_color, marker, cyber,
@@ -75,6 +75,10 @@ int sr_population_staff_of(const SrPopulation *p, int building);
 int sr_population_promote(SrPopulation *p, const SrCity *c, const SrAmbient *a, int64_t t);
 int sr_population_find_by_key(const SrPopulation *p, uint64_t key);
 const char *sr_role_name(SrRole r);
+/* Memory of the player: helping raises, harming lowers the attitude (-100..100). */
+void sr_npc_remember(SrNpc *n, int delta);
+/* Greeting that reflects the remembered attitude. */
+const char *sr_npc_greeting(const SrNpc *n);
 
 /* Services */
 bool sr_poi_open(const SrCity *c, int building, int64_t t);

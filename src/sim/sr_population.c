@@ -264,7 +264,7 @@ int sr_population_promote(SrPopulation *p, const SrCity *c, const SrAmbient *a, 
 /* ---- ambient crowds --------------------------------------------------------------------- */
 
 int sr_crowd_density(SrDistrictType t, int hour) {
-  static const int base[SR_D_COUNT] = {18, 12, 26, 30, 16, 18, 8, 6, 6, 14, 3};
+  static const int base[SR_D_COUNT] = {45, 30, 65, 80, 40, 45, 20, 15, 15, 35, 8};
   int pct;
   if (t == SR_D_ENTERTAINMENT) {
     if (hour >= 20 || hour <= 4) pct = 100;
@@ -383,4 +383,13 @@ bool sr_bark(const SrCity *c, const SrEventLog *log, int district, int64_t t, ui
   snprintf(out, cap, "%s", generic[sr_mix64(key) % SR_ARRAY_LEN(generic)]);
   (void)c;
   return false;
+}
+
+void sr_npc_remember(SrNpc *n, int delta) { n->attitude = (int8_t)SR_CLAMP(n->attitude + delta, -100, 100); }
+
+const char *sr_npc_greeting(const SrNpc *n) {
+  if (n->attitude <= -30) return "You again. Get lost before I call someone.";
+  if (n->attitude < 10) return "What do you want?";
+  if (n->attitude < 40) return "Good to see you again.";
+  return "My favourite customer! The usual?";
 }

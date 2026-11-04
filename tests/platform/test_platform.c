@@ -382,6 +382,13 @@ static void test_title_starts(void) {
   frames(&g_app, 2);
   push_key(SDL_SCANCODE_RETURN, true);
   push_key(SDL_SCANCODE_RETURN, false);
+  SR_CHECK_EQ(g_app.game->screen, SR_SCREEN_CREATE);
+  frames(&g_app, 2); /* draws the creation screen */
+  push_key(SDL_SCANCODE_3, true);
+  push_key(SDL_SCANCODE_R, true);
+  push_key(SDL_SCANCODE_DOWN, true);
+  SR_CHECK_EQ(g_app.game->create_bg, 3);
+  push_key(SDL_SCANCODE_RETURN, true);
   SR_CHECK_EQ(g_app.game->screen, SR_SCREEN_PLAY);
   /* mouse, touch and gamepad also start from the title */
   SDL_Event e;
@@ -391,7 +398,30 @@ static void test_title_starts(void) {
     memset(&e, 0, sizeof e);
     e.type = types[i];
     sr_app_event(&g_app, &e);
+    SR_CHECK_EQ(g_app.game->screen, SR_SCREEN_CREATE);
+    /* left side cycles the background, right side re-rolls, bottom right starts */
+    memset(&e, 0, sizeof e);
+    e.type = types[i];
+    if (types[i] == SDL_EVENT_MOUSE_BUTTON_DOWN) { e.button.x = 10; e.button.y = 10; }
+    if (types[i] == SDL_EVENT_FINGER_DOWN) { e.tfinger.x = 0.9f; e.tfinger.y = 0.2f; }
+    if (types[i] == SDL_EVENT_GAMEPAD_BUTTON_DOWN) e.gbutton.button = SDL_GAMEPAD_BUTTON_WEST;
+    sr_app_event(&g_app, &e);
+    if (types[i] == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+      e.gbutton.button = SDL_GAMEPAD_BUTTON_DPAD_DOWN;
+      sr_app_event(&g_app, &e);
+      e.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
+    } else if (types[i] == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+      e.button.x = g_app.css_w * 0.9f;
+      e.button.y = g_app.css_h * 0.9f;
+    } else {
+      e.tfinger.y = 0.9f;
+    }
+    sr_app_event(&g_app, &e);
     SR_CHECK_EQ(g_app.game->screen, SR_SCREEN_PLAY);
+    if (types[i] == SDL_EVENT_FINGER_DOWN) {
+      e.type = SDL_EVENT_FINGER_UP;
+      sr_app_event(&g_app, &e);
+    }
   }
   /* touch on the pause screen resumes */
   sr_game_focus(g_app.game, false);

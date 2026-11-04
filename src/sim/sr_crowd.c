@@ -8,6 +8,7 @@
 void sr_crowd_init(SrCrowd *cr) {
   memset(cr, 0, sizeof *cr);
   cr->last_slot = -1;
+  cr->fresh = true;
 }
 
 bool sr_camera_sees(const SrCamera *cam, SrVec3 p) {
@@ -85,8 +86,29 @@ void sr_crowd_refresh(SrCrowd *cr, const SrCity *c, const SrPopulation *pop, con
   int bx = (int)(cam->pos.x * 100.0f) / SR_BLOCK_CM, by = (int)(cam->pos.z * 100.0f) / SR_BLOCK_CM;
   int rad = (int)(SR_CROWD_RADIUS * 100.0f) / SR_BLOCK_CM + 1;
   SrAmbient amb[SR_MAX_AMBIENT_PER_BLOCK];
-  for (int dy = -rad; dy <= rad; dy++) {
+  /* blocks in front of the camera first, so the agent budget goes where people look */
+  int order[(2 * 4 + 1) * (2 * 4 + 1)][2];
+  float score[(2 * 4 + 1) * (2 * 4 + 1)];
+  int no = 0;
+  if (rad > 4) rad = 4;
+  for (int dy = -rad; dy <= rad; dy++)
     for (int dx = -rad; dx <= rad; dx++) {
+      float fx = (float)dx * cam->forward.x + (float)dy * cam->forward.z;
+      float s = (float)(dx * dx + dy * dy) - 2.5f * fx;
+      int k = no++;
+      while (k > 0 && score[k - 1] > s) {
+        score[k] = score[k - 1];
+        order[k][0] = order[k - 1][0];
+        order[k][1] = order[k - 1][1];
+        k--;
+      }
+      score[k] = s;
+      order[k][0] = dx;
+      order[k][1] = dy;
+    }
+  for (int oi = 0; oi < no; oi++) {
+    {
+      int dx = order[oi][0], dy = order[oi][1];
       int b = sr_city_block_index(c, bx + dx, by + dy);
       if (b < 0) continue;
       int n = sr_ambient_generate(c, b, t, amb, SR_MAX_AMBIENT_PER_BLOCK);
@@ -94,12 +116,13 @@ void sr_crowd_refresh(SrCrowd *cr, const SrCity *c, const SrPopulation *pop, con
         if (sr_crowd_find(cr, amb[i].key) >= 0) continue;
         SrVec3 p = sr_v3((float)amb[i].x / 100.0f, 0, (float)amb[i].y / 100.0f);
         if (dist_xz(p, cam->pos) > SR_CROWD_RADIUS) continue;
-        if (!may_pop(cam, p)) continue; /* no pop-in inside the view nearby */
+        if (!cr->fresh && !may_pop(cam, p)) continue; /* no pop-in inside the view nearby */
         int npc = pop ? sr_population_find_by_key(pop, amb[i].key) : -1;
         spawn(cr, c, &amb[i], npc, b);
       }
     }
   }
+  cr->fresh = false;
 }
 
 void sr_crowd_update(SrCrowd *cr, const SrCity *c, float dt, float rain) {
@@ -201,4 +224,62 @@ int sr_crowd_visible(const SrCrowd *cr, const SrCamera *cam, float max_dist) {
   for (int i = 0; i < cr->count; i++)
     if (dist_xz(cr->agents[i].pos, cam->pos) <= max_dist && sr_camera_sees(cam, cr->agents[i].pos)) n++;
   return n;
+}
+
+/* ---- traffic ------------------------------------------------------------------------------ */
+
+bool sr_vehicle_should_stop(const SrVehicle *v, const SrVec3 *peds, int n) {
+  SrVec3 perp = sr_v3(-v->dir.z, 0, v->dir.x);
+  for (int i = 0; i < n; i++) {
+    SrVec3 rel = sr_v3_sub(peds[i], v->pos);
+    rel.y = 0;
+    float along = sr_v3_dot(rel, v->dir), lateral = sr_v3_dot(rel, perp);
+    if (along > 0.5f && along < 9.0f && lateral > -3.0f && lateral < 3.0f) return true;
+  }
+  return false;
+}
+
+static bool on_road(const SrCity *c, SrVec3 p) {
+  int blk = sr_city_block_at(c, (int32_t)(p.x * 100.0f), (int32_t)(p.z * 100.0f));
+  return blk >= 0 && !c->blocks[blk].water;
+}
+
+void sr_crowd_traffic(SrCrowd *cr, const SrCity *c, const SrCamera *cam, SrVec3 player, float dt) {
+  /* despawn far or off-road vehicles (never inside the view nearby) */
+  for (int i = cr->vehicle_count - 1; i >= 0; i--) {
+    SrVehicle *v = &cr->vehicles[i];
+    bool gone = dist_xz(v->pos, cam->pos) > SR_CROWD_RADIUS + 30.0f || !on_road(c, v->pos);
+    if (gone && may_pop(cam, v->pos)) cr->vehicles[i] = cr->vehicles[--cr->vehicle_count];
+  }
+  /* spawn on lanes: along the north street strip (x lanes) or the west strip (z lanes) */
+  for (int tries = 0; tries < 8 && cr->vehicle_count < SR_MAX_VEHICLES; tries++) {
+    SrRng r = sr_rng_stream(c->seed, "traffic", cr->vehicle_serial++, 0);
+    float block = (float)SR_BLOCK_CM / 100.0f;
+    int bx = (int)(cam->pos.x / block) + sr_rng_range(&r, -1, 1);
+    int bz = (int)(cam->pos.z / block) + sr_rng_range(&r, -1, 1);
+    bool xlane = sr_rng_chance(&r, 500);
+    float sign = sr_rng_chance(&r, 500) ? 1.0f : -1.0f;
+    float offset = sign > 0 ? 4.0f : 12.0f;
+    float t = sr_rng_float(&r) * block;
+    SrVehicle v;
+    memset(&v, 0, sizeof v);
+    v.key = sr_rng_u32(&r);
+    v.dir = xlane ? sr_v3(sign, 0, 0) : sr_v3(0, 0, sign);
+    v.pos = xlane ? sr_v3((float)bx * block + t, 0, (float)bz * block + offset)
+                  : sr_v3((float)bx * block + offset, 0, (float)bz * block + t);
+    v.speed = 8.0f + sr_rng_float(&r) * 6.0f;
+    v.color = (uint8_t)sr_rng_range(&r, 0, 23);
+    if (!on_road(c, v.pos) || !may_pop(cam, v.pos)) continue;
+    cr->vehicles[cr->vehicle_count++] = v;
+  }
+  /* move: stop for pedestrians on the crossing ahead */
+  SrVec3 peds[SR_MAX_AGENTS + 1];
+  int np = 0;
+  peds[np++] = player;
+  for (int i = 0; i < cr->count; i++) peds[np++] = cr->agents[i].pos;
+  for (int i = 0; i < cr->vehicle_count; i++) {
+    SrVehicle *v = &cr->vehicles[i];
+    v->stopped = sr_vehicle_should_stop(v, peds, np);
+    if (!v->stopped) v->pos = sr_v3_add(v->pos, sr_v3_scale(v->dir, v->speed * dt));
+  }
 }

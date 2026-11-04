@@ -224,6 +224,47 @@ static void touch_overlay(SrUi *ui, const SrInput *in) {
   }
 }
 
+static void create_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
+  int s = ui->scale;
+  float line = 11.0f * (float)s, x = 12.0f * (float)s, y = 10.0f * (float)s;
+  sr_ui_rect(ui, 0, 0, (float)ui->w, (float)ui->h, (SrColor){5, 3, 12, 255});
+  sr_ui_text(ui, x, y, "WHO ARE YOU?", k_cyan, s * 2);
+  y += line * 2;
+  char buf[96];
+  for (int b = 0; b < SR_BG_COUNT; b++) {
+    const SrBackgroundDef *d = sr_background_def(b);
+    snprintf(buf, sizeof buf, "%d %s  %d CRED", b + 1, d->name, d->cash);
+    sr_ui_text(ui, x, y, buf, b == g->create_bg ? k_amber : k_white, s);
+    y += line;
+  }
+  const SrBackgroundDef *d = sr_background_def(g->create_bg);
+  y += line * 0.5f;
+  for (int a = 0; a < SR_ATTR_COUNT; a++) {
+    sr_ui_text(ui, x, y, sr_attr_name((SrAttr)a), k_white, s);
+    bar(ui, x + 50.0f * (float)s, y, 60.0f * (float)s, 6.0f * (float)s, d->attr[a] / 10.0f, k_cyan);
+    y += line * 0.8f;
+  }
+  snprintf(buf, sizeof buf, "TRAINED: %s, %s", sr_skill_name((SrSkill)d->trained[0]), sr_skill_name((SrSkill)d->trained[1]));
+  sr_ui_text(ui, x, y + line * 0.3f, buf, k_cyan, s);
+  /* appearance preview: a portrait built from the generated parts */
+  SrAppearance a = sr_game_create_preview(g);
+  static const SrColor skin[8] = {{250, 210, 180, 255}, {230, 180, 140, 255}, {200, 150, 110, 255},
+                                  {170, 120, 80, 255}, {140, 95, 60, 255}, {110, 70, 45, 255},
+                                  {80, 52, 35, 255}, {60, 40, 28, 255}};
+  float px = (float)ui->w * 0.7f, py = (float)ui->h * 0.25f, u = 6.0f * (float)s;
+  SrColor hair = sr_corp_color(a.hair_color * 2);
+  SrColor coat = sr_corp_color(a.outfit_color + 8);
+  sr_ui_rect(ui, px - 3 * u, py + 9 * u, 6 * u + (float)a.body * u, 9 * u, coat);
+  sr_ui_rect(ui, px - 2 * u, py + 2 * u, 4 * u, 6 * u, skin[a.skin & 7]);
+  if (a.hair % 12 < 4) sr_ui_rect(ui, px - u / 2, py - (float)(a.hair % 4) * u, u, 2 * u + (float)(a.hair % 4) * u, hair);
+  else if (a.hair % 12 < 9) sr_ui_rect(ui, px - 2 * u, py + u, 4 * u, 1.5f * u, hair);
+  if (a.cyber) sr_ui_rect(ui, px - 1.5f * u, py + 4 * u, 3 * u, 0.6f * u, k_red);
+  bool touch = in && in->scheme == SR_SCHEME_TOUCH;
+  sr_ui_text(ui, x, (float)ui->h - line * 1.5f,
+             touch ? "TAP LEFT: BACKGROUND  RIGHT: LOOK  BOTTOM RIGHT: START"
+                   : "1-5 BACKGROUND   R RANDOMISE LOOK   ENTER START", k_amber, s);
+}
+
 void sr_ui_build(SrUi *ui, const SrGame *g, const SrInput *in, bool portrait) {
   int s = ui->scale;
   if (portrait && in && in->scheme == SR_SCHEME_TOUCH) {
@@ -249,6 +290,7 @@ void sr_ui_build(SrUi *ui, const SrGame *g, const SrInput *in, bool portrait) {
              in && in->scheme == SR_SCHEME_TOUCH ? "TAP TO RESUME" : "PRESS ESC TO RESUME", k_white, s);
     break;
   case SR_SCREEN_TERMINAL: terminal(ui, g); break;
+  case SR_SCREEN_CREATE: create_screen(ui, g, in); break;
   case SR_SCREEN_DEAD:
     sr_ui_rect(ui, 0, 0, (float)ui->w, (float)ui->h, (SrColor){30, 0, 0, 240});
     centered(ui, (float)ui->h * 0.4f, "FLATLINED", k_red, s * 2);

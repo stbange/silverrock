@@ -62,7 +62,7 @@ SrGame *sr_game_create(void) {
   sr_heat_init(&g->heat);
   sr_events_init(&g->events);
   g->crowd_enabled = true;
-  g->max_agents = 220;
+  g->max_agents = 400;
   g->screen = SR_SCREEN_TITLE;
   g->active_job = -1;
   g->cam.cos_half_fov = 0.5f; /* 120 degree horizontal view */
@@ -268,6 +268,7 @@ void sr_game_step(SrGame *g, const SrActionState *a) {
     if (g->steps % 30 == 1) sr_crowd_refresh(&g->crowd, g->city, g->pop, &g->cam, t, g->max_agents);
     SrWeatherState w = sr_weather_at(g->seed, t);
     sr_crowd_update(&g->crowd, g->city, dt, w.rain);
+    sr_crowd_traffic(&g->crowd, g->city, &g->cam, g->player.pos, dt);
   }
   if (g->toast_time > 0) g->toast_time -= dt;
   if (g->player.health <= 0) sr_game_flatline(g);
@@ -369,8 +370,14 @@ SrResult sr_game_eat_at(SrGame *g, int building) {
     if (stock[i].kind != SR_IK_FOOD) continue;
     SrResult r = sr_player_buy(&g->player, g->city, building, &stock[i], sr_game_time(g));
     if (r == SR_OK) {
-      char msg[96];
-      snprintf(msg, sizeof msg, "You eat %s.", sr_food_def(stock[i].type)->name);
+      char msg[160];
+      int staff = sr_population_staff_of(g->pop, building);
+      const char *greet = "";
+      if (staff >= 0) { /* regulars are remembered */
+        greet = sr_npc_greeting(&g->pop->npcs[staff]);
+        sr_npc_remember(&g->pop->npcs[staff], 5);
+      }
+      snprintf(msg, sizeof msg, "%s You eat %s.", greet, sr_food_def(stock[i].type)->name);
       sr_game_toast(g, msg);
     } else {
       sr_game_toast(g, r == SR_ERR_DENIED ? "Can't buy that right now." : "Inventory full.");
@@ -603,4 +610,29 @@ SrResult sr_game_interact(SrGame *g) {
   case SR_CTX_CLOSED: sr_game_toast(g, "Closed. Come back later."); return SR_ERR_DENIED;
   default: return SR_ERR_NOT_FOUND;
   }
+}
+
+/* ---- character creation ----------------------------------------------------------------- */
+
+void sr_game_begin_create(SrGame *g, uint64_t seed) {
+  g->create_seed = seed;
+  g->create_bg = SR_BG_STREET_KID;
+  g->create_look = sr_hash_combine(seed, 0x91A7E5u);
+  g->screen = SR_SCREEN_CREATE;
+}
+
+void sr_game_create_select(SrGame *g, int bg) {
+  if (bg >= 0 && bg < SR_BG_COUNT) g->create_bg = bg;
+}
+
+void sr_game_create_randomize(SrGame *g) { g->create_look = sr_mix64(g->create_look + 0x9E37u); }
+
+SrAppearance sr_game_create_preview(const SrGame *g) {
+  return sr_appearance_generate(g->create_look, SR_ROLE_WORKER, 0);
+}
+
+SrResult sr_game_create_confirm(SrGame *g) {
+  SrResult r = sr_game_new(g, g->create_seed, NULL, (SrBackground)g->create_bg, "Runner");
+  if (r == SR_OK) g->player.look = sr_game_create_preview(g);
+  return r;
 }

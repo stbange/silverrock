@@ -190,21 +190,26 @@ static void test_crowd(void) {
   sr_building_center(&c->buildings[c->home_building], &hx, &hy);
   SrCamera cam = camera_at(sr_v3((float)hx / 100.0f, 1.7f, (float)hy / 100.0f + 30.0f));
   int64_t t = 2 * 86400 + 22 * 3600;
-  sr_crowd_refresh(cr, c, g_pop, &cam, t, SR_MAX_AGENTS);
+  sr_crowd_refresh(cr, c, g_pop, &cam, t, SR_MAX_AGENTS); /* first frame: may fill the view */
   SR_CHECK(cr->count > 20);
-  for (int i = 0; i < cr->count; i++) {
-    SrAgent *a = &cr->agents[i];
-    float dx = a->pos.x - cam.pos.x, dz = a->pos.z - cam.pos.z;
-    bool near = sqrtf(dx * dx + dz * dz) < SR_NO_POP_RADIUS;
-    SR_CHECK(!(near && sr_camera_sees(&cam, a->pos)));
-  }
-  /* walking a while and refreshing never pops agents in view nearby */
+  SR_CHECK(!cr->fresh);
+  /* walking and refreshing: newly spawned agents never appear in view nearby */
   for (int k = 0; k < 120; k++) {
     sr_crowd_update(cr, c, 0.5f, 0.0f);
     cam.pos.z -= 0.5f;
-    int before = cr->count;
-    sr_crowd_refresh(cr, c, g_pop, &cam, t + k, SR_MAX_AGENTS);
-    (void)before;
+    uint64_t keys[SR_MAX_AGENTS];
+    int nk = cr->count;
+    for (int i = 0; i < nk; i++) keys[i] = cr->agents[i].key;
+    sr_crowd_refresh(cr, c, g_pop, &cam, t + k * 900, SR_MAX_AGENTS);
+    for (int i = 0; i < cr->count; i++) {
+      bool existed = false;
+      for (int j = 0; j < nk && !existed; j++) existed = keys[j] == cr->agents[i].key;
+      if (existed) continue;
+      SrAgent *ag = &cr->agents[i];
+      float dx = ag->pos.x - cam.pos.x, dz = ag->pos.z - cam.pos.z;
+      bool near = sqrtf(dx * dx + dz * dz) < SR_NO_POP_RADIUS;
+      SR_CHECK(!(near && sr_camera_sees(&cam, ag->pos)));
+    }
   }
   SR_CHECK(sr_crowd_find(cr, 12345) < 0);
   SR_CHECK(sr_crowd_visible(cr, &cam, 200.0f) > 0);
@@ -1243,7 +1248,54 @@ static void test_job_approaches(void) {
   (void)sr;
 }
 
+static void test_traffic_and_memory(void) {
+  SR_SPEC("population-simulation", "Vehicles stop at crossings");
+  SR_SPEC("population-simulation", "Notable remembers the player");
+  SrVehicle v;
+  memset(&v, 0, sizeof v);
+  v.pos = sr_v3(0, 0, 0);
+  v.dir = sr_v3(1, 0, 0);
+  SrVec3 ahead = sr_v3(5, 0, 1), behind = sr_v3(-5, 0, 0), side = sr_v3(5, 0, 6);
+  SR_CHECK(sr_vehicle_should_stop(&v, &ahead, 1));
+  SR_CHECK(!sr_vehicle_should_stop(&v, &behind, 1));
+  SR_CHECK(!sr_vehicle_should_stop(&v, &side, 1));
+  SR_CHECK(!sr_vehicle_should_stop(&v, NULL, 0));
+  /* live traffic: spawn, stop for the player on the lane, drive on when clear */
+  SrCity *c = city();
+  SrCrowd *cr = (SrCrowd *)calloc(1, sizeof *cr);
+  sr_crowd_init(cr);
+  int32_t hx, hy;
+  sr_building_center(&c->buildings[c->home_building], &hx, &hy);
+  SrCamera cam = camera_at(sr_v3((float)hx / 100.0f, 1.7f, (float)hy / 100.0f));
+  sr_crowd_traffic(cr, c, &cam, sr_v3(-999, 0, -999), 0.1f);
+  SR_CHECK(cr->vehicle_count > 0);
+  SrVehicle *first = &cr->vehicles[0];
+  SrVec3 in_front = sr_v3_add(first->pos, sr_v3_scale(first->dir, 4.0f));
+  SrVec3 before = first->pos;
+  sr_crowd_traffic(cr, c, &cam, in_front, 0.5f);
+  SR_CHECK(cr->vehicles[0].stopped);
+  SR_CHECK_NEAR(cr->vehicles[0].pos.x, before.x, 1e-4);
+  sr_crowd_traffic(cr, c, &cam, sr_v3(-999, 0, -999), 0.5f);
+  if (!cr->vehicles[0].stopped) SR_CHECK(cr->vehicles[0].pos.x != before.x || cr->vehicles[0].pos.z != before.z);
+  cam.pos = sr_v3(-5000, 0, -5000);
+  for (int i = 0; i < 5; i++) sr_crowd_traffic(cr, c, &cam, cam.pos, 0.1f);
+  SR_CHECK_EQ(cr->vehicle_count, 0); /* far away: despawned, none spawn off the map */
+  free(cr);
+  /* memory */
+  SrNpc n;
+  memset(&n, 0, sizeof n);
+  const char *neutral = sr_npc_greeting(&n);
+  for (int i = 0; i < 10; i++) sr_npc_remember(&n, 5);
+  SR_CHECK(strcmp(sr_npc_greeting(&n), neutral) != 0);
+  sr_npc_remember(&n, -500);
+  SR_CHECK_EQ(n.attitude, -100);
+  SR_CHECK(strstr(sr_npc_greeting(&n), "Get lost") != NULL);
+  n.attitude = 20;
+  SR_CHECK(strstr(sr_npc_greeting(&n), "again") != NULL);
+}
+
 void suite_sim(void) {
+  SR_RUN(test_traffic_and_memory);
   SR_RUN(test_appearance);
   SR_RUN(test_density_and_stability);
   SR_RUN(test_notables);

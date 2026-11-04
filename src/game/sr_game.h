@@ -47,7 +47,8 @@ typedef struct SrContext {
 } SrContext;
 
 typedef enum SrScreen {
-  SR_SCREEN_TITLE, SR_SCREEN_PLAY, SR_SCREEN_PAUSE, SR_SCREEN_TERMINAL, SR_SCREEN_DEAD
+  SR_SCREEN_TITLE, SR_SCREEN_PLAY, SR_SCREEN_PAUSE, SR_SCREEN_TERMINAL, SR_SCREEN_DEAD,
+  SR_SCREEN_CREATE
 } SrScreen;
 
 typedef struct SrGame {
@@ -84,6 +85,10 @@ typedef struct SrGame {
   int32_t active_job;
   int max_agents;
   bool audio_muted;
+  /* character creation */
+  uint64_t create_seed;
+  uint64_t create_look;
+  int create_bg;
 } SrGame;
 
 SrGame *sr_game_create(void);
@@ -119,5 +124,12 @@ SrMissionResult sr_game_execute(SrGame *g, int32_t job, SrApproach a);
 int32_t sr_game_report(SrGame *g, int32_t job);
 void sr_game_fire(SrGame *g);
 void sr_game_flatline(SrGame *g);
+
+/* Character creation: background choice and a randomisable appearance. */
+void sr_game_begin_create(SrGame *g, uint64_t seed);
+void sr_game_create_select(SrGame *g, int background);
+void sr_game_create_randomize(SrGame *g);
+SrAppearance sr_game_create_preview(const SrGame *g);
+SrResult sr_game_create_confirm(SrGame *g);
 
 #endif
