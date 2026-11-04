@@ -1,0 +1,9 @@
+{
+  "name": "Silverrock",
+  "short_name": "Silverrock",
+  "start_url": "./silverrock.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#05030c",
+  "theme_color": "#05030c"
+}

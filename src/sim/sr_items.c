@@ -450,7 +450,9 @@ int sr_vendor_stock(const SrCity *c, int building, int64_t day, SrItem *out, int
       int corp = sr_rng_range(&r, 0, c->factions.corp_count - 1);
       if (sr_maker_valid(c, corp) && sr_rng_chance(&r, 600)) maker = corp;
       int arch = sr_rng_range(&r, 0, sr_archetype_count() - 1);
-      PUSH(sr_item_weapon(arch, maker, sr_rng_range(&r, 0, 2), sr_rng_u32(&r)));
+      int rarity = sr_rng_range(&r, 0, 2);
+      uint32_t wseed = sr_rng_u32(&r);
+      PUSH(sr_item_weapon(arch, maker, rarity, wseed));
     }
     PUSH(sr_item_simple(SR_IK_AMMO, SR_AMMO_STANDARD, 30));
     PUSH(sr_item_simple(SR_IK_AMMO, SR_AMMO_GEL, 30));
@@ -476,11 +478,13 @@ int sr_vendor_stock(const SrCity *c, int building, int64_t day, SrItem *out, int
   case SR_POI_CLOTHING:
     for (int k = 0; k < 3; k++) PUSH(sr_item_simple(SR_IK_OUTFIT, sr_rng_range(&r, 1, 12), 1));
     break;
-  case SR_POI_FENCE:
-    PUSH(sr_item_weapon(sr_rng_range(&r, 0, sr_archetype_count() - 1), SR_STREET_MAKER_FIRST, 2,
-                        sr_rng_u32(&r)));
+  case SR_POI_FENCE: {
+    int arch = sr_rng_range(&r, 0, sr_archetype_count() - 1);
+    uint32_t wseed = sr_rng_u32(&r);
+    PUSH(sr_item_weapon(arch, SR_STREET_MAKER_FIRST, 2, wseed));
     out[n - 1].flags |= SR_IF_BLACKMARKET;
     break;
+  }
   default: break;
   }
 #undef PUSH

@@ -110,33 +110,51 @@ static const char *district_suffix(SrDistrictType t, SrRng *r) {
   }
 
 void sr_name_person(uint64_t seed, uint64_t id, char *out, size_t cap) {
-  GEN_LOOP("name.person", snprintf(out, cap, "%s %s", PICK(&r, k_given), PICK(&r, k_family)))
+  GEN_LOOP("name.person", {
+    const char *a = PICK(&r, k_given);
+    const char *b = PICK(&r, k_family);
+    snprintf(out, cap, "%s %s", a, b);
+  })
 }
 
 void sr_name_corp(uint64_t seed, uint64_t id, char *out, size_t cap) {
   GEN_LOOP("name.corp", {
     int form = sr_rng_range(&r, 0, 3);
     if (form == 0) {
-      snprintf(out, cap, "%s-%s", PICK(&r, k_family), PICK(&r, k_family));
+      const char *a = PICK(&r, k_family);
+      const char *b = PICK(&r, k_family);
+      snprintf(out, cap, "%s-%s", a, b);
     } else {
-      snprintf(out, cap, "%s %s", PICK(&r, k_corp_a), PICK(&r, k_corp_b));
+      const char *a = PICK(&r, k_corp_a);
+      const char *b = PICK(&r, k_corp_b);
+      snprintf(out, cap, "%s %s", a, b);
     }
   })
 }
 
 void sr_name_gang(uint64_t seed, uint64_t id, char *out, size_t cap) {
-  GEN_LOOP("name.gang", snprintf(out, cap, "%s %s", PICK(&r, k_gang_a), PICK(&r, k_gang_b)))
+  GEN_LOOP("name.gang", {
+    const char *a = PICK(&r, k_gang_a);
+    const char *b = PICK(&r, k_gang_b);
+    snprintf(out, cap, "%s %s", a, b);
+  })
 }
 
 void sr_name_district(uint64_t seed, uint64_t id, SrDistrictType t, char *out, size_t cap) {
-  GEN_LOOP("name.district",
-           snprintf(out, cap, "%s %s", PICK(&r, k_place_a), district_suffix(t, &r)))
+  GEN_LOOP("name.district", {
+    const char *a = PICK(&r, k_place_a);
+    const char *b = district_suffix(t, &r);
+    snprintf(out, cap, "%s %s", a, b);
+  })
 }
 
 void sr_name_city(uint64_t seed, char *out, size_t cap) {
   uint64_t id = 0;
-  GEN_LOOP("name.city",
-           snprintf(out, cap, "%s %s", PICK(&r, k_city_prefix), PICK(&r, k_place_a)))
+  GEN_LOOP("name.city", {
+    const char *a = PICK(&r, k_city_prefix);
+    const char *b = PICK(&r, k_place_a);
+    snprintf(out, cap, "%s %s", a, b);
+  })
 }
 
 void sr_name_blackops(uint64_t seed, uint64_t id, char *out, size_t cap) {
@@ -150,7 +168,12 @@ void sr_name_business(uint64_t seed, uint64_t id, SrPoi poi, char *out, size_t c
   GEN_LOOP("name.business", {
     const char *fam = PICK(&r, k_family);
     switch (poi) {
-    case SR_POI_FOOD: snprintf(out, cap, "%s %s", PICK(&r, adj), PICK(&r, food)); break;
+    case SR_POI_FOOD: {
+      const char *a = PICK(&r, adj);
+      const char *b = PICK(&r, food);
+      snprintf(out, cap, "%s %s", a, b);
+      break;
+    }
     case SR_POI_BAR: snprintf(out, cap, "The %s Lantern", PICK(&r, adj)); break;
     case SR_POI_CLINIC: snprintf(out, cap, "%s Clinic", fam); break;
     case SR_POI_RIPPERDOC: snprintf(out, cap, "Chrome & Bone %s", fam); break;

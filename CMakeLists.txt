@@ -3,7 +3,6 @@ project(silverrock VERSION 0.1.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(SR_BUILD_APP      "Build the SDL3/OpenGL game executable" ON)
@@ -17,6 +16,7 @@ option(SR_WERROR         "Treat warnings as errors in first-party code" ON)
 # Warnings, determinism and instrumentation for first-party targets only.
 # ---------------------------------------------------------------------------
 function(sr_configure_target tgt)
+  set_target_properties(${tgt} PROPERTIES C_EXTENSIONS OFF)
   if(MSVC)
     target_compile_options(${tgt} PRIVATE /W4 /fp:precise /utf-8)
     if(SR_WERROR)
@@ -89,9 +89,16 @@ if(SR_BUILD_APP)
     target_link_options(silverrock PRIVATE
       -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sALLOW_MEMORY_GROWTH=1
       -sENVIRONMENT=web -lidbfs.js
-      "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS','IDBFS']"
-      "-sEXPORTED_FUNCTIONS=['_main','_sr_web_test_exec','_sr_web_set_safe_area','_malloc','_free']"
+      "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS','IDBFS','addRunDependency','removeRunDependency']"
       --shell-file ${CMAKE_SOURCE_DIR}/web/shell.html)
+    if(SR_TEST_HOOKS)
+      target_link_options(silverrock PRIVATE
+        "-sEXPORTED_FUNCTIONS=['_main','_sr_web_test_exec','_sr_web_set_safe_area','_sr_web_context_lost','_sr_web_context_restored']")
+    else()
+      target_link_options(silverrock PRIVATE
+        "-sEXPORTED_FUNCTIONS=['_main','_sr_web_set_safe_area','_sr_web_context_lost','_sr_web_context_restored']")
+    endif()
+    configure_file(${CMAKE_SOURCE_DIR}/web/manifest.webmanifest ${CMAKE_BINARY_DIR}/manifest.webmanifest COPYONLY)
   endif()
 endif()
 

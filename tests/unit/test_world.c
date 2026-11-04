@@ -55,7 +55,7 @@ static void test_deterministic(void) {
   SrCity *a = sr_city_create(7, NULL), *b = sr_city_create(7, NULL);
   SR_CHECK(sr_city_digest(a) == sr_city_digest(b));
   /* Golden digest: identical on Linux, Windows and Web (unit tests run on all three). */
-  SR_CHECK(sr_city_digest(a) == 0x514c75ab491cfbf9ull);
+  SR_CHECK(sr_city_digest(a) == 0xa62de72a404483c9ull);
   sr_city_destroy(a);
   sr_city_destroy(b);
 }

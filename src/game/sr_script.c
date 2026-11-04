@@ -216,6 +216,9 @@ static SrResult command(ScriptState *st, char *line, char *out, size_t cap) {
     }
     return sr_game_new(g, st->seed, &opt, (SrBackground)bg, "Test Runner");
   }
+  if (strcmp(cmd, "get") == 0 && n >= 2) { /* queries work on every screen */
+    return sr_game_query(g, tok[1], out, cap) ? SR_OK : SR_ERR_NOT_FOUND;
+  }
   if (!g->started) return SR_ERR_INVALID;
   if (strcmp(cmd, "advance") == 0 && n >= 2) {
     sr_game_skip(g, parse_duration(tok[1]), false);
@@ -253,9 +256,6 @@ static SrResult command(ScriptState *st, char *line, char *out, size_t cap) {
   if (strcmp(cmd, "set") == 0 && n >= 3) {
     const char *val = (n >= 4 && strcmp(tok[2], "=") == 0) ? tok[3] : tok[2];
     return sr_game_set(g, tok[1], val);
-  }
-  if (strcmp(cmd, "get") == 0 && n >= 2) {
-    return sr_game_query(g, tok[1], out, cap) ? SR_OK : SR_ERR_NOT_FOUND;
   }
   if (strcmp(cmd, "teleport") == 0 && n >= 2) {
     if (strcmp(tok[1], "home") == 0) sr_game_teleport_building(g, g->player.home);

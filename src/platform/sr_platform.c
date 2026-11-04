@@ -23,7 +23,7 @@ static void join(const SrFileStore *fs, const char *name, char *out, size_t cap)
 
 static void web_sync(void) {
 #ifdef __EMSCRIPTEN__
-  EM_ASM({ if (typeof FS !== 'undefined' && FS.syncfs) FS.syncfs(false, function(e) {}); });
+  emscripten_run_script("if (typeof FS !== 'undefined' && FS.syncfs) FS.syncfs(false, function(e) {});");
 #endif
 }
 
@@ -190,7 +190,7 @@ SrPad sr_platform_pad_button(int b) {
 
 static bool coarse_pointer(void) {
 #ifdef __EMSCRIPTEN__
-  return EM_ASM_INT({ return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? 1 : 0; }) != 0;
+  return emscripten_run_script_int("(window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? 1 : 0") != 0;
 #else
   return SDL_GetHintBoolean("SR_COARSE_POINTER", false);
 #endif
