@@ -109,6 +109,7 @@ static void apply_settings(SrApp *a) {
 void sr_app_load_settings(SrApp *a) {
   void *data = NULL;
   size_t len = 0;
+  if (a->input.coarse_pointer) a->game->settings.bloom = false; /* mobile preset: no bloom by default */
   if (a->storage.read(a->storage.user, SETTINGS_FILE, &data, &len) == SR_OK) {
     char *text = (char *)malloc(len + 1);
     memcpy(text, data, len);

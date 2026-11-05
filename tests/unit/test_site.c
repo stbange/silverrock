@@ -1135,6 +1135,30 @@ static void test_interior_render_and_ui(void) {
   sr_game_destroy(g);
 }
 
+static void test_light_grid(void) {
+  SrGame *g = game(41);
+  SrLightGrid lg;
+  memset(&lg, 0, sizeof lg);
+  sr_light_grid_build(&lg, g->city);
+  SR_CHECK(lg.count > g->city->grid);
+  SrVec3 cam = sr_game_outside_pos(g);
+  SrLight a[SR_MAX_FRAME_LIGHTS], b[SR_MAX_FRAME_LIGHTS];
+  int n = sr_light_grid_query(&lg, g->city, cam, 120.0f, a, SR_MAX_FRAME_LIGHTS);
+  int m = sr_collect_lights(g->city, cam, 120.0f, b, SR_MAX_FRAME_LIGHTS);
+  SR_CHECK(n > 0 && m > 0);
+  /* nearest first: the first light is closer than the last */
+  float d0 = sr_v3_len(sr_v3_sub(a[0].pos, cam)), d1 = sr_v3_len(sr_v3_sub(a[n - 1].pos, cam));
+  SR_CHECK(d0 < d1);
+  /* small budgets keep the nearest lights */
+  SrLight few[4];
+  SR_CHECK_EQ(sr_light_grid_query(&lg, g->city, cam, 120.0f, few, 4), 4);
+  SR_CHECK(sr_v3_len(sr_v3_sub(few[3].pos, cam)) < 140.0f);
+  SR_CHECK_EQ(sr_light_grid_query(&lg, g->city, sr_v3(-1e4f, 0, -1e4f), 50.0f, few, 4), 0);
+  sr_light_grid_free(&lg);
+  SR_CHECK(lg.lights == NULL);
+  sr_game_destroy(g);
+}
+
 /* ---- scripts ------------------------------------------------------------------------------ */
 
 static void test_site_script_commands(void) {
@@ -1191,5 +1215,6 @@ void suite_site(void) {
   SR_RUN(test_street_gadgets);
   SR_RUN(test_shops);
   SR_RUN(test_interior_render_and_ui);
+  SR_RUN(test_light_grid);
   SR_RUN(test_site_script_commands);
 }

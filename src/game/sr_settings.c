@@ -13,6 +13,7 @@ void sr_settings_default(SrSettings *s) {
   s->dither = s->quantize = true;
   s->vertex_snap = s->affine = false;
   s->crt = false;
+  s->bloom = true;
   s->dynamic_res = true;
   s->mouse_sensitivity = 0.0025f;
   s->touch_sensitivity = 0.006f;
@@ -39,6 +40,7 @@ static const Field k_fields[] = {F(internal_res, T_INT),
                                  F(vertex_snap, T_BOOL),
                                  F(affine, T_BOOL),
                                  F(crt, T_BOOL),
+                                 F(bloom, T_BOOL),
                                  F(dynamic_res, T_BOOL),
                                  F(mouse_sensitivity, T_FLOAT),
                                  F(touch_sensitivity, T_FLOAT),

@@ -108,41 +108,80 @@ static SrColor neon_for(const SrCity *c, int building) {
   return pal->neon[b->id % 3];
 }
 
+static int block_lights(const SrCity *c, int blk, SrLight *out, int max) {
+  int n = 0;
+  const SrBlock *b = &c->blocks[blk];
+  if (b->water) return 0;
+  int32_t ox, oy;
+  sr_city_block_origin(blk, c->grid, &ox, &oy);
+  SrColor col = sr_palette(c->districts[b->district].type)->neon[blk % 3];
+  if (n < max) { /* street lamp */
+    SrLight *l = &out[n++];
+    float st = (float)SR_STREET_CM / 100.0f;
+    l->pos = sr_v3((float)ox / 100.0f + st - 1.1f, 6.2f, (float)oy / 100.0f + st - 1.1f);
+    l->radius = 26.0f;
+    l->r = col.r / 255.0f * 0.9f;
+    l->g = col.g / 255.0f * 0.9f;
+    l->b = col.b / 255.0f * 0.9f;
+  }
+  for (int i = 0; i < b->building_count && n < max; i++) {
+    int bi = b->first_building + i;
+    const SrBuilding *bd = &c->buildings[bi];
+    if (bd->poi == SR_POI_NONE) continue;
+    SrColor nc = neon_for(c, bi);
+    SrLight *l = &out[n++];
+    l->pos = sr_v3((float)(bd->x0 + bd->x1) / 200.0f, 4.5f, (float)bd->y1 / 100.0f + 0.5f);
+    l->radius = 14.0f;
+    l->r = nc.r / 255.0f;
+    l->g = nc.g / 255.0f;
+    l->b = nc.b / 255.0f;
+  }
+  return n;
+}
+
+void sr_light_grid_build(SrLightGrid *lg, const SrCity *c) {
+  sr_light_grid_free(lg);
+  int blocks = c->grid * c->grid;
+  lg->lights = (SrLight *)malloc(sizeof(SrLight) * (size_t)blocks * 5);
+  if (!lg->lights) return; /* GCOVR_EXCL_LINE reason: malloc failure not injectable */
+  lg->blocks = blocks;
+  lg->city_seed = c->seed;
+  for (int b = 0; b < blocks; b++) {
+    lg->start[b] = (uint16_t)lg->count;
+    lg->count += block_lights(c, b, lg->lights + lg->count, 5);
+  }
+  lg->start[blocks] = (uint16_t)lg->count;
+}
+
+void sr_light_grid_free(SrLightGrid *lg) {
+  free(lg->lights);
+  memset(lg, 0, sizeof *lg);
+}
+
+int sr_light_grid_query(const SrLightGrid *lg, const SrCity *c, SrVec3 cam, float radius, SrLight *out, int max) {
+  int n = 0;
+  int bx = (int)(cam.x * 100.0f) / SR_BLOCK_CM, by = (int)(cam.z * 100.0f) / SR_BLOCK_CM;
+  int rad = (int)(radius * 100.0f) / SR_BLOCK_CM + 1;
+  for (int ring = 0; ring <= rad && n < max; ring++) /* nearest blocks first */
+    for (int dy = -ring; dy <= ring && n < max; dy++)
+      for (int dx = -ring; dx <= ring && n < max; dx++) {
+        if (SR_MAX(abs(dx), abs(dy)) != ring) continue;
+        int blk = sr_city_block_index(c, bx + dx, by + dy);
+        if (blk < 0) continue;
+        for (int i = lg->start[blk]; i < lg->start[blk + 1] && n < max; i++) out[n++] = lg->lights[i];
+      }
+  return n;
+}
+
 int sr_collect_lights(const SrCity *c, SrVec3 cam, float radius, SrLight *out, int max) {
   int n = 0;
   int bx = (int)(cam.x * 100.0f) / SR_BLOCK_CM, by = (int)(cam.z * 100.0f) / SR_BLOCK_CM;
   int rad = (int)(radius * 100.0f) / SR_BLOCK_CM + 1;
-  for (int dy = -rad; dy <= rad && n < max; dy++) {
+  for (int dy = -rad; dy <= rad && n < max; dy++)
     for (int dx = -rad; dx <= rad && n < max; dx++) {
       int blk = sr_city_block_index(c, bx + dx, by + dy);
-      if (blk < 0) continue;
-      const SrBlock *b = &c->blocks[blk];
-      if (!b->water && n < max) { /* street lamp */
-        int32_t ox, oy;
-        sr_city_block_origin(blk, c->grid, &ox, &oy);
-        SrColor col = sr_palette(c->districts[b->district].type)->neon[blk % 3];
-        SrLight *l = &out[n++];
-        float st = (float)SR_STREET_CM / 100.0f;
-        l->pos = sr_v3((float)ox / 100.0f + st - 1.1f, 6.2f, (float)oy / 100.0f + st - 1.1f);
-        l->radius = 26.0f;
-        l->r = col.r / 255.0f * 0.9f;
-        l->g = col.g / 255.0f * 0.9f;
-        l->b = col.b / 255.0f * 0.9f;
-      }
-      for (int i = 0; i < b->building_count && n < max; i++) {
-        int bi = b->first_building + i;
-        const SrBuilding *bd = &c->buildings[bi];
-        if (bd->poi == SR_POI_NONE) continue;
-        SrColor col = neon_for(c, bi);
-        SrLight *l = &out[n++];
-        l->pos = sr_v3((float)(bd->x0 + bd->x1) / 200.0f, 4.5f, (float)bd->y1 / 100.0f + 0.5f);
-        l->radius = 14.0f;
-        l->r = col.r / 255.0f;
-        l->g = col.g / 255.0f;
-        l->b = col.b / 255.0f;
-      }
+      if (blk >= 0) n += block_lights(c, blk, out + n, max - n);
     }
-  }
   return n;
 }
 
@@ -498,6 +537,7 @@ void sr_scene_free(SrSceneCache *s) {
   sr_mesh_free(&s->skyline);
   sr_mesh_free(&s->landmarks);
   for (int i = 0; i < SR_INT_MAX_ROOMS; i++) sr_mesh_free(&s->rooms[i]);
+  sr_light_grid_free(&s->light_grid);
   sr_mesh_free(&s->site_dyn);
   sr_mesh_free(&s->guards);
 }
@@ -578,11 +618,14 @@ void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) 
   f->vertex_snap = g->settings.vertex_snap;
   f->affine = g->settings.affine;
   f->crt = g->settings.crt;
+  f->bloom = g->settings.bloom;
   if (g->site.active) {
     build_site_frame(s, g, f);
     return;
   }
-  f->nlights = sr_collect_lights(c, p->pos, 120.0f, f->lights, SR_MAX_FRAME_LIGHTS);
+  if (s->light_grid.city_seed != c->seed || s->light_grid.blocks != c->grid * c->grid || !s->light_grid.lights)
+    sr_light_grid_build(&s->light_grid, c);
+  f->nlights = sr_light_grid_query(&s->light_grid, c, p->pos, 120.0f, f->lights, SR_MAX_FRAME_LIGHTS);
   /* city chunks around the camera, nearest first, limited build budget */
   int ccx = (int)(p->pos.x * 100.0f) / (SR_BLOCK_CM * SR_CHUNK_BLOCKS);
   int ccy = (int)(p->pos.z * 100.0f) / (SR_BLOCK_CM * SR_CHUNK_BLOCKS);

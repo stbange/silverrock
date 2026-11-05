@@ -200,6 +200,37 @@ static void test_render_interiors(void) {
   free(th);
 }
 
+static void test_bloom(void) {
+  SR_SPEC("retro-rendering", "Neon through fog");
+  reference_scene(&g_app);
+  g_app.game->settings.dither = g_app.game->settings.quantize = false;
+  int ww = g_app.win_w, wh = g_app.win_h;
+  uint8_t *off = (uint8_t *)malloc((size_t)ww * wh * 3), *on = (uint8_t *)malloc((size_t)ww * wh * 3);
+  g_app.game->settings.bloom = false;
+  sr_app_iterate(&g_app);
+  sr_glb_render(&g_app.gfx, &g_app.frame, NULL, ww, wh, false);
+  sr_glb_read_window(&g_app.gfx, off, 0, 0, ww, wh);
+  g_app.frame.bloom = true;
+  sr_glb_render(&g_app.gfx, &g_app.frame, NULL, ww, wh, false);
+  sr_glb_read_window(&g_app.gfx, on, 0, 0, ww, wh);
+  /* bloom only ever adds light, and it adds it around the neon */
+  long brighter = 0, darker = 0;
+  for (int i = 0; i < ww * wh * 3; i++) {
+    brighter += on[i] > off[i] + 2;
+    darker += on[i] + 2 < off[i];
+  }
+  printf("  bloom: %ld brighter channels, %ld darker\n", brighter, darker);
+  save_shot("bloom_off", off, ww, wh);
+  save_shot("bloom_on", on, ww, wh);
+  SR_CHECK(brighter > 1000);
+  SR_CHECK_EQ(darker, 0);
+  SR_CHECK(g_app.gfx.bloom_w == g_app.frame.internal_w / 2);
+  g_app.frame.bloom = false;
+  g_app.game->settings.bloom = true;
+  free(off);
+  free(on);
+}
+
 static void test_shop_taps(void) {
   sr_app_start_game(&g_app, 0x5EEDC0DEull);
   SrGame *g = g_app.game;
@@ -670,6 +701,7 @@ void suite_platform(void) {
   SR_RUN(test_retro_toggles);
   SR_RUN(test_render_interiors);
   SR_RUN(test_shop_taps);
+  SR_RUN(test_bloom);
   SR_RUN(test_letterbox_window);
   SR_RUN(test_focus_and_autosave);
   SR_RUN(test_settings_persist);

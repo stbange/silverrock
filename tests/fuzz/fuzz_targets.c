@@ -1,11 +1,48 @@
-/* Fuzz targets for every parser of external input: save files, settings, scenario scripts,
- * seed codes and key bindings. Built either with libFuzzer (clang -fsanitize=fuzzer) or with
+/* Fuzz targets for every parser of external input (save files, settings, scenario scripts,
+ * seed codes, key bindings) and property checks for the name generators. Built either with libFuzzer (clang -fsanitize=fuzzer) or with
  * the stand-alone driver in fuzz_driver.c (any compiler, random mutation). */
 #include "game/sr_save.h"
 #include "game/sr_script.h"
 
 #include <stdlib.h>
 #include <string.h>
+
+/* Generated names: terminated, within the buffer, printable, never on the blocklist. */
+static void check_name(const char *name, size_t cap) {
+  size_t len = 0;
+  while (len < cap && name[len]) len++;
+  if (len >= cap) abort();
+  for (size_t i = 0; i < len; i++)
+    if ((unsigned char)name[i] < 32 || (unsigned char)name[i] > 126) abort();
+  if (cap > 8 && len == 0) abort();
+  if (cap >= SR_NAME_LEN && sr_name_blocked(name)) abort();
+}
+
+static void fuzz_names(const uint8_t *data, size_t size, const char *text) {
+  uint64_t seed = 0, id = 0;
+  for (size_t i = 1; i < size && i < 9; i++) seed = seed << 8 | data[i];
+  for (size_t i = 9; i < size && i < 17; i++) id = id << 8 | data[i];
+  static const size_t caps[] = {1, 2, 5, 12, SR_NAME_LEN};
+  for (size_t k = 0; k < sizeof caps / sizeof caps[0]; k++) {
+    char out[SR_NAME_LEN];
+    size_t cap = caps[k];
+    sr_name_person(seed, id, out, cap);
+    check_name(out, cap);
+    sr_name_corp(seed, id, out, cap);
+    check_name(out, cap);
+    sr_name_gang(seed, id, out, cap);
+    check_name(out, cap);
+    sr_name_district(seed, id, (SrDistrictType)(id % SR_D_COUNT), out, cap);
+    check_name(out, cap);
+    sr_name_city(seed, out, cap);
+    check_name(out, cap);
+    sr_name_blackops(seed, id, out, cap);
+    check_name(out, cap);
+    sr_name_business(seed, id, (SrPoi)(id % SR_POI_COUNT), out, cap);
+    check_name(out, cap);
+  }
+  (void)sr_name_blocked(text); /* arbitrary text must not crash the blocklist check */
+}
 
 static SrGame *g_game;
 static SrWriter g_valid;
@@ -22,7 +59,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   char *text = (char *)malloc(size + 1);
   memcpy(text, data, size);
   text[size] = '\0';
-  switch (data[0] % 5) {
+  switch (data[0] % 6) {
+    case 5: fuzz_names(data, size, text + 1); break;
     case 0: { /* save file: mutate a valid save in place so the fuzzer gets past the header */
       uint8_t *buf = (uint8_t *)malloc(g_valid.len);
       memcpy(buf, g_valid.data, g_valid.len);

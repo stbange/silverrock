@@ -260,7 +260,8 @@ static void terminal(SrUi *ui, const SrGame *g) {
     sr_ui_text(ui, x, y, buf, green, s);
     y += line;
   }
-  sr_ui_text(ui, x, (float)ui->h - m - line, g->site.active && g->site.in.apartment ? "[E] APARTMENTS  [ESC] CLOSE" : "[ESC] CLOSE", green, s);
+  sr_ui_text(ui, x, (float)ui->h - m - line,
+             g->site.active && g->site.in.apartment ? "[E] APARTMENTS  [ESC] CLOSE" : "[ESC] CLOSE", green, s);
 }
 
 static void touch_overlay(SrUi *ui, const SrGame *g, const SrInput *in) {

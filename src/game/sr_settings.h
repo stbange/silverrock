@@ -9,6 +9,7 @@ typedef struct SrSettings {
   bool integer_scale;
   bool fullscreen;
   bool dither, quantize, vertex_snap, affine, crt;
+  bool bloom; /* neon glow (off in the mobile preset) */
   bool dynamic_res;
   float mouse_sensitivity;
   float touch_sensitivity;

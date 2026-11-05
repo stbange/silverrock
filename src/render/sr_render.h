@@ -169,10 +169,25 @@ typedef struct SrFrame {
   int ndraws;
   SrDraw draws[SR_MAX_DRAWS];
   int internal_w, internal_h;
-  bool dither, quantize, vertex_snap, affine, crt;
+  bool dither, quantize, vertex_snap, affine, crt, bloom;
 } SrFrame;
 
+/* Light grid: every city light (street lamps, neon signs) precomputed and binned per block, so
+ * the lights near the camera are gathered block ring by block ring, nearest first. */
+typedef struct SrLightGrid {
+  uint64_t city_seed;
+  int blocks;
+  uint16_t start[SR_MAX_BLOCKS + 1];
+  int count;
+  SrLight *lights;
+} SrLightGrid;
+
+void sr_light_grid_build(SrLightGrid *lg, const SrCity *c);
+void sr_light_grid_free(SrLightGrid *lg);
+int sr_light_grid_query(const SrLightGrid *lg, const SrCity *c, SrVec3 cam, float radius, SrLight *out, int max);
+
 typedef struct SrSceneCache {
+  SrLightGrid light_grid;
   SrChunkCache chunks;
   SrMesh characters, rain, skyline, landmarks;
   SrMesh rooms[SR_INT_MAX_ROOMS], site_dyn, guards;

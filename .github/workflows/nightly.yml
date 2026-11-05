@@ -3,6 +3,8 @@ name: Nightly
 on:
   schedule: [{ cron: "17 3 * * *" }]
   workflow_dispatch:
+  push: # changes to the nightly itself or its bands run it right away
+    paths: [".github/workflows/nightly.yml", "tests/balance/**", "tests/fuzz/**"]
 
 jobs:
   sweep-balance-fuzz:
@@ -15,9 +17,11 @@ jobs:
         run: cmake -S . -B build/n -G Ninja -DCMAKE_BUILD_TYPE=Release -DSR_BUILD_APP=OFF && cmake --build build/n
       - name: World-generation invariants over 2,000 seeds
         run: ./build/n/sr_headless --sweep 2000
-      - name: Autoplayer balance report (40 seeds, all strategies)
-        run: ./build/n/sr_headless --balance 40 | tee balance.txt
-      - name: Fuzz parsers with libFuzzer (10 minutes)
+      - name: Autoplayer balance report (200 seeds, all strategies), gated by bands
+        run: |
+          set -o pipefail
+          ./build/n/sr_headless --balance 200 --bands tests/balance/bands.txt | tee balance.txt
+      - name: Fuzz parsers and name generators with libFuzzer (10 minutes)
         run: |
           clang -g -O1 -fsanitize=fuzzer,address,undefined -Isrc tests/fuzz/fuzz_targets.c \
             src/core/*.c src/world/*.c src/sim/*.c src/input/*.c src/game/*.c -lm -o fuzz

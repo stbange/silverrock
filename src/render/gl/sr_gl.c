@@ -176,6 +176,8 @@ static const char *k_post_fs =
     "uniform int u_quant;\n"
     "uniform int u_crt;\n"
     "uniform vec2 u_res;\n"
+    "uniform sampler2D u_bloom;\n"
+    "uniform float u_bloom_k;\n"
     "in vec2 v_uv;\n"
     "out vec4 o_color;\n"
     "float bayer(vec2 p) {\n"
@@ -186,6 +188,7 @@ static const char *k_post_fs =
     "}\n"
     "void main() {\n"
     "  vec3 c = texture(u_tex, v_uv).rgb;\n"
+    "  if (u_bloom_k > 0.0) c += texture(u_bloom, v_uv).rgb * u_bloom_k;\n"
     "  vec2 px = floor(v_uv * u_res);\n"
     "  if (u_dither == 1) c += bayer(px) / 24.0;\n"
     "  if (u_quant == 1) c = floor(c * vec3(31.0, 63.0, 31.0) + 0.5) / vec3(31.0, 63.0, 31.0);\n"
@@ -193,9 +196,32 @@ static const char *k_post_fs =
     "  o_color = vec4(clamp(c, 0.0, 1.0), 1.0);\n"
     "}\n";
 
-void sr_gl_shader_source(bool gles, bool fragment, bool post, char *out, size_t cap) {
+/* Bloom: a bright pass keeps only glowing pixels, then a separable 9-tap blur (two passes). */
+static const char *k_blur_fs = "uniform sampler2D u_tex;\n"
+                               "uniform vec2 u_dir;\n"
+                               "uniform int u_bright;\n"
+                               "in vec2 v_uv;\n"
+                               "out vec4 o_color;\n"
+                               "void main() {\n"
+                               "  if (u_bright == 1) {\n"
+                               "    vec3 c = texture(u_tex, v_uv).rgb;\n"
+                               "    float l = max(c.r, max(c.g, c.b));\n"
+                               "    o_color = vec4(c * smoothstep(0.7, 1.0, l), 1.0);\n"
+                               "    return;\n"
+                               "  }\n"
+                               "  vec3 s = texture(u_tex, v_uv).rgb * 0.2270270;\n"
+                               "  s += (texture(u_tex, v_uv + u_dir * 1.3846).rgb + texture(u_tex, v_uv - u_dir * "
+                               "1.3846).rgb) * 0.3162162;\n"
+                               "  s += (texture(u_tex, v_uv + u_dir * 3.2308).rgb + texture(u_tex, v_uv - u_dir * "
+                               "3.2308).rgb) * 0.0702703;\n"
+                               "  o_color = vec4(s, 1.0);\n"
+                               "}\n";
+
+void sr_gl_shader_source(bool gles, bool fragment, int prog, char *out, size_t cap) {
   const char *pre = gles ? "#version 300 es\nprecision highp float;\nprecision highp int;\n" : "#version 330 core\n";
-  const char *body = post ? (fragment ? k_post_fs : k_post_vs) : (fragment ? k_world_fs : k_world_vs);
+  const char *body = prog == SR_GL_PROG_BLUR   ? (fragment ? k_blur_fs : k_post_vs)
+                     : prog == SR_GL_PROG_POST ? (fragment ? k_post_fs : k_post_vs)
+                                               : (fragment ? k_world_fs : k_world_vs);
   snprintf(out, cap, "%s%s", pre, body);
 }
 
@@ -214,7 +240,7 @@ static unsigned compile(SrGlBackend *b, GLenum type, const char *src) {
   return s;
 }
 
-static unsigned link_program(SrGlBackend *b, bool post) {
+static unsigned link_program(SrGlBackend *b, int post) {
   char vs[4096], fs[4096];
   sr_gl_shader_source(b->gles, false, post, vs, sizeof vs);
   sr_gl_shader_source(b->gles, true, post, fs, sizeof fs);
@@ -254,6 +280,54 @@ static void upload_textures(SrGlBackend *b) {
   free(pixels);
 }
 
+/* Half-resolution ping-pong targets for bloom. */
+static void ensure_bloom(SrGlBackend *b, int w, int h) {
+  if (b->bloom_fbo[0] && b->bloom_w == w && b->bloom_h == h) return;
+  for (int i = 0; i < 2; i++) {
+    if (b->bloom_fbo[i]) {
+      pDeleteFramebuffers(1, &b->bloom_fbo[i]);
+      pDeleteTextures(1, &b->bloom_tex[i]);
+    }
+    pGenTextures(1, &b->bloom_tex[i]);
+    pBindTexture(GL_TEXTURE_2D, b->bloom_tex[i]);
+    pTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    pTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    pTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    pTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    pTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    pGenFramebuffers(1, &b->bloom_fbo[i]);
+    pBindFramebuffer(GL_FRAMEBUFFER, b->bloom_fbo[i]);
+    pFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, b->bloom_tex[i], 0);
+  }
+  pBindFramebuffer(GL_FRAMEBUFFER, 0);
+  b->bloom_w = w;
+  b->bloom_h = h;
+}
+
+static void bloom_pass(SrGlBackend *b, unsigned src_tex, unsigned dst_fbo, int bright, float dx, float dy) {
+  pBindFramebuffer(GL_FRAMEBUFFER, dst_fbo);
+  pViewport(0, 0, b->bloom_w, b->bloom_h);
+  pBindTexture(GL_TEXTURE_2D, src_tex);
+  pUniform1i(b->b_bright, bright);
+  pUniform2f(b->b_dir, dx, dy);
+  pDrawArrays(GL_TRIANGLES, 0, 6);
+  b->draw_calls++;
+}
+
+/* Emissive pass and bloom: bright pixels of the scene, blurred at half resolution. */
+static void render_bloom(SrGlBackend *b, int iw, int ih) {
+  int w = iw / 2 > 0 ? iw / 2 : 1, h = ih / 2 > 0 ? ih / 2 : 1;
+  ensure_bloom(b, w, h);
+  pUseProgram(b->prog_blur);
+  pUniform1i(b->b_tex, 0);
+  pBindVertexArray(b->quad_vao);
+  bloom_pass(b, b->fbo_color, b->bloom_fbo[0], 1, 0, 0);
+  bloom_pass(b, b->bloom_tex[0], b->bloom_fbo[1], 0, 1.0f / (float)w, 0);
+  bloom_pass(b, b->bloom_tex[1], b->bloom_fbo[0], 0, 0, 1.0f / (float)h);
+  bloom_pass(b, b->bloom_tex[0], b->bloom_fbo[1], 0, 2.0f / (float)w, 0);
+  bloom_pass(b, b->bloom_tex[1], b->bloom_fbo[0], 0, 0, 2.0f / (float)h);
+}
+
 static void ensure_fbo(SrGlBackend *b, int w, int h) {
   if (b->fbo && b->fbo_w == w && b->fbo_h == h) return;
   if (b->fbo) {
@@ -287,9 +361,10 @@ bool sr_glb_init(SrGlBackend *b, bool gles) {
   memset(b, 0, sizeof *b);
   b->generation = gen + 1;
   b->gles = gles;
-  b->prog_world = link_program(b, false);
-  b->prog_post = link_program(b, true);
-  if (!b->prog_world || !b->prog_post) return false;
+  b->prog_world = link_program(b, SR_GL_PROG_WORLD);
+  b->prog_post = link_program(b, SR_GL_PROG_POST);
+  b->prog_blur = link_program(b, SR_GL_PROG_BLUR);
+  if (!b->prog_world || !b->prog_post || !b->prog_blur) return false;
   GLuint p = b->prog_world;
   b->u_mvp = pGetUniformLocation(p, "u_mvp");
   b->u_view = pGetUniformLocation(p, "u_view");
@@ -309,6 +384,11 @@ bool sr_glb_init(SrGlBackend *b, bool gles) {
   b->p_quant = pGetUniformLocation(p, "u_quant");
   b->p_crt = pGetUniformLocation(p, "u_crt");
   b->p_res = pGetUniformLocation(p, "u_res");
+  b->p_bloom = pGetUniformLocation(p, "u_bloom");
+  b->p_bloom_k = pGetUniformLocation(p, "u_bloom_k");
+  b->b_tex = pGetUniformLocation(b->prog_blur, "u_tex");
+  b->b_dir = pGetUniformLocation(b->prog_blur, "u_dir");
+  b->b_bright = pGetUniformLocation(b->prog_blur, "u_bright");
   upload_textures(b);
   static const float quad[12] = {-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1};
   pGenVertexArrays(1, &b->quad_vao);
@@ -343,6 +423,12 @@ void sr_glb_shutdown(SrGlBackend *b) {
     pDeleteTextures(1, &b->fbo_color);
     pDeleteRenderbuffers(1, &b->fbo_depth);
   }
+  for (int i = 0; i < 2; i++)
+    if (b->bloom_fbo[i]) {
+      pDeleteFramebuffers(1, &b->bloom_fbo[i]);
+      pDeleteTextures(1, &b->bloom_tex[i]);
+    }
+  pDeleteProgram(b->prog_blur);
   pDeleteTextures(1, &b->tex_array);
   pDeleteVertexArrays(1, &b->quad_vao);
   pDeleteBuffers(1, &b->quad_vbo);
@@ -461,6 +547,9 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
       if (d->pass == SR_PASS_XRAY) pEnable(GL_DEPTH_TEST);
     }
     pDisable(GL_DEPTH_TEST);
+    pDisable(GL_BLEND);
+    if (f->bloom) render_bloom(b, iw, ih);
+    pEnable(GL_BLEND);
   }
   /* post pass: upscale with nearest filtering into the letterboxed viewport */
   pBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -477,6 +566,12 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
     pUniform1i(b->p_quant, f->quantize ? 1 : 0);
     pUniform1i(b->p_crt, f->crt ? 1 : 0);
     pUniform2f(b->p_res, (float)iw, (float)ih);
+    pUniform1i(b->p_bloom, 1);
+    pUniform1f(b->p_bloom_k, f->bloom ? 0.75f : 0.0f);
+    pActiveTexture(GL_TEXTURE1);
+    pBindTexture(GL_TEXTURE_2D, f->bloom ? b->bloom_tex[0] : b->fbo_color);
+    pActiveTexture(GL_TEXTURE0);
+    pBindTexture(GL_TEXTURE_2D, b->fbo_color);
     pBindVertexArray(b->quad_vao);
     pDrawArrays(GL_TRIANGLES, 0, 6);
     b->draw_calls++;

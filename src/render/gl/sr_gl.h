@@ -9,6 +9,8 @@
 
 #define SR_GL_MAX_MESHES 512
 
+enum { SR_GL_PROG_WORLD = 0, SR_GL_PROG_POST = 1, SR_GL_PROG_BLUR = 2 };
+
 typedef struct SrGlMesh {
   unsigned vao, vbo, ibo;
   int count;
@@ -19,7 +21,9 @@ typedef struct SrGlBackend {
   bool ready;
   bool gles;
   unsigned generation;
-  unsigned prog_world, prog_post;
+  unsigned prog_world, prog_post, prog_blur;
+  unsigned bloom_fbo[2], bloom_tex[2];
+  int bloom_w, bloom_h;
   unsigned tex_array;
   unsigned fbo, fbo_color, fbo_depth;
   int fbo_w, fbo_h;
@@ -30,15 +34,16 @@ typedef struct SrGlBackend {
   char error[256];
   /* uniform locations */
   int u_mvp, u_view, u_lpos, u_lcol, u_nl, u_amb, u_wet, u_snap, u_affine, u_tex, u_fog, u_fogr;
-  int p_tex, p_dither, p_quant, p_crt, p_res;
+  int p_tex, p_dither, p_quant, p_crt, p_res, p_bloom, p_bloom_k;
+  int b_tex, b_dir, b_bright;
 } SrGlBackend;
 
 /* Loads GL entry points through a getter (SDL_GL_GetProcAddress); NULL on the web. */
 typedef void (*SrGlFn)(void);
 typedef SrGlFn (*SrGlGetProc)(const char *name);
 bool sr_gl_load(SrGlGetProc get);
-/* Shader source for the dialect: preamble + body. */
-void sr_gl_shader_source(bool gles, bool fragment, bool post, char *out, size_t cap);
+/* Shader source for the dialect: preamble + body. prog: SR_GL_PROG_WORLD, _POST or _BLUR. */
+void sr_gl_shader_source(bool gles, bool fragment, int prog, char *out, size_t cap);
 
 bool sr_glb_init(SrGlBackend *b, bool gles);
 void sr_glb_shutdown(SrGlBackend *b);

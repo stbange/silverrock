@@ -131,6 +131,25 @@ class Builds(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("headless_fail.scn.txt:4", r.stderr)
 
+    def test_balance_bands_gate(self):
+        exe = os.path.join(BUILD, "sr_headless")
+        if not os.path.exists(exe):
+            self.skipTest("no headless build")
+        d = tempfile.mkdtemp()
+        tight = os.path.join(d, "bands.txt")
+        with open(tight, "w") as f:
+            f.write("# impossible band\ngig earned 999999 9999999\n* dominance 0 100\n")
+        r = run([exe, "--balance", "1", "--bands", tight])
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("BAND FAIL gig earned", r.stdout)
+        with open(tight, "w") as f:
+            f.write("gig earned 0 9999999\n")
+        r = run([exe, "--balance", "1", "--bands", tight])
+        self.assertEqual(r.returncode, 0, r.stdout)
+        r = run([exe, "--balance", "1", "--bands", os.path.join(d, "missing.txt")])
+        self.assertNotEqual(r.returncode, 0)
+        shutil.rmtree(d)
+
     def test_new_warning_fails(self):
         # @spec quality-gates: New compiler warning
         d = tempfile.mkdtemp()
