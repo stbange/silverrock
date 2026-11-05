@@ -63,7 +63,7 @@ Then serve `build/web/` with any static web server and open `silverrock.html`.
 | [Game design](docs/concept/01-game-design.md) | Vision, pillars, setting, player, core loops, procedural city, living city, factions and the corporate game, story, jobs, progression, economy, combat, weapons and gadgets, the Matrix, art direction, controls |
 | [Technical design](docs/concept/02-technical-design.md) | C17 / SDL3 / OpenGL architecture, determinism, world generation, simulation, retro renderer, input and touch, persistence, platforms, performance budgets, testing strategy (≥ 95 % coverage, automated game tests), CI |
 | [Roadmap](docs/concept/03-roadmap.md) | Milestones M0–M7, first playable slice, risks, open questions |
-| [Soundtrack](docs/concept/04-soundtrack.md) | Ambient instrumental tracks for every situation, with prompts for AI music generators |
+| [Soundtrack](docs/concept/04-soundtrack.md) | *Songs for a City Without a Sun*: the musical vision (three layers, four leitmotifs) and 51 ambient instrumental tracks with ready-to-paste prompts for AI music generators |
 
 ## Technology
 

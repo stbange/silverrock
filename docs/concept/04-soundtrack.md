@@ -1,317 +1,400 @@
-# Silverrock — Soundtrack brief
+# Silverrock — Soundtrack: *Songs for a City Without a Sun*
 
 Status: draft for generation, 2026-11-05. Companion to the [game design](01-game-design.md).
 
-Every track is **ambient and instrumental**. The only voice allowed is a **wordless choir or a breathy pad-like
-vocal texture**, never words. The city never sees the sun, so the whole score lives at night: cold synths, rain,
-distant machinery, warm analogue pads, slow pulses, tape hiss. It should sound like it belongs to a retro low-poly
-world: slightly lo-fi, a little worn, never glossy pop.
+## 1. The artistic vision
 
-## How to use these prompts with Suno
+**The sun went out forty years ago. The music remembers it.**
+
+Silverrock's score is one long nocturne in many rooms. It is ambient and instrumental: no words, ever. The only
+voice is a **wordless choir**, used sparingly, and it stands for the one thing nobody in the city has seen in
+decades: daylight. When the choir appears, the music is reaching for the sun.
+
+The score is built from three layers that mirror the city itself:
+
+| Layer | Stands for | Sound |
+|---|---|---|
+| **The Ground** | the street, the poor, rent, rain, people | warm and worn: tape-saturated electric piano, detuned analogue pads, vinyl and tape hiss, rain, soft hand-played textures, things slightly out of tune |
+| **The Glass** | the megacorps, money, control | cold and perfect: crystalline FM bells, glassy pads, quantised arpeggios like data, pristine sub bass, no noise, no wobble, nothing human |
+| **The Memory** | the lost sun, hope, the player's will | the wordless choir and one long, bowed, string-like synth tone that slowly rises; only in rare moments, never in loops you hear for hours |
+
+Every track sits somewhere between those layers. A slum alley is all Ground. A corporate lobby is all Glass. A
+rooftop above the clouds of smog lets the Memory in.
+
+### Leitmotifs
+
+Four short melodic ideas recur in different disguises. Suno will not reproduce exact notes, but describing them the
+same way keeps the tracks related.
+
+- **The Sun motif:** five notes, rising slowly and resting on a long, unresolved fifth, like a question. On the title
+  screen it is grand; on a rooftop it is hopeful; at the ending it finally resolves into a major chord.
+- **The Rent motif:** a two-note falling figure, like a clock or a dripping pipe (tock… tick). It hides in every home
+  track and turns anxious when money runs out.
+- **The Grid motif:** a fast, perfectly even sixteenth-note arpeggio, the sound of the corps' data. Wherever the
+  Glass is near, it is there, cold and precise.
+- **The Heartbeat:** a soft, low double pulse. Missions, stealth and danger are built on it; it speeds up as you are
+  noticed and stops when you flatline.
+
+### Rules for the whole score
+
+- **Instrumental only.** No sung words, no spoken words, no rap. The choir is always wordless ("ah", "oo"), distant
+  and reverberant.
+- **Night, always.** No bright major-key pop, no festival drops, no happy guitars. Even rewards are cool and
+  understated.
+- **Retro texture.** The game is low-poly and dithered; the music should feel the same: slightly lo-fi, tape-worn,
+  a little grainy, like a cassette found in a drawer. Avoid glossy, modern, over-compressed production.
+- **Built to loop.** In-game tracks have no big intro, no final hit, no fade-out story. They breathe, they evolve
+  slowly, and they can repeat.
+- **Families share key and tempo:** all street loops, all mission states and all Matrix states, so the game can
+  crossfade between them seamlessly.
+
+## 2. How to use these prompts with Suno
 
 - Switch on **Instrumental**.
-- **Simple mode:** paste the *Prompt* line into the song description.
-- **Custom mode:** paste the *Style* line into "Style of Music" and leave the lyrics empty. The title goes into the
-  title field.
-- If a voice with words slips in anyway, add `no vocals, no lyrics, no singing` at the end of the style. For tracks
-  that allow a choir, keep the word `wordless` next to it.
-- Every track should loop in the game. Generate a few takes and pick the one with the steadiest ending and no big
-  final hit. Generate the in-game loops at 2–4 minutes.
-- Suno does not know artist names reliably and they can cause refusals, so the prompts describe the sound, not
-  other composers.
-
-Shared sound palette (already part of each prompt where it fits): *dark ambient, analog synth pads, slow arpeggios,
-sub bass, rain texture, tape hiss, reverb, cinematic, cyberpunk, no drums or soft muted drums.*
-
-Wherever there are several variants of one situation (district, alert state), the variants use the same key and
-tempo, so the game can crossfade between them.
+- **Custom mode (recommended):** paste the *Style* block into "Style of Music". The style tags come first, the
+  description after them; current Suno versions read long, descriptive style prompts well. Put the title in the
+  title field and leave the lyrics empty.
+- **Simple mode:** paste only the first sentence of the description plus the style tags.
+- If a voice with words appears anyway, generate again and end the style with `no vocals, no lyrics, no singing,
+  wordless only`.
+- Generate several takes and keep the one with the steadiest ending (for loops) or the clearest shape (for short
+  stingers). In-game loops: 2–4 minutes. Stingers: ask for "short, 20 seconds" and trim.
+- The prompts describe sounds, never other artists: artist names are unreliable and can be refused.
 
 ---
 
-## 1. Menus and the start of a game
+## 3. The tracks
 
-### 1.1 Silverrock (title theme)
-- **When:** title screen.
-- **Prompt:** Slow dark cyberpunk ambient theme, lonely analog synth melody over deep pads, distant city hum and rain, wordless choir swells, melancholic and grand, instrumental.
-- **Style:** `dark ambient, cyberpunk, cinematic, analog synth lead, warm pads, wordless choir, rain ambience, slow 70 bpm, D minor, melancholic, majestic, instrumental, no vocals`
-- **Description:** The city's main theme. A simple five-note synth motif rises out of rain noise and a low drone; a wordless choir enters halfway and lifts it, then everything sinks back into the rain. It should feel like looking at an endless night skyline: beautiful, cold and a little hopeless. The motif returns in other tracks.
+### Part I — The Threshold
 
-### 1.2 Who Are You (character creation)
-- **When:** choosing background and look.
-- **Prompt:** Calm introspective synth ambient, soft pulsing arpeggio, glassy bell tones, gentle sub bass, curious and quiet, instrumental, loopable.
-- **Style:** `ambient electronic, minimal, soft arpeggiator, glass bells, warm pads, sub bass, 80 bpm, D minor, introspective, calm, loopable, instrumental, no vocals`
-- **Description:** A quiet mirror moment. A soft, repeating arpeggio like a scanner reading a face, with glassy bell notes picking out the title motif. No tension, just anticipation.
+#### 1. Silverrock
+*Title screen. The city's overture.*
 
-### 1.3 Pause
-- **When:** pause screen and settings.
-- **Prompt:** Very sparse muted synth drone, slow low pad, faint rain, almost silent, instrumental, seamless loop.
-- **Style:** `drone ambient, minimal, low pad, faint rain, very quiet, slow, loopable, instrumental, no vocals`
-- **Description:** A held breath. One low pad with slow filter movement and faint rain, quiet enough to sit under menus without being noticed.
+**Style:**
+`dark ambient, cyberpunk, cinematic, analog synth, wordless choir, rain, 70 bpm, D minor, melancholic, majestic, tape warmth, instrumental, no vocals.` Rain on glass and a low city drone open the piece, as if heard through a window high above an endless night skyline. A warm, slightly detuned analog synth plays a slow five-note melody that rises and stops on an open, unresolved interval, like a question asked into the dark. Deep pads swell beneath it. Halfway through, a distant wordless choir enters, singing only "ah", soft and enormous, as if the city remembered the sun for a moment. The choir lifts the melody once, then everything sinks back into rain and tape hiss. Beautiful, cold and lonely; grand but never triumphant.
 
----
+#### 2. Mirror, Mirror
+*Character creation.*
 
-## 2. Home
+**Style:**
+`ambient electronic, minimal, glass bells, soft arpeggio, warm pads, 80 bpm, D minor, introspective, curious, loopable, instrumental, no vocals.` A quiet room with a scanner humming. A soft, patient arpeggio repeats like a light passing over a face, and glassy bell tones pick out fragments of a rising five-note melody, never finishing it. Warm low pads breathe underneath; a faint tape hiss gives it a worn, retro feel. The mood is curious and calm: someone deciding who to be before stepping out into the rain.
 
-### 2.1 Four Walls (apartment, ordinary night)
-- **When:** inside your own apartment.
-- **Prompt:** Cozy lo-fi ambient, warm electric piano chords, rain on the window, soft vinyl crackle, muffled city outside, tired but safe, instrumental, no drums.
-- **Style:** `lo-fi ambient, warm electric piano, rain on window, vinyl crackle, muffled city ambience, soft pads, 65 bpm, F major 7, cozy, tired, intimate, loopable, instrumental, no vocals`
-- **Description:** The one warm place in the city. Slow electric piano chords, rain against glass, the muffled sound of traffic and neighbours through thin walls. Safe, small and tired, like coming home after a long shift.
+#### 3. Held Breath
+*Pause and settings.*
 
-### 2.2 Rent Is Due (apartment, rent due in under two days or debt open)
-- **When:** at home while rent is due soon or unpaid.
-- **Prompt:** Uneasy lo-fi ambient, detuned electric piano, ticking clock pulse, low dissonant drone, rain, quiet anxiety, instrumental.
-- **Style:** `lo-fi ambient, detuned electric piano, ticking clock percussion, dissonant low drone, rain, 65 bpm, F minor, anxious, restless, loopable, instrumental, no vocals`
-- **Description:** The same room, but the chords have gone slightly out of tune and a soft tick, like a clock or a dripping pipe, keeps time. A low drone sits under everything. Nothing dramatic, just the steady weight of money worries.
-
-### 2.3 Lights Out (sleeping, time skip)
-- **When:** sleeping in bed or in a capsule hotel.
-- **Prompt:** Slow dreamy ambient, soft pads swelling and fading, distant wordless choir, gentle rain, sleep, instrumental, 60 seconds.
-- **Style:** `dream ambient, soft pads, slow swells, distant wordless choir, gentle rain, 50 bpm, F major, peaceful, sleepy, instrumental, no vocals`
-- **Description:** A short sting for the sleep transition. Pads slowly swell and dissolve, with a faint wordless choir far away, like drifting off while it rains.
-
-### 2.4 Still Night (waking up)
-- **When:** waking up after sleep.
-- **Prompt:** Short gentle ambient sting, soft synth bell motif, rising pad, rain, a new night begins, instrumental, 30 seconds.
-- **Style:** `ambient sting, soft synth bells, rising pad, rain, 70 bpm, D minor, gentle, hopeful but grey, instrumental, no vocals`
-- **Description:** Waking up and it is still night. Three soft bell notes from the title motif over a rising pad: a little hope, a lot of grey.
-
-### 2.5 New Keys (moved to a better apartment)
-- **When:** after moving up a housing tier.
-- **Prompt:** Warm uplifting ambient, bright synth arpeggio, soft strings pad, sense of progress and relief, cyberpunk night, instrumental, 45 seconds.
-- **Style:** `uplifting ambient, bright synth arpeggio, string pad, warm bass, 85 bpm, A major, relief, progress, instrumental, no vocals`
-- **Description:** A short, warm reward cue. A bright arpeggio climbs over soft strings: you have moved a step up. It ends open, not triumphant.
+**Style:**
+`drone ambient, minimal, very quiet, low pad, distant rain, slow filter movement, loopable, instrumental, no vocals.` Time stands still. A single low pad slowly opens and closes like breathing, with distant rain and the faintest electrical hum. Almost nothing happens, and that is the point: a quiet held breath that can sit under menus for minutes without asking for attention.
 
 ---
 
-## 3. The streets (one loop per district type)
+### Part II — Four Walls (home)
 
-All district loops share **75 bpm, D minor** and the same sub bass pulse, so they can crossfade while walking.
+All home tracks hide the **Rent motif**: a soft two-note falling figure, tock… tick, like a clock or a dripping
+pipe.
 
-### 3.1 Glass and Gold (Corporate Spire)
-- **Prompt:** Cold sleek corporate ambient, crystalline synth pads, precise arpeggio, deep sub bass, high wordless choir, sterile and powerful, cyberpunk, instrumental.
-- **Style:** `corporate ambient, cyberpunk, crystalline pads, precise arpeggio, deep sub bass, airy wordless choir, 75 bpm, D minor, cold, sleek, imposing, loopable, instrumental, no vocals`
-- **Description:** Towers of glass and money. Clean, expensive, slightly inhuman: a precise arpeggio like ticker data, cold crystal pads and a thin high choir far above the streets. Nothing out of place.
+#### 4. Four Walls
+*Inside your apartment on an ordinary night.*
 
-### 3.2 City Hall at Night (Civic Center)
-- **Prompt:** Solemn civic ambient, slow organ-like synth chords, distant bells, low brass pad, rain, bureaucratic and grey, instrumental.
-- **Style:** `dark ambient, organ-like synth, distant bells, low brass pad, rain, 75 bpm, D minor, solemn, institutional, loopable, instrumental, no vocals`
-- **Description:** Stone steps, flags and surveillance. Slow organ-like chords and a distant bell give it a public, official feel, worn down and grey.
+**Style:**
+`lo-fi ambient, warm electric piano, rain on window, vinyl crackle, muffled city, soft pads, 65 bpm, F major seventh, cozy, tired, intimate, loopable, instrumental, no vocals.` The one warm place in a cold city. Slow, tired electric piano chords with soft jazz colours, slightly wobbly like an old tape. Rain taps on the window; through thin walls you hear muffled traffic, a neighbour's TV and the hum of the building. Somewhere in the background a soft two-note falling figure, like a dripping tap, repeats quietly. No drums. It should feel like taking off wet boots after a long shift: small, safe and human.
 
-### 3.3 Neon Market (Commercial)
-- **Prompt:** Busy cyberpunk market ambient, layered synth arpeggios, muffled crowd chatter texture, soft pulsing bass, neon hum, light percussion, instrumental.
-- **Style:** `cyberpunk ambient, layered arpeggios, crowd ambience texture, neon hum, soft pulsing bass, light muted percussion, 75 bpm, D minor, busy, colorful, loopable, instrumental, no vocals`
-- **Description:** Shops, signs and crowds. Overlapping bright arpeggios like competing ads, a warm pulse underneath and the indistinct murmur of people. Lively but still night.
+#### 5. Rent Is Due
+*At home while rent is due within two days, or debt is open.*
 
-### 3.4 After Hours (Entertainment)
-- **Prompt:** Hazy nightlife ambient, muffled club bass from behind walls, sultry synth chords, glittering arps, neon glow, wet streets, instrumental.
-- **Style:** `nightlife ambient, muffled club kick, deep house bass muffled, sultry synth chords, glittering arpeggios, 75 bpm half-time, D minor, hazy, seductive, loopable, instrumental, no vocals`
-- **Description:** Bars and clubs everywhere. The beat is heard only through walls, muffled and distant, while hazy chords and glittering arps hang in the neon. Seductive and a little dangerous.
+**Style:**
+`lo-fi ambient, detuned electric piano, ticking clock, dissonant drone, rain, 65 bpm, F minor, anxious, restless, loopable, instrumental, no vocals.` The same small room, but something has gone wrong with it. The electric piano is now slightly out of tune and the chords keep sliding into minor. The two-note falling figure has become a steady tick, like a clock you cannot stop hearing at 3 a.m. A low, uneasy drone sits under everything and slowly grows. The rain is heavier. Nothing dramatic happens; it is the quiet, grinding weight of money you do not have.
 
-### 3.5 Blocks (Residential)
-- **Prompt:** Quiet residential night ambient, soft warm pads, distant traffic, sparse piano notes, gentle rain, lonely but human, instrumental.
-- **Style:** `ambient, soft warm pads, sparse piano, distant traffic ambience, gentle rain, 75 bpm, D minor, lonely, human, calm, loopable, instrumental, no vocals`
-- **Description:** Endless apartment blocks with a few lit windows. Sparse piano notes over warm pads, far-off traffic and rain: thousands of small lives behind glass.
+#### 6. Lights Out
+*Falling asleep (bed or capsule hotel).*
 
-### 3.6 Old Quarter
-- **Prompt:** Nostalgic old town ambient, worn tape-saturated synths, distant accordion-like pad, rain on tiles, faded memories, cyberpunk, instrumental.
-- **Style:** `nostalgic ambient, tape saturation, worn analog synths, reed organ pad, rain on rooftops, 75 bpm, D minor, faded, melancholic, warm, loopable, instrumental, no vocals`
-- **Description:** The part of the city that existed before the towers. Tape-worn synths, a reed-organ-like pad and rain on old tiles; it feels like a memory that is slowly being demolished.
+**Style:**
+`dream ambient, slow swelling pads, distant wordless choir, gentle rain, tape warmth, 50 bpm, F major, peaceful, drifting, short, instrumental, no vocals.` Drifting off. Warm pads swell slowly and dissolve into each other like lights blurring through a rainy window. Far away, a wordless choir hums a soft "oo", as if from a dream of daylight. The rain softens. It fades into silence after about a minute.
 
-### 3.7 Foundry (Industrial)
-- **Prompt:** Heavy industrial ambient, rhythmic metallic machinery, deep droning bass, steam hiss, dark synth pads, relentless, instrumental.
-- **Style:** `industrial ambient, metallic percussion loops, machinery rhythm, deep drone, steam hiss, dark pads, 75 bpm, D minor, heavy, grinding, loopable, instrumental, no vocals`
-- **Description:** Factories that never sleep. Machines thud and clank in a slow rhythm, steam hisses, and a dark drone grinds underneath. Workers walk past in silence.
+#### 7. Still Night
+*Waking up.*
 
-### 3.8 Low Tide (Docks)
-- **Prompt:** Foggy harbour ambient, distant ship horns, deep swelling bass like waves, creaking metal, cold synth pads, lonely, instrumental.
-- **Style:** `dark ambient, foggy harbor, distant ship horns, wave-like bass swells, creaking metal, cold pads, 75 bpm, D minor, lonely, vast, loopable, instrumental, no vocals`
-- **Description:** Containers, cranes and black water. Bass swells like slow waves, a ship horn sounds far off, metal creaks. Cold, empty and huge.
+**Style:**
+`ambient sting, soft synth bells, rising pad, rain, 70 bpm, D minor, gentle, grey hope, short 30 seconds, instrumental, no vocals.` Eyes open, and it is still night. Three soft bell notes rise from a quiet pad, the beginning of a melody that never finishes. A little hope, a lot of grey.
 
-### 3.9 Clean Rooms (Research Campus)
-- **Prompt:** Clinical futuristic ambient, pristine sine tones, slow data-like blips, soft airy pads, curious and slightly eerie, instrumental.
-- **Style:** `futuristic ambient, sine tones, data blips, airy pads, subtle glitch, 75 bpm, D minor, clinical, curious, eerie, loopable, instrumental, no vocals`
-- **Description:** Labs and lawns under floodlights. Pure sine tones and soft data blips, airy and clean, with a slight eeriness: something is being tested here.
+#### 8. New Keys
+*Moving to a better apartment.*
 
-### 3.10 Under the Highway (Undercity)
-- **Prompt:** Dark claustrophobic ambient, rumbling traffic overhead, dripping water, low distorted drone, distant echoes, gritty, instrumental.
-- **Style:** `dark ambient, claustrophobic, rumbling overhead traffic, dripping water, distorted low drone, cave reverb, 75 bpm, D minor, gritty, oppressive, loopable, instrumental, no vocals`
-- **Description:** The city's basement under the elevated highways. Traffic rumbles overhead, water drips, sounds echo off concrete. Gritty and close, never fully dark.
+**Style:**
+`uplifting ambient, bright synth arpeggio, warm string pad, soft bass, 85 bpm, A major, relief, progress, short 45 seconds, instrumental, no vocals.` A rare, warm moment. A bright arpeggio climbs over soft string-like pads and a gentle bass, the tired electric piano of home replaced by something clearer and more open. One step up the ladder; the music ends open rather than triumphant, because the climb is long.
 
-### 3.11 Scrap (Barrens)
-- **Prompt:** Desolate wasteland ambient, wind, crackling fire, sparse detuned guitar-like synth plucks, empty space, lonely, instrumental.
-- **Style:** `desolate ambient, wind, crackling fire, detuned plucked synth, sparse, wide reverb, 75 bpm, D minor, empty, lonely, harsh, loopable, instrumental, no vocals`
-- **Description:** Empty lots and burning barrels at the city's edge. Wind, fire crackle and a few detuned plucks in a lot of empty space. The skyline glows far away.
+#### 9. Locked Out
+*Evicted: the street is your home now.*
 
-### 3.12 Weather layers (optional stems)
-Generate these as separate textures to mix over any district loop.
-- **Downpour:** `heavy rain ambience, thunder rumble, no music, field recording style, loopable, no vocals`
-- **Fog:** `muffled foghorn, soft white noise, low airy drone, very quiet, loopable, no vocals`
-- **Smog alert / acid-rain advisory:** `distant warning siren, sickly detuned pad, hiss, public address tone without words, loopable, no vocals`
+**Style:**
+`bleak ambient, cold wind, sparse sad piano, rain, distant city noise, 60 bpm, D minor, lonely, homeless, loopable, instrumental, no vocals.` The warm room is gone. Fragments of the home piano now play outside, in the wind and rain, sparse and far apart, with long silences between them. The city rumbles in the distance, indifferent. Cold, lonely and very quiet.
 
 ---
 
-## 4. Getting around
+### Part III — The Districts (street loops)
 
-### 4.1 Line 3 (metro ride)
-- **Prompt:** Hypnotic train ambient, rhythmic rail clatter as percussion, steady motorik pulse, passing light flickers as synth swells, instrumental.
-- **Style:** `motorik ambient, train rhythm percussion, steady pulse, synth swells, tunnel reverb, 90 bpm, D minor, hypnotic, travelling, instrumental, no vocals`
-- **Description:** Riding under the city. The clatter of rails becomes the beat, a steady pulse carries it and passing lights sweep by as synth swells. Hypnotic, a moment to think.
+Every district loop shares **75 bpm, D minor** and the same soft sub-bass pulse, so walking across a district
+border is a slow crossfade, not a cut. Each district has its own character, made from the three layers.
 
-### 4.2 Up on the Roofs (rooftops, after the grapple line)
-- **Prompt:** Wide open rooftop ambient, soaring airy pads, high wordless choir, wind, distant flying cars, skyline at night, breathtaking, instrumental.
-- **Style:** `cinematic ambient, soaring pads, high wordless choir, wind, distant engines, wide reverb, 75 bpm, D minor, breathtaking, free, loopable, instrumental, no vocals`
-- **Description:** Above the noise for once. Wind, wide pads and a high wordless choir, aerodynes humming past: the whole skyline at your feet. The title motif appears very slowly.
+#### 10. Glass and Gold — Corporate Spire
+*All Glass.*
 
-### 4.3 Cab Ride (cab travel transition)
-- **Prompt:** Smooth night drive ambient, warm bass groove, gentle synth chords, city lights passing, relaxed, instrumental, 40 seconds.
-- **Style:** `night drive, smooth synthwave ambient, warm bass, gentle chords, 85 bpm, D minor, relaxed, instrumental, no vocals`
-- **Description:** A short travel cue. Warm bass and smooth chords as lights slide past the window.
+**Style:**
+`corporate ambient, cyberpunk, crystalline FM bells, precise arpeggio, deep clean sub bass, airy high wordless choir, 75 bpm, D minor, cold, sleek, imposing, loopable, instrumental, no vocals.` Towers of glass and money, lit from inside and empty at night. Everything is perfect and nothing is warm: a fast, perfectly even arpeggio streams like stock data, crystalline bells ring with long reflections, the sub bass is clean and powerful. High above, a thin, distant wordless choir sounds like air conditioning in a cathedral of glass. No noise, no tape, no human touch: beautiful, expensive and inhuman.
 
----
+#### 11. The Steps — Civic Center
+*Ground under Glass.*
 
-## 5. Places and people
+**Style:**
+`dark ambient, organ-like synth chords, distant bells, low brass pad, light rain, 75 bpm, D minor, solemn, institutional, worn, loopable, instrumental, no vocals.` Stone steps, flags and cameras. Slow, organ-like chords move like a ceremony nobody believes in anymore. A distant bell tolls the hour; a low brass-like pad gives it a sense of official weight. Under it all, a faint data arpeggio flickers, the corps watching through the city's institutions. Grey, solemn and slightly hollow.
 
-### 5.1 The Back Room (fixer meeting)
-- **Prompt:** Smoky noir ambient, slow upright-bass-like synth, muted trumpet-like pad, low murmurs, cigarette smoke and secrets, instrumental.
-- **Style:** `noir ambient, cyberpunk noir, synth upright bass, muted brass pad, soft brushes, smoky, 70 bpm, D minor, secretive, cool, loopable, instrumental, no vocals`
-- **Description:** A corner booth where work is handed out. Noir mood: a walking bass, a muted brass-like pad, soft brushes. Cool, discreet, a little dangerous.
+#### 12. Neon Bazaar — Commercial
+*Ground with Glass signs.*
 
-### 5.2 Chrome (ripperdoc)
-- **Prompt:** Unsettling clinical ambient, medical beeps, whirring servo sounds, cold metallic pads, low heartbeat pulse, instrumental.
-- **Style:** `dark clinical ambient, medical monitor beeps, servo whirs, metallic pads, heartbeat pulse, 70 bpm, D minor, unsettling, cold, loopable, instrumental, no vocals`
-- **Description:** A back-alley surgery. Monitor beeps, the whir of servos, a heartbeat-like pulse and cold metal pads. Fascinating and a little nauseating.
+**Style:**
+`cyberpunk ambient, layered synth arpeggios, crowd murmur texture, neon hum, soft pulsing bass, light muted percussion, 75 bpm, D minor, busy, colorful, loopable, instrumental, no vocals.` Shopfronts, holo-signs and crowds under umbrellas. Several bright arpeggios overlap like advertisements competing for attention; a warm bass pulse walks underneath; neon tubes buzz and the crowd is an indistinct murmur without words. Colourful and lively, yet still night, still wet, still a little tired.
 
-### 5.3 Counter Service (shops)
-- **Prompt:** Light quirky shop ambient, plinky synth melody, soft bass, retro electronic, friendly but tired, instrumental, loopable.
-- **Style:** `retro electronic, plinky synth melody, soft bass, light percussion, 90 bpm, F major, friendly, tired, loopable, instrumental, no vocals`
-- **Description:** Gun shops, electronics stalls and noodle counters. A plinky little melody, slightly tired, like store music that has played all night.
+#### 13. Last Call — Entertainment
+*Ground, glowing.*
 
-### 5.4 Clinic Lights (clinic, waking up after MedEvac)
-- **Prompt:** Soft sterile ambient, gentle beeping monitor, slow warm pad, relief and exhaustion, quiet, instrumental.
-- **Style:** `ambient, soft hospital monitor beeps, warm slow pad, quiet, 60 bpm, F major, relief, exhaustion, instrumental, no vocals`
-- **Description:** Waking up patched together. Quiet beeps and a warm pad: you are alive, and the bill is on its way.
+**Style:**
+`nightlife ambient, muffled club beat behind walls, deep bass, sultry synth chords, glittering arpeggios, wet streets, 75 bpm half-time, D minor, hazy, seductive, loopable, instrumental, no vocals.` The district of bars, clubs and bad decisions. The beat is only ever heard through walls: a muffled kick and bass as if from the club next door, swelling when a door opens and fading again. Over it float hazy, sultry chords and glittering arpeggios like reflections in puddles. Seductive, warm and a little dangerous.
 
-### 5.5 Terminal (home terminal, messages and news)
-- **Prompt:** Minimal retro computer ambient, soft data hum, gentle modem-like tones, slow pads, focused, instrumental, loopable.
-- **Style:** `minimal electronic, retro computer hum, soft data tones, slow pads, 80 bpm, D minor, focused, quiet, loopable, instrumental, no vocals`
-- **Description:** Reading messages at night. Soft machine hum and gentle data tones, focused and calm.
+#### 14. Ten Thousand Windows — Residential
+*All Ground.*
 
----
+**Style:**
+`ambient, soft warm pads, sparse piano, distant traffic, gentle rain, tape hiss, 75 bpm, D minor, lonely, human, calm, loopable, instrumental, no vocals.` Endless apartment blocks with a few lit windows. A sparse piano plays slow notes with lots of space, each one like a window lighting up and going dark. Warm pads, rain and faraway traffic. Somewhere inside, the quiet two-note figure of home. Thousands of small lives behind glass; lonely, but human.
 
-## 6. Jobs and missions
+#### 15. Before the Towers — Old Quarter
+*Ground and Memory.*
 
-All mission states share **95 bpm, E minor**, so the game can move between them as guards notice you.
+**Style:**
+`nostalgic ambient, tape-worn analog synths, reed organ pad, rain on tiled roofs, faint wordless choir, 75 bpm, D minor, faded, melancholic, warm, loopable, instrumental, no vocals.` The part of the city that existed when there was still a sun. Old, tape-worn synths wobble gently; a reed-organ-like pad sounds like a forgotten church; rain runs off tiled roofs. Very faintly, a wordless choir drifts in, like a memory of a summer afternoon. Warm and sad, slowly being demolished.
 
-### 6.1 Casing the Place (approaching a target building)
-- **Prompt:** Tense low-key ambient, steady muted pulse, slow ominous pads, faint ticking, preparation before a heist, instrumental.
-- **Style:** `tension ambient, muted pulse, ominous pads, faint ticking, 95 bpm, E minor, focused, ominous, loopable, instrumental, no vocals`
-- **Description:** Standing across the street from the target. A steady muted pulse and dark pads; you are planning the way in.
+#### 16. The Foundry — Industrial
+*Ground, grinding.*
 
-### 6.2 Ghost (inside, unnoticed)
-- **Prompt:** Stealth ambient, very quiet sub bass pulse, soft breathy pads, sparse metallic clicks, held tension, instrumental, loopable.
-- **Style:** `stealth ambient, quiet sub bass pulse, breathy pads, sparse metallic clicks, 95 bpm, E minor, tense, quiet, controlled, loopable, instrumental, no vocals`
-- **Description:** Moving through the building unseen. Almost silent: a low heartbeat-like pulse, breathy pads and the occasional click. Every sound should feel risky.
+**Style:**
+`industrial ambient, metallic machinery rhythm, deep drone, steam hiss, dark pads, 75 bpm, D minor, heavy, grinding, relentless, loopable, instrumental, no vocals.` Factories that never stop. Machines thud and clank in a slow, heavy rhythm that becomes the beat; steam hisses; chains rattle somewhere above. A dark drone grinds underneath and dark pads rise like smoke. Workers walk past in silence. Heavy, relentless and strangely hypnotic.
 
-### 6.3 Something Moved (a guard is suspicious or searching)
-- **Prompt:** Rising stealth tension, pulse speeds up, dissonant string-like synth swells, sharp ticks, suspense, instrumental, loopable.
-- **Style:** `suspense ambient, faster pulse, dissonant swells, sharp ticks, 95 bpm, E minor, suspenseful, uneasy, loopable, instrumental, no vocals`
-- **Description:** A guard heard something. The pulse doubles, dissonant swells rise, sharp ticks like a flashlight sweeping. Hold your breath.
+#### 17. Black Water — Docks
+*Ground and vastness.*
 
-### 6.4 Hot (combat)
-- **Prompt:** Driving dark cyberpunk combat track, aggressive distorted bass, fast synth arpeggios, punchy electronic drums, urgent, instrumental, no vocals.
-- **Style:** `dark synthwave combat, distorted bass, fast arpeggios, punchy electronic drums, industrial hits, 95 bpm double-time, E minor, aggressive, urgent, loopable, instrumental, no vocals`
-- **Description:** Guns out. Distorted bass, fast arpeggios and hard electronic drums. Urgent, not heroic: this is a mercenary fighting for rent.
+**Style:**
+`dark ambient, foggy harbor, distant ship horns, slow wave-like bass swells, creaking metal, cold pads, 75 bpm, D minor, lonely, vast, loopable, instrumental, no vocals.` Containers, cranes and black water under a sky that never lightens. The bass swells and recedes like slow waves; a ship horn sounds far away in the fog; metal creaks. Cold pads stretch to the horizon. Empty, enormous and lonely.
 
-### 6.5 Alarm (alarm raised, getting out)
-- **Prompt:** Frantic escape track, siren-like synth rising and falling, pounding drums, racing arpeggio, panic, instrumental, no vocals.
-- **Style:** `cyberpunk action, siren-like synth, pounding drums, racing arpeggio, 95 bpm double-time, E minor, frantic, escape, loopable, instrumental, no vocals`
-- **Description:** The building knows. A siren-like synth wails over pounding drums and a racing arpeggio; the only goal is the exit.
+#### 18. Clean Rooms — Research Campus
+*Glass, curious.*
 
-### 6.6 Clean (objective taken without an alarm)
-- **Prompt:** Short satisfying ambient sting, soft rising arpeggio resolving, warm bass, quiet confidence, instrumental, 20 seconds.
-- **Style:** `ambient sting, rising arpeggio, resolving chord, warm bass, 95 bpm, E major, satisfying, confident, instrumental, no vocals`
-- **Description:** A small, cool success cue: the arpeggio rises and resolves into a major chord. No fanfare.
+**Style:**
+`futuristic ambient, pure sine tones, soft data blips, airy pads, subtle glitches, 75 bpm, D minor, clinical, curious, eerie, loopable, instrumental, no vocals.` Labs and manicured lawns under floodlights. Pure sine tones and soft data blips drift like instruments being calibrated. Airy, clean pads. Every so often something glitches for a moment, a hint that what is being researched here is not meant to be seen. Curious, clinical and slightly eerie.
 
-### 6.7 Sideways (job failed)
-- **Prompt:** Short downbeat sting, falling detuned synth notes, low drone, disappointment, instrumental, 20 seconds.
-- **Style:** `ambient sting, falling detuned synth, low drone, 70 bpm, E minor, disappointed, heavy, instrumental, no vocals`
-- **Description:** It went wrong. A few detuned notes fall into a low drone.
+#### 19. Under the Overpass — Undercity
+*Ground, buried.*
 
-### 6.8 Paid (reporting back, payment)
-- **Prompt:** Smooth cool reward cue, mellow synth chords, light groove, relief and satisfaction, cyberpunk noir, instrumental, 30 seconds.
-- **Style:** `noir synth, mellow chords, light groove, warm bass, 85 bpm, A minor to C major, relief, satisfaction, instrumental, no vocals`
-- **Description:** Cred in the account. Mellow chords and a light groove, a little noir: you got away with it, this time.
+**Style:**
+`dark ambient, claustrophobic, rumbling traffic overhead, dripping water, distorted low drone, concrete echo, 75 bpm, D minor, gritty, oppressive, loopable, instrumental, no vocals.` The city's basement beneath the elevated highways. Traffic rumbles overhead like thunder that never ends; water drips into puddles; every sound echoes off concrete. A low, slightly distorted drone holds it all together. Gritty and close, but alive: people live down here.
+
+#### 20. Burning Barrels — Barrens
+*Ground, scorched.*
+
+**Style:**
+`desolate ambient, wind, crackling fire, sparse detuned plucked synth, wide empty reverb, 75 bpm, D minor, empty, lonely, harsh, loopable, instrumental, no vocals.` Empty lots at the edge of everything. Wind, the crackle of fires in oil barrels, and a few detuned, guitar-like plucks in an enormous empty space. The glowing skyline is far away; here nobody is watching, and nobody is coming.
+
+#### 21–23. Weather layers
+*Textures mixed over any district loop.*
+
+- **Downpour:** `heavy rain ambience, rolling thunder, water rushing in gutters, no music, field recording, loopable, no vocals.` A wall of rain that swallows the city's sounds.
+- **Fog:** `muffled foghorn, soft white noise, low airy drone, very quiet, loopable, no vocals.` Everything muted and far away.
+- **Smog / acid-rain advisory:** `distant warning siren, sickly detuned pad, electric hiss, wordless public-address tone, loopable, no vocals.` The air itself is a threat; a siren wails somewhere, a sour pad hangs in the haze.
 
 ---
 
-## 7. Trouble
+### Part IV — In Between (travel and heights)
 
-### 7.1 Heat (wanted by the police, Heat 2–3)
-- **Prompt:** Paranoid pursuit ambient, distant sirens woven into synths, tense pulsing bass, helicopter-like rhythmic whoosh, instrumental, loopable.
-- **Style:** `tension electronic, distant sirens texture, pulsing bass, rotor whoosh rhythm, 100 bpm, E minor, paranoid, hunted, loopable, instrumental, no vocals`
-- **Description:** The police are looking. A pulsing bass, sirens melted into the pads and a rotor-like whoosh overhead. You feel watched on every corner.
+#### 24. Line 3
+*Riding the metro.*
 
-### 7.2 Manhunt (Heat 4–5)
-- **Prompt:** Relentless chase track, heavy industrial drums, aggressive distorted synth bass, alarm tones, overwhelming force, instrumental, no vocals.
-- **Style:** `industrial action, heavy drums, distorted synth bass, alarm tones, 100 bpm double-time, E minor, relentless, overwhelming, loopable, instrumental, no vocals`
-- **Description:** The whole city is after you. Heavy industrial drums and distorted bass, alarm tones everywhere. Run or hide.
+**Style:**
+`motorik ambient, rail clatter rhythm, steady pulse, passing light synth swells, tunnel reverb, 90 bpm, D minor, hypnotic, travelling, contemplative, instrumental, no vocals.` Riding beneath the city. The clatter of wheels on rails becomes a steady, hypnotic beat; a calm bass pulse drives it forward; passing tunnel lights sweep by as slow synth swells. A moment to sit, think and watch your reflection in the dark window.
 
-### 7.3 Gang Turf (entering a hostile gang's territory)
-- **Prompt:** Menacing street ambient, slow heavy bass, distorted low synth, sparse trap-like hi-hats, graffiti and danger, instrumental.
-- **Style:** `dark street ambient, heavy slow bass, distorted low synth, sparse hi-hats, 75 bpm half-time, D minor, menacing, loopable, instrumental, no vocals`
-- **Description:** You are on someone else's block. Slow heavy bass and sparse hi-hats; eyes are on you.
+#### 25. Above the Smog
+*Rooftops, after the grapple line.*
 
-### 7.4 Neural Glitch (over capacity, glitching)
-- **Prompt:** Glitchy corrupted ambient, stuttering synths, digital noise bursts, bitcrushed pads, disorienting, instrumental, 15 seconds.
-- **Style:** `glitch, stuttering synths, digital noise, bitcrushed pads, disorienting, instrumental, no vocals`
-- **Description:** A short stinger for when your chrome glitches: stuttering, bitcrushed, broken audio for a second or two.
+**Style:**
+`cinematic ambient, soaring airy pads, high wordless choir, wind, distant flying car engines, wide reverb, 75 bpm, D minor, breathtaking, free, hopeful, loopable, instrumental, no vocals.` For once you are above the noise. Wind, wide soaring pads and the hum of aerodynes gliding along their sky lanes. Slowly, a high wordless choir rises, and the five-note melody of the title appears very slowly, hopeful, almost reaching a resolution before drifting away. The whole skyline at your feet: the closest anyone gets to the sky.
 
-### 7.5 Thermal (thermal optics active)
-- **Prompt:** Low infrared ambient layer, warm humming drone, soft heartbeat thumps, muffled, instrumental, loopable.
-- **Style:** `drone ambient, warm hum, heartbeat thumps, muffled, low pass, loopable, instrumental, no vocals`
-- **Description:** A layer under any track while thermal vision is on: everything muffled, a warm hum and heartbeats.
+#### 26. Window Seat
+*Cab ride.*
 
-### 7.6 Flatline (down)
-- **Prompt:** Slow fading ambient, heartbeat slowing to silence, distant muffled sounds, cold pad, wordless choir fading, instrumental, 30 seconds.
-- **Style:** `dark ambient, slowing heartbeat, muffled ambience, cold pad, fading wordless choir, 60 bpm, D minor, fading, somber, instrumental, no vocals`
-- **Description:** The screen goes dark. A heartbeat slows, sounds go muffled, a wordless choir fades away.
-
-### 7.7 Evicted (lost the apartment)
-- **Prompt:** Bleak lonely ambient, cold wind, sparse sad piano, distant city noise, homeless in the rain, instrumental.
-- **Style:** `bleak ambient, cold wind, sparse sad piano, rain, distant city noise, 60 bpm, D minor, lonely, homeless, loopable, instrumental, no vocals`
-- **Description:** Locked out with nowhere to go. Cold wind, rain and a few sad piano notes from the apartment theme, now outside in the street.
+**Style:**
+`night drive, smooth synthwave ambient, warm bass, gentle chords, soft rain on glass, 85 bpm, D minor, relaxed, short 40 seconds, instrumental, no vocals.` City lights slide past a rain-streaked window. Warm bass, smooth chords, the quiet hum of an electric engine. A short breath between places.
 
 ---
 
-## 8. Later milestones (M4 Matrix, M5 story)
+### Part V — Faces (places and people)
 
-### 8.1 Jack In (entering the Matrix)
-- **Prompt:** Euphoric digital ambient, shimmering arpeggios accelerating, rising white noise, bright crystalline pads, entering cyberspace, instrumental.
-- **Style:** `digital ambient, shimmering arpeggios, rising white noise, crystalline pads, 110 bpm, A minor, euphoric, transcendent, instrumental, no vocals`
-- **Description:** The body falls away. Arpeggios accelerate, noise rises, then everything opens into bright crystal pads.
+#### 27. Corner Booth
+*Meeting a fixer.*
 
-### 8.2 The Grid (moving through the Matrix)
-- **Prompt:** Vast geometric cyberspace ambient, clean pulsing sequencer, cold neon pads, deep space reverb, mathematical, instrumental, loopable.
-- **Style:** `cyberspace ambient, pulsing sequencer, neon pads, deep reverb, 110 bpm, A minor, vast, abstract, loopable, instrumental, no vocals`
-- **Description:** An endless glowing grid. A clean sequencer pulse, cold neon pads and huge reverb: abstract and beautiful.
+**Style:**
+`cyberpunk noir ambient, walking synth bass, muted brass-like pad, soft brushes, smoky, 70 bpm, D minor, secretive, cool, loopable, instrumental, no vocals.` The back corner of a smoky bar where work is handed out. A walking bass line, soft brushes, and a muted, trumpet-like synth pad straight out of an old noir film, reshaped by neon. Cool, discreet and a little dangerous: everyone here wants something.
 
-### 8.3 ICE (fighting security programs)
-- **Prompt:** Aggressive digital combat, harsh glitch percussion, sharp square-wave bass, fast arpeggios, data storm, instrumental, no vocals.
-- **Style:** `glitch electronic, harsh glitch drums, square wave bass, fast arpeggios, 110 bpm, A minor, aggressive, digital, loopable, instrumental, no vocals`
-- **Description:** Security programs attack. Harsh glitch percussion and square-wave bass, cold and machine-like.
+#### 28. Chrome and Needles
+*The ripperdoc.*
 
-### 8.4 The Patron (first contact with the black-ops division)
-- **Prompt:** Ominous corporate power theme, deep slow brass-like synth, low wordless male choir, cold strings, dangerous offer, instrumental.
-- **Style:** `cinematic dark ambient, slow brass synth, low wordless male choir, cold strings, 60 bpm, D minor, ominous, powerful, instrumental, no vocals`
-- **Description:** A megacorp's shadow reaches out. Slow brass-like synths and a low wordless choir: power, money and danger in one offer.
+**Style:**
+`dark clinical ambient, medical monitor beeps, whirring servos, cold metallic pads, low heartbeat pulse, 70 bpm, D minor, unsettling, fascinating, loopable, instrumental, no vocals.` A back-alley surgery behind a noodle shop. Monitors beep, servos whir and click, a soft heartbeat pulse keeps time. Cold metallic pads mix with the warm hum of fluorescent tubes: the Glass is entering a human body. Fascinating and slightly nauseating.
 
-### 8.5 Breaking News (news and big world events)
-- **Prompt:** Short urgent news sting, bright synth stabs, ticking pulse, broadcast feel, instrumental, 15 seconds.
-- **Style:** `news sting, synth stabs, ticking pulse, broadcast, 120 bpm, instrumental, no vocals`
-- **Description:** The city's news jingle, used when big events break (a councillor falls, a corp strikes). No voice.
+#### 29. Counter Service
+*Shops and stalls.*
 
-### 8.6 Dawn That Never Comes (ending theme)
-- **Prompt:** Emotional cinematic ambient finale, title melody on warm analog synth, swelling strings, wordless choir, bittersweet hope, instrumental.
-- **Style:** `cinematic ambient, emotional, warm analog synth melody, swelling strings, wordless choir, 70 bpm, D major, bittersweet, hopeful, grand, instrumental, no vocals`
-- **Description:** The ending. The title motif, now in a major key, on warm synth with strings and a wordless choir. Bittersweet: maybe, one day, the sun comes back.
+**Style:**
+`retro electronic, plinky synth melody, soft bass, light percussion, tape warmth, 90 bpm, F major, friendly, tired, loopable, instrumental, no vocals.` The store music of a gun shop, an electronics stall or a noodle counter at 2 a.m.: a plinky little melody, friendly but tired, like a tape that has played all night and is starting to wear out.
+
+#### 30. Patched Up
+*Clinic, waking up after MedEvac.*
+
+**Style:**
+`ambient, soft hospital monitor beeps, warm slow pad, quiet, 60 bpm, F major, relief, exhaustion, short, instrumental, no vocals.` Waking up stitched together under harsh light. Quiet monitor beeps and a warm, slowly breathing pad: you are alive. The bill is on its way.
+
+#### 31. Green Text
+*The home terminal: messages and news.*
+
+**Style:**
+`minimal electronic, retro computer hum, soft modem-like data tones, slow pads, 80 bpm, D minor, focused, quiet, loopable, instrumental, no vocals.` Reading messages in the dark by the light of a green screen. The soft hum of an old machine, gentle data tones like a distant modem, slow pads. Focused, private, late.
+
+---
+
+### Part VI — The Job (missions)
+
+All mission states share **95 bpm, E minor** and the **Heartbeat** (a soft low double pulse), so the game can move
+between them without a cut as guards notice you.
+
+#### 32. Casing the Place
+*Approaching a target building.*
+
+**Style:**
+`tension ambient, muted double pulse, ominous pads, faint ticking, 95 bpm, E minor, focused, ominous, preparation, loopable, instrumental, no vocals.` Standing across the street from the target. A low double pulse like a calm heartbeat, dark pads, a faint tick like a watch. You are counting cameras, guards and doors. Focused, quiet, with the cold Grid arpeggio glimmering at the edge of hearing: the corp's building is awake.
+
+#### 33. Ghost
+*Inside, unnoticed.*
+
+**Style:**
+`stealth ambient, very quiet low heartbeat pulse, breathy pads, sparse metallic clicks, 95 bpm, E minor, tense, controlled, quiet, loopable, instrumental, no vocals.` Moving through the building unseen. The music almost disappears: a very low heartbeat pulse, breathy pads like held breath, and the occasional metallic click, a lock, a footstep, a camera turning. Every sound feels like a risk. Tense, controlled and very quiet.
+
+#### 34. Something Moved
+*A guard is suspicious or searching.*
+
+**Style:**
+`suspense ambient, faster heartbeat pulse, dissonant string-like swells, sharp ticks, 95 bpm, E minor, suspenseful, uneasy, loopable, instrumental, no vocals.` A guard heard something. The heartbeat doubles; dissonant, string-like swells rise and fall like a flashlight sweeping a corridor; sharp ticks cut through. Hold your breath and don't move.
+
+#### 35. Hot
+*Combat.*
+
+**Style:**
+`dark synthwave combat, aggressive distorted bass, fast synth arpeggios, punchy electronic drums, industrial hits, 95 bpm double-time, E minor, urgent, desperate, loopable, instrumental, no vocals.` Guns out. The heartbeat becomes a pounding drum, the bass distorts, a fast arpeggio races ahead. Urgent and desperate rather than heroic: this is a mercenary fighting for rent, not a hero saving the world. Gritty, tape-saturated and loud.
+
+#### 36. Alarm
+*The alarm is raised; getting out.*
+
+**Style:**
+`cyberpunk action, siren-like synth rising and falling, pounding drums, racing arpeggio, 95 bpm double-time, E minor, frantic, escape, loopable, instrumental, no vocals.` The building knows you are here. A siren-like synth wails up and down over pounding drums and a racing arpeggio; cold Grid tones flash like security lights. Only one thing matters: the exit.
+
+#### 37. Clean Exit
+*Objective taken without an alarm.*
+
+**Style:**
+`ambient sting, rising arpeggio resolving, warm bass, 95 bpm, E major, satisfying, quiet confidence, short 20 seconds, instrumental, no vocals.` The data is in your pocket and no one saw you. A soft arpeggio rises and resolves into a warm major chord. No fanfare, just a cool, private smile.
+
+#### 38. Sideways
+*Job failed.*
+
+**Style:**
+`ambient sting, falling detuned synth notes, low drone, 70 bpm, E minor, disappointed, heavy, short 20 seconds, instrumental, no vocals.` It went wrong. A few detuned notes fall slowly into a low drone, like a coin rolling into a drain.
+
+#### 39. Paid in Full
+*Reporting back and getting paid.*
+
+**Style:**
+`noir synth, mellow chords, light groove, warm bass, 85 bpm, A minor to C major, relief, satisfaction, short 30 seconds, instrumental, no vocals.` Cred lands in the account. Mellow, smoky chords over a light groove, a nod from the fixer across the table. For a moment, the Rent motif turns into something that sounds almost like a sigh of relief.
+
+---
+
+### Part VII — Trouble
+
+#### 40. Heat
+*Wanted by the police (Heat 2–3).*
+
+**Style:**
+`tension electronic, distant sirens woven into pads, pulsing bass, helicopter rotor whoosh rhythm, 100 bpm, E minor, paranoid, hunted, loopable, instrumental, no vocals.` The police are looking for you. A pulsing bass, sirens melted into the pads so you are never sure if they are real, and a rotor-like whoosh that circles overhead. Every corner might have a camera; every passer-by might call it in.
+
+#### 41. Manhunt
+*Heat 4–5.*
+
+**Style:**
+`industrial action, heavy industrial drums, distorted synth bass, alarm tones, 100 bpm double-time, E minor, relentless, overwhelming, loopable, instrumental, no vocals.` The whole city is after you. Heavy industrial drums, a distorted bass that never lets up, alarm tones on every side. The Glass and the Ground both turn against you. Run or hide.
+
+#### 42. Not Your Block
+*Entering a hostile gang's territory.*
+
+**Style:**
+`dark street ambient, heavy slow bass, distorted low synth, sparse hi-hats, 75 bpm half-time, D minor, menacing, watchful, loopable, instrumental, no vocals.` You crossed an invisible line. Slow, heavy bass, a growling low synth and a few sparse hi-hats. Graffiti glows in the neon; eyes follow you from doorways.
+
+#### 43. Static in the Nerves
+*Neural glitch (cyberware over capacity).*
+
+**Style:**
+`glitch, stuttering synths, digital noise bursts, bitcrushed pads, disorienting, short 10 seconds, instrumental, no vocals.` For a second or two your chrome betrays you: the audio stutters, breaks into bitcrushed noise and snaps back.
+
+#### 44. Warm Bodies
+*Thermal optics active (a layer under any track).*
+
+**Style:**
+`drone ambient, warm low hum, soft heartbeat thumps, muffled, low pass, loopable, instrumental, no vocals.` Seeing heat. The world goes muffled and red; a warm hum and soft heartbeats, as if you could hear the bodies you see.
+
+#### 45. Flatline
+*Going down.*
+
+**Style:**
+`dark ambient, slowing heartbeat, muffled sounds, cold pad, fading wordless choir, 60 bpm, D minor, fading, somber, short 30 seconds, instrumental, no vocals.` The heartbeat slows, the city sounds go muffled and far away, a cold pad stretches out, and a wordless choir fades like a memory of light. Then silence.
+
+---
+
+### Part VIII — Later chapters (M4 Matrix, M5 the corporate game)
+
+#### 46. Jack In
+*Entering the Matrix.*
+
+**Style:**
+`digital ambient, accelerating shimmering arpeggios, rising white noise, crystalline pads, 110 bpm, A minor, euphoric, transcendent, instrumental, no vocals.` The body falls away. Arpeggios accelerate, white noise rises like a rushing wind, and then everything opens into bright crystalline pads: a sky made of light, the only sky left.
+
+#### 47. The Grid
+*Moving through the Matrix.*
+
+**Style:**
+`cyberspace ambient, clean pulsing sequencer, cold neon pads, deep space reverb, 110 bpm, A minor, vast, abstract, loopable, instrumental, no vocals.` An endless glowing geometry. The Grid motif, fast and perfectly even, pulses through vast neon pads and deep reverb. Abstract, beautiful and inhuman: the corps' own world.
+
+#### 48. ICE
+*Fighting security programs.*
+
+**Style:**
+`glitch electronic, harsh glitch drums, square-wave bass, fast arpeggios, 110 bpm, A minor, aggressive, digital, loopable, instrumental, no vocals.` The system fights back. Harsh glitch percussion, a biting square-wave bass and arpeggios that break apart and reassemble. Cold, machine-like violence.
+
+#### 49. The Offer
+*First contact from the black-ops division of a megacorp.*
+
+**Style:**
+`cinematic dark ambient, slow brass-like synth, low wordless male choir, cold strings, deep sub bass, 60 bpm, D minor, ominous, powerful, seductive, instrumental, no vocals.` A shadow reaches out of the Glass. Slow, heavy brass-like synths, a low wordless male choir humming like the engine of a building, cold strings and a sub bass you feel more than hear. Power, money and danger in a single offer you cannot really refuse.
+
+#### 50. Breaking
+*News of big world events.*
+
+**Style:**
+`news sting, bright synth stabs, ticking pulse, broadcast feel, short 15 seconds, instrumental, no vocals.` The city's news jingle, used when something big happens: a councillor falls, a corporation strikes, a gang is wiped out. Bright, cold stabs over a ticking pulse; no voice.
+
+#### 51. Dawn That Never Comes
+*The ending.*
+
+**Style:**
+`cinematic ambient, emotional, warm analog synth melody, swelling strings, wordless choir, 70 bpm, D major, bittersweet, hopeful, grand, instrumental, no vocals.` The end of the story. The five-note melody from the title returns on a warm analog synth, and this time it finally resolves into a major chord. Strings swell, the wordless choir rises fully for the first and only time, and the rain slowly stops. Bittersweet and hopeful: the sun is still gone, but somewhere, maybe, it could come back.
