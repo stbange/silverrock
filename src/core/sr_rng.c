@@ -48,13 +48,13 @@ uint32_t sr_rng_u32(SrRng *r) {
   r->state = old * 6364136223846793005ull + r->inc;
   uint32_t xorshifted = (uint32_t)(((old >> 18u) ^ old) >> 27u);
   uint32_t rot = (uint32_t)(old >> 59u);
-  return (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
+  return (xorshifted >> rot) | (xorshifted << ((0u - rot) & 31u));
 }
 
 int32_t sr_rng_range(SrRng *r, int32_t lo, int32_t hi) {
   if (hi <= lo) return lo;
   uint32_t span = (uint32_t)((int64_t)hi - lo + 1);
-  uint32_t threshold = (uint32_t)(-span) % span;
+  uint32_t threshold = (0u - span) % span;
   for (;;) {
     uint32_t x = sr_rng_u32(r);
     if (x >= threshold) return (int32_t)((int64_t)lo + (x % span));

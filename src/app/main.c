@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* GCOVR_EXCL_START reason: entry point; exercised by the app_headless_script game test, not unit tests */
 static SrApp g_app;
 
 static int run_headless_script(const char *path) {
@@ -54,3 +55,4 @@ void SDL_AppQuit(void *state, SDL_AppResult result) {
   SrApp *a = (SrApp *)state;
   if (a->game) sr_app_quit(a);
 }
+/* GCOVR_EXCL_STOP */

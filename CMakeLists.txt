@@ -137,5 +137,7 @@ if(SR_BUILD_TESTS)
       SR_GOLDEN_DIR="${CMAKE_SOURCE_DIR}/tests/render")
     sr_configure_target(sr_platform_tests)
     add_test(NAME platform COMMAND sr_platform_tests)
+    add_test(NAME game_app_headless_script COMMAND silverrock --headless --script
+             ${CMAKE_SOURCE_DIR}/tests/game/new_game_start.scn)
   endif()
 endif()
