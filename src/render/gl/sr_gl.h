@@ -37,7 +37,9 @@ typedef struct SrGlBackend {
   int triangles;
   char error[256];
   /* uniform locations */
-  int u_mvp, u_view, u_lpos, u_lcol, u_nl, u_amb, u_wet, u_snap, u_affine, u_tex, u_fog, u_fogr;
+  int u_mvp, u_view, u_lpos, u_lcol, u_nl, u_amb, u_wet, u_snap, u_affine, u_tex, u_fog, u_fogr, u_inst;
+  unsigned inst_vao, inst_vbo, inst_ibo, inst_data;
+  int inst_count_idx;
   int p_tex, p_dither, p_quant, p_crt, p_res, p_bloom, p_bloom_k;
   int b_tex, b_dir, b_bright;
 } SrGlBackend;

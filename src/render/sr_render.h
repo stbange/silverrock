@@ -123,8 +123,19 @@ int sr_chunk_count(const SrCity *c); /* chunks per side */
 void sr_mesh_part(SrMesh *m, SrVec3 origin, float yaw, SrVec3 pivot, float swing, SrVec3 lo, SrVec3 hi, SrColor col,
                   int layer, int em);
 
+/* Instanced crowd (far level of detail): a unit body whose vertices carry a part id (pad byte:
+ * 0/1 legs, 2 torso, 3/4 arms, 5 head) and per-instance data of SR_INST_FLOATS floats:
+ * x y z yaw | swing width height 0 | outfit rgb 0 | skin rgb 0. */
+#define SR_INST_FLOATS  16
+#define SR_CROWD_NEAR_M 28.0f
+void sr_build_instance_body(SrMesh *out);
+/* Near citizens as detailed meshes into `near`, far ones as instances; returns the instance count. */
+int sr_build_crowd_lod(const SrCrowd *cr, SrVec3 cam, float near_m, float far_m, SrMesh *near, float *inst, int max);
+
 /* Characters, rain, skyline, landmarks */
 void sr_build_characters(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *out);
+/* Appends the vehicles within range to a mesh. */
+void sr_build_vehicles(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *out);
 void sr_build_character(const SrAppearance *a, SrVec3 pos, SrVec3 dir, bool umbrella, SrMesh *out);
 /* Character facing `dir`; walk >= 0 is the distance walked and swings legs and arms (walk cycle). */
 void sr_build_character_walk(const SrAppearance *a, SrVec3 pos, SrVec3 dir, float walk, bool umbrella, SrMesh *out);
@@ -170,6 +181,10 @@ typedef struct SrFrame {
   SrDraw draws[SR_MAX_DRAWS];
   int internal_w, internal_h;
   bool dither, quantize, vertex_snap, affine, crt, bloom;
+  /* instanced crowd: far citizens drawn from one unit body */
+  const SrMesh *inst_mesh;
+  const float *inst;
+  int inst_count;
 } SrFrame;
 
 /* Light grid: every city light (street lamps, neon signs) precomputed and binned per block, so
@@ -191,6 +206,8 @@ typedef struct SrSceneCache {
   SrChunkCache chunks;
   SrMesh characters, rain, skyline, landmarks;
   SrMesh rooms[SR_INT_MAX_ROOMS], site_dyn, guards;
+  SrMesh inst_body;
+  float inst[SR_MAX_AGENTS * SR_INST_FLOATS];
   uint64_t site_key;
   bool skyline_built;
   uint64_t frame_no;

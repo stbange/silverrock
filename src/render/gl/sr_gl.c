@@ -38,6 +38,8 @@
   X(void, DeleteBuffers, (GLsizei, const GLuint *))                                                                    \
   X(void, VertexAttribPointer, (GLuint, GLint, GLenum, GLboolean, GLsizei, const void *))                              \
   X(void, EnableVertexAttribArray, (GLuint))                                                                           \
+  X(void, VertexAttribDivisor, (GLuint, GLuint))                                                                       \
+  X(void, DrawElementsInstanced, (GLenum, GLsizei, GLenum, const void *, GLsizei))                                     \
   X(GLuint, CreateShader, (GLenum))                                                                                    \
   X(void, ShaderSource, (GLuint, GLsizei, const GLchar *const *, const GLint *))                                       \
   X(void, CompileShader, (GLuint))                                                                                     \
@@ -112,6 +114,11 @@ static const char *k_world_vs =
     "layout(location=1) in vec2 a_uv;\n"
     "layout(location=2) in vec4 a_color;\n"
     "layout(location=3) in vec4 a_extra;\n"
+    "layout(location=4) in vec4 i_a;\n" /* instance: x, y, z, yaw */
+    "layout(location=5) in vec4 i_b;\n" /* walk swing, width scale, height scale */
+    "layout(location=6) in vec4 i_c;\n" /* outfit colour */
+    "layout(location=7) in vec4 i_d;\n" /* skin colour */
+    "uniform int u_inst;\n"
     "uniform mat4 u_mvp;\n"
     "uniform mat4 u_view;\n"
     "uniform vec3 u_lpos[8];\n"
@@ -127,23 +134,37 @@ static const char *k_world_vs =
     "out float v_fogz;\n"
     "out float v_em;\n"
     "void main() {\n"
-    "  vec4 clip = u_mvp * vec4(a_pos, 1.0);\n"
+    "  vec3 p = a_pos;\n"
+    "  vec3 base = a_color.rgb;\n"
+    "  if (u_inst == 1) {\n" /* instanced crowd: rigid parts swing around hips and shoulders */
+    "    int part = int(a_extra.w + 0.5);\n"
+    "    p *= vec3(i_b.y, i_b.z, i_b.y);\n"
+    "    float sw = part == 0 ? i_b.x : part == 1 ? -i_b.x : part == 3 ? -0.8 * i_b.x : part == 4 ? 0.8 * i_b.x : "
+    "0.0;\n"
+    "    float py = (part < 2 ? 0.48 : 0.8) * i_b.z;\n"
+    "    float cs = cos(sw), sn = sin(sw);\n"
+    "    p = vec3(p.x, (p.y - py) * cs - p.z * sn + py, (p.y - py) * sn + p.z * cs);\n"
+    "    float cy = cos(i_a.w), sy = sin(i_a.w);\n"
+    "    p = vec3(i_a.x + p.x * cy + p.z * sy, i_a.y + p.y, i_a.z - p.x * sy + p.z * cy);\n"
+    "    base = part == 5 ? i_d.rgb : (part < 2 ? i_c.rgb * 0.6 : i_c.rgb);\n"
+    "  }\n"
+    "  vec4 clip = u_mvp * vec4(p, 1.0);\n"
     "  if (u_snap.x > 0.0) clip.xy = floor(clip.xy / clip.w * u_snap + 0.5) / u_snap * clip.w;\n"
     "  gl_Position = clip;\n"
     "  vec3 light = u_amb;\n"
     "  for (int i = 0; i < 8; i++) {\n"
     "    if (i >= u_nl) break;\n"
-    "    float d = length(u_lpos[i] - a_pos);\n"
+    "    float d = length(u_lpos[i] - p);\n"
     "    float att = clamp(1.0 - d / u_lcol[i].w, 0.0, 1.0);\n"
     "    light += u_lcol[i].rgb * att * att * (1.0 + a_extra.z * u_wet * 1.5);\n"
     "  }\n"
     "  float em = a_extra.y / 255.0;\n"
     "  v_em = em;\n"
-    "  v_color = vec4(a_color.rgb * mix(light, vec3(1.0), em), a_color.a);\n"
+    "  v_color = vec4(base * mix(light, vec3(1.0), em), a_color.a);\n"
     "  float w = u_affine == 1 ? clip.w : 1.0;\n"
     "  v_uvw = vec3(a_uv * w, w);\n"
     "  v_layer = a_extra.x;\n"
-    "  v_fogz = -(u_view * vec4(a_pos, 1.0)).z;\n"
+    "  v_fogz = -(u_view * vec4(p, 1.0)).z;\n"
     "}\n";
 
 static const char *k_world_fs = "uniform highp sampler2DArray u_tex;\n"
@@ -280,6 +301,48 @@ static void upload_textures(SrGlBackend *b) {
   free(pixels);
 }
 
+/* Instanced crowd: the unit body is uploaded once with the per-instance attributes (divisor 1). */
+static void draw_instances(SrGlBackend *b, const SrFrame *f) {
+  if (!b->inst_vao) {
+    pGenVertexArrays(1, &b->inst_vao);
+    pGenBuffers(1, &b->inst_vbo);
+    pGenBuffers(1, &b->inst_ibo);
+    pGenBuffers(1, &b->inst_data);
+    pBindVertexArray(b->inst_vao);
+    pBindBuffer(GL_ARRAY_BUFFER, b->inst_vbo);
+    pBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(SrVertex) * (size_t)f->inst_mesh->nv), f->inst_mesh->v,
+                GL_STATIC_DRAW);
+    pBindBuffer(GL_ELEMENT_ARRAY_BUFFER, b->inst_ibo);
+    pBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)(sizeof(uint32_t) * (size_t)f->inst_mesh->ni), f->inst_mesh->idx,
+                GL_STATIC_DRAW);
+    GLsizei stride = (GLsizei)sizeof(SrVertex);
+    pEnableVertexAttribArray(0);
+    pVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void *)offsetof(SrVertex, x));
+    pEnableVertexAttribArray(1);
+    pVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, (void *)offsetof(SrVertex, u));
+    pEnableVertexAttribArray(2);
+    pVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, stride, (void *)offsetof(SrVertex, r));
+    pEnableVertexAttribArray(3);
+    pVertexAttribPointer(3, 4, GL_UNSIGNED_BYTE, GL_FALSE, stride, (void *)offsetof(SrVertex, layer));
+    pBindBuffer(GL_ARRAY_BUFFER, b->inst_data);
+    for (int k = 0; k < 4; k++) {
+      pEnableVertexAttribArray((GLuint)(4 + k));
+      pVertexAttribPointer((GLuint)(4 + k), 4, GL_FLOAT, GL_FALSE, SR_INST_FLOATS * 4, (void *)(uintptr_t)(k * 16));
+      pVertexAttribDivisor((GLuint)(4 + k), 1);
+    }
+    b->inst_count_idx = f->inst_mesh->ni;
+  }
+  pBindVertexArray(b->inst_vao);
+  pBindBuffer(GL_ARRAY_BUFFER, b->inst_data);
+  pBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * SR_INST_FLOATS * (size_t)f->inst_count), f->inst,
+              GL_STREAM_DRAW);
+  pUniform1i(b->u_inst, 1);
+  pDrawElementsInstanced(GL_TRIANGLES, b->inst_count_idx, GL_UNSIGNED_INT, (void *)0, f->inst_count);
+  pUniform1i(b->u_inst, 0);
+  b->draw_calls++;
+  b->triangles += b->inst_count_idx / 3 * f->inst_count;
+}
+
 /* Half-resolution ping-pong targets for bloom. */
 static void ensure_bloom(SrGlBackend *b, int w, int h) {
   if (b->bloom_fbo[0] && b->bloom_w == w && b->bloom_h == h) return;
@@ -378,6 +441,7 @@ bool sr_glb_init(SrGlBackend *b, bool gles) {
   b->u_tex = pGetUniformLocation(p, "u_tex");
   b->u_fog = pGetUniformLocation(p, "u_fog");
   b->u_fogr = pGetUniformLocation(p, "u_fogr");
+  b->u_inst = pGetUniformLocation(p, "u_inst");
   p = b->prog_post;
   b->p_tex = pGetUniformLocation(p, "u_tex");
   b->p_dither = pGetUniformLocation(p, "u_dither");
@@ -429,6 +493,12 @@ void sr_glb_shutdown(SrGlBackend *b) {
       pDeleteTextures(1, &b->bloom_tex[i]);
     }
   pDeleteProgram(b->prog_blur);
+  if (b->inst_vao) {
+    pDeleteVertexArrays(1, &b->inst_vao);
+    pDeleteBuffers(1, &b->inst_vbo);
+    pDeleteBuffers(1, &b->inst_ibo);
+    pDeleteBuffers(1, &b->inst_data);
+  }
   pDeleteTextures(1, &b->tex_array);
   pDeleteVertexArrays(1, &b->quad_vao);
   pDeleteBuffers(1, &b->quad_vbo);
@@ -547,6 +617,7 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
     SrMat4 mvp = sr_m4_mul(f->proj, f->view);
     pUniformMatrix4fv(b->u_mvp, 1, GL_FALSE, mvp.m);
     pUniformMatrix4fv(b->u_view, 1, GL_FALSE, f->view.m);
+    pUniform1i(b->u_inst, 0);
     pUniform3f(b->u_amb, f->ambient[0], f->ambient[1], f->ambient[2]);
     pUniform1f(b->u_wet, f->wetness);
     pUniform2f(b->u_snap, f->vertex_snap ? (float)iw * 0.5f : 0.0f, f->vertex_snap ? (float)ih * 0.5f : 0.0f);
@@ -562,6 +633,13 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
       set_lights(b, f, d);
       draw_mesh(b, d->mesh);
       if (d->pass == SR_PASS_XRAY) pEnable(GL_DEPTH_TEST);
+    }
+    if (f->inst_count > 0 && f->inst_mesh) {
+      SrDraw crowd = {0};
+      crowd.nlights = sr_select_lights(f->lights, f->nlights, f->eye, crowd.lights);
+      pUniform2f(b->u_fogr, f->fog_start, f->fog_end);
+      set_lights(b, f, &crowd);
+      draw_instances(b, f);
     }
     pDisable(GL_DEPTH_TEST);
     pDisable(GL_BLEND);

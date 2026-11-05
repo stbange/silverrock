@@ -460,14 +460,64 @@ void sr_build_character(const SrAppearance *a, SrVec3 p, SrVec3 dir, bool umbrel
   sr_build_character_walk(a, p, dir, -1.0f, umbrella, m);
 }
 
-void sr_build_characters(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *out) {
-  sr_mesh_clear(out);
+static void body_part(SrMesh *m, SrVec3 lo, SrVec3 hi, int part) {
+  int v0 = m->nv;
+  sr_mesh_box(m, lo, hi, (SrColor){255, 255, 255, 255}, SR_LAYER_WHITE, 0, 0);
+  for (int v = v0; v < m->nv; v++) {
+    m->v[v].pad = (uint8_t)part;
+    m->v[v].layer = SR_LAYER_WHITE;
+  }
+}
+
+void sr_build_instance_body(SrMesh *m) {
+  sr_mesh_clear(m);
+  body_part(m, sr_v3(-0.22f, 0, -0.12f), sr_v3(-0.02f, 0.48f, 0.12f), 0);
+  body_part(m, sr_v3(0.02f, 0, -0.12f), sr_v3(0.22f, 0.48f, 0.12f), 1);
+  body_part(m, sr_v3(-0.26f, 0.48f, -0.15f), sr_v3(0.26f, 0.82f, 0.15f), 2);
+  body_part(m, sr_v3(-0.37f, 0.5f, -0.07f), sr_v3(-0.27f, 0.8f, 0.07f), 3);
+  body_part(m, sr_v3(0.27f, 0.5f, -0.07f), sr_v3(0.37f, 0.8f, 0.07f), 4);
+  body_part(m, sr_v3(-0.13f, 0.84f, -0.13f), sr_v3(0.13f, 1.0f, 0.13f), 5);
+}
+
+int sr_build_crowd_lod(const SrCrowd *cr, SrVec3 cam, float near_m, float far_m, SrMesh *near, float *inst, int max) {
+  static const SrColor skin[8] = {{250, 210, 180, 255}, {230, 180, 140, 255}, {200, 150, 110, 255}, {170, 120, 80, 255},
+                                  {140, 95, 60, 255},   {110, 70, 45, 255},   {80, 52, 35, 255},    {60, 40, 28, 255}};
+  sr_mesh_clear(near);
+  int n = 0;
   for (int i = 0; i < cr->count; i++) {
     const SrAgent *a = &cr->agents[i];
-    float dx = a->pos.x - cam.x, dz = a->pos.z - cam.z;
-    if (dx * dx + dz * dz > max_dist * max_dist) continue;
-    sr_build_character_walk(&a->look, a->pos, a->dir, a->speed > 0.05f ? a->walk : -1.0f, a->umbrella, out);
+    float dx = a->pos.x - cam.x, dz = a->pos.z - cam.z, d2 = dx * dx + dz * dz;
+    if (d2 > far_m * far_m) continue;
+    float walk = a->speed > 0.05f ? a->walk : -1.0f;
+    if (d2 <= near_m * near_m || n >= max) {
+      sr_build_character_walk(&a->look, a->pos, a->dir, walk, a->umbrella, near);
+      continue;
+    }
+    float *f = inst + n * SR_INST_FLOATS;
+    float tall = 1.55f + 0.08f * (float)(a->look.body % 3);
+    SrColor o = palette16(a->look.outfit_color, a->look.outfit % 4 != 0), sk = skin[a->look.skin & 7];
+    f[0] = a->pos.x;
+    f[1] = a->pos.y;
+    f[2] = a->pos.z;
+    f[3] = (fabsf(a->dir.x) + fabsf(a->dir.z)) > 1e-4f ? atan2f(a->dir.x, a->dir.z) : 0.0f;
+    f[4] = walk >= 0 ? sr_walk_swing(walk) : 0.0f;
+    f[5] = (0.22f + 0.04f * a->look.body) / 0.22f;
+    f[6] = tall;
+    f[7] = 0;
+    f[8] = o.r / 255.0f;
+    f[9] = o.g / 255.0f;
+    f[10] = o.b / 255.0f;
+    f[11] = 0;
+    f[12] = sk.r / 255.0f;
+    f[13] = sk.g / 255.0f;
+    f[14] = sk.b / 255.0f;
+    f[15] = 0;
+    n++;
   }
+  return n;
+}
+
+void sr_build_vehicles(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *out) {
   for (int i = 0; i < cr->vehicle_count; i++) {
     const SrVehicle *v = &cr->vehicles[i];
     float dx = v->pos.x - cam.x, dz = v->pos.z - cam.z;
@@ -484,6 +534,17 @@ void sr_build_characters(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *
     sr_mesh_box(out, sr_v3(b.x - 0.4f, 0.6f, b.z - 0.4f), sr_v3(b.x + 0.4f, 0.9f, b.z + 0.4f),
                 v->stopped ? (SrColor){255, 30, 30, 255} : (SrColor){150, 20, 20, 255}, SR_LAYER_WHITE, 0, 255);
   }
+}
+
+void sr_build_characters(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *out) {
+  sr_mesh_clear(out);
+  for (int i = 0; i < cr->count; i++) {
+    const SrAgent *a = &cr->agents[i];
+    float dx = a->pos.x - cam.x, dz = a->pos.z - cam.z;
+    if (dx * dx + dz * dz > max_dist * max_dist) continue;
+    sr_build_character_walk(&a->look, a->pos, a->dir, a->speed > 0.05f ? a->walk : -1.0f, a->umbrella, out);
+  }
+  sr_build_vehicles(cr, cam, max_dist, out);
 }
 
 /* ---- rain, skyline, landmarks ----------------------------------------------------------------- */
@@ -580,6 +641,7 @@ void sr_scene_free(SrSceneCache *s) {
   sr_light_grid_free(&s->light_grid);
   sr_mesh_free(&s->site_dyn);
   sr_mesh_free(&s->guards);
+  sr_mesh_free(&s->inst_body);
 }
 
 static void add_draw(SrFrame *f, SrMesh *m, SrPass pass, SrVec3 at) {
@@ -682,8 +744,17 @@ void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) 
       }
     }
   }
-  sr_build_characters(&g->crowd, p->pos, f->fog_end, &s->characters);
-  if (g->thermal) sr_mesh_thermal(&s->characters, 0);
+  if (g->thermal) { /* thermal vision draws every body as a detailed heat signature */
+    sr_build_characters(&g->crowd, p->pos, f->fog_end, &s->characters);
+    sr_mesh_thermal(&s->characters, 0);
+  } else {
+    if (s->inst_body.nv == 0) sr_build_instance_body(&s->inst_body);
+    f->inst_count =
+        sr_build_crowd_lod(&g->crowd, p->pos, SR_CROWD_NEAR_M, f->fog_end, &s->characters, s->inst, SR_MAX_AGENTS);
+    f->inst_mesh = &s->inst_body;
+    f->inst = s->inst;
+    sr_build_vehicles(&g->crowd, p->pos, f->fog_end, &s->characters); /* vehicles join the near mesh */
+  }
   add_draw(f, &s->characters, g->thermal ? SR_PASS_XRAY : SR_PASS_WORLD, p->pos);
   if (w.rain > 0.05f) {
     sr_build_rain(p->pos, w.rain, s->frame_no, c, &s->rain);

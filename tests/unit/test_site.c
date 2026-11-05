@@ -1135,6 +1135,39 @@ static void test_interior_render_and_ui(void) {
   sr_game_destroy(g);
 }
 
+static void test_crowd_lod(void) {
+  SR_SPEC("population-simulation", "Peak crowd on desktop");
+  SrGame *g = game(42);
+  sr_game_leave(g);
+  g->crowd_enabled = true;
+  sr_clock_set_seconds(&g->clock, 2 * 86400 + 23 * 3600);
+  g->last_minute = sr_game_time(g) / 60;
+  steps(g, 60);
+  SR_CHECK(g->crowd.count > 20);
+  SrMesh body, near;
+  sr_mesh_init(&body);
+  sr_mesh_init(&near);
+  sr_build_instance_body(&body);
+  int parts[6] = {0};
+  for (int v = 0; v < body.nv; v++) parts[body.v[v].pad]++;
+  for (int k = 0; k < 6; k++) SR_CHECK(parts[k] > 0);
+  float *inst = (float *)malloc(sizeof(float) * SR_MAX_AGENTS * SR_INST_FLOATS);
+  int n = sr_build_crowd_lod(&g->crowd, g->player.pos, SR_CROWD_NEAR_M, 200.0f, &near, inst, SR_MAX_AGENTS);
+  SR_CHECK(n > 0);
+  for (int i = 0; i < n; i++) {
+    float dx = inst[i * SR_INST_FLOATS] - g->player.pos.x, dz = inst[i * SR_INST_FLOATS + 2] - g->player.pos.z;
+    SR_CHECK(dx * dx + dz * dz > SR_CROWD_NEAR_M * SR_CROWD_NEAR_M); /* only far citizens are instanced */
+    SR_CHECK(inst[i * SR_INST_FLOATS + 6] > 1.5f);                   /* height scale */
+  }
+  int cap = sr_build_crowd_lod(&g->crowd, g->player.pos, 0.0f, 200.0f, &near, inst, 3);
+  SR_CHECK_EQ(cap, 3); /* past the budget, the rest are drawn detailed */
+  SR_CHECK(near.nv > 0);
+  free(inst);
+  sr_mesh_free(&body);
+  sr_mesh_free(&near);
+  sr_game_destroy(g);
+}
+
 static void test_light_grid(void) {
   SrGame *g = game(41);
   SrLightGrid lg;
@@ -1215,6 +1248,7 @@ void suite_site(void) {
   SR_RUN(test_street_gadgets);
   SR_RUN(test_shops);
   SR_RUN(test_interior_render_and_ui);
+  SR_RUN(test_crowd_lod);
   SR_RUN(test_light_grid);
   SR_RUN(test_site_script_commands);
 }

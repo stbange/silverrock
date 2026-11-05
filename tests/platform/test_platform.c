@@ -297,6 +297,43 @@ static void test_many_games_keep_rendering(void) {
   SR_CHECK(g_app.gfx.reclaimed > 0);
 }
 
+static void test_peak_crowd_render(void) {
+  SR_SPEC("population-simulation", "Peak crowd on desktop");
+  sr_app_start_game(&g_app, 0x5EEDC0DEull);
+  SrGame *g = g_app.game;
+  sr_game_leave(g);
+  g->settings.dynamic_res = false;
+  int best = -1;
+  for (int k = 0; k < g->city->district_count; k++)
+    if (g->city->districts[k].type == SR_D_ENTERTAINMENT)
+      best = sr_city_block_at(g->city, g->city->districts[k].cx, g->city->districts[k].cy);
+  int32_t ox, oy;
+  sr_city_block_origin(best, g->city->grid, &ox, &oy);
+  g->player.pos = sr_v3((float)ox / 100.0f + 8, 1.7f, (float)oy / 100.0f + 8);
+  g->player.yaw = -SR_PI / 2;
+  sr_clock_set_seconds(&g->clock, 2 * 86400 + 23 * 3600);
+  g->last_minute = sr_game_time(g) / 60;
+  g_app.fixed_frame_dt = 1.0 / 60.0;
+  for (int i = 0; i < 90; i++) sr_app_iterate(&g_app);
+  int visible = sr_crowd_visible(&g->crowd, &g->cam, 160.0f);
+  SrSceneCache *sc = &g_app.scene;
+  SrFrame *f = (SrFrame *)malloc(sizeof(SrFrame));
+  uint64_t t0 = SDL_GetTicksNS();
+  for (int i = 0; i < 10; i++) sr_scene_build(sc, g, 16.0f / 9.0f, f);
+  double build_ms = (double)(SDL_GetTicksNS() - t0) / 1e7;
+  printf("  peak: %d citizens visible, %d instanced, scene build %.2f ms, %d draw calls\n", visible, f->inst_count,
+         build_ms, g_app.gfx.draw_calls);
+  SR_CHECK(visible >= 150);
+  SR_CHECK(f->inst_count > 50); /* far citizens share one instanced draw */
+  SR_CHECK(build_ms < 8.0);     /* CPU side of the frame (debug build) within half a 60 Hz frame */
+  SR_CHECK(g_app.gfx.draw_calls < 80);
+  int w, h;
+  uint8_t *rgb = render_internal(&g_app, &w, &h);
+  if (rgb) save_shot("peak_crowd", rgb, w, h);
+  free(rgb);
+  free(f);
+}
+
 static void test_shop_taps(void) {
   sr_app_start_game(&g_app, 0x5EEDC0DEull);
   SrGame *g = g_app.game;
@@ -768,6 +805,7 @@ void suite_platform(void) {
   SR_RUN(test_render_interiors);
   SR_RUN(test_shop_taps);
   SR_RUN(test_bloom);
+  SR_RUN(test_peak_crowd_render);
   SR_RUN(test_many_games_keep_rendering);
   SR_RUN(test_seed_screenshots);
   SR_RUN(test_letterbox_window);
