@@ -72,5 +72,7 @@ void sr_hear_noise(SrEnemy *e, SrVec3 noise_pos, float radius);
 bool sr_enemy_tactics(SrEnemy *e, bool comms_jammed, int allies_down);
 void sr_body_discovered(SrEnemy *e, SrVec3 body_pos);
 const char *sr_alert_name(SrAlert a);
+/* One enemy shot at the player: hit chance falls with distance, rises with difficulty. */
+bool sr_enemy_fire(const SrEnemy *e, float distance, SrDifficulty d, uint64_t shot_key);
 
 #endif

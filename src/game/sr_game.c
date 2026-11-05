@@ -258,6 +258,8 @@ void sr_game_step(SrGame *g, const SrActionState *a) {
     if (a->pressed[SR_ACT_INTERACT]) sr_game_interact(g);
     if (a->pressed[SR_ACT_FIRE]) sr_game_fire(g);
     if (a->pressed[SR_ACT_TERMINAL]) g->screen = SR_SCREEN_TERMINAL;
+    for (int q = 0; q < 4; q++)
+      if (a->pressed[SR_ACT_QUICK1 + q]) sr_game_use_quick(g, q);
   }
   sr_clock_step(&g->clock);
   process_minutes(g, false);
@@ -499,6 +501,18 @@ int32_t sr_game_report(SrGame *g, int32_t id) {
     if (g->active_job == id) g->active_job = -1;
   }
   return paid;
+}
+
+bool sr_game_use_quick(SrGame *g, int slot) {
+  SrPlayer *p = &g->player;
+  if (slot < 0 || slot > 3 || p->quick[slot] == 255) return false;
+  int idx = sr_inv_find(&p->inv, SR_IK_GADGET, p->quick[slot]);
+  if (idx < 0) return false;
+  const SrGadgetDef *d = sr_gadget_def(p->quick[slot]);
+  if (d->category == SR_GC_CONSUMABLE && d->damage < 0)
+    p->health = SR_MIN(p->max_health, p->health - d->damage);
+  sr_inv_remove_at(&p->inv, idx, 1);
+  return true;
 }
 
 void sr_game_fire(SrGame *g) {

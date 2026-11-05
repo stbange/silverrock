@@ -43,11 +43,11 @@ def tags(root):
     found = set()
     for dirpath, _, files in os.walk(os.path.join(root, "tests")):
         for f in files:
-            if not f.endswith((".c", ".h", ".scn", ".js", ".ts", ".mjs")):
+            if not f.endswith((".c", ".h", ".scn", ".js", ".ts", ".mjs", ".py", ".sh")):
                 continue
             with open(os.path.join(dirpath, f), encoding="utf-8", errors="replace") as fh:
                 for line in fh:
-                    for m in C_TAG.finditer(line):
+                    for m in (C_TAG.finditer(line) if f.endswith((".c", ".h")) else ()):
                         found.add((m.group(1), m.group(2)))
                     m = TEXT_TAG.search(line)
                     if m:

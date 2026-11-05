@@ -8,8 +8,50 @@ retainer, and your jobs become moves in the corporate chess game. Retro low-poly
 Matrix that changes the real world, and an emergent story about corporations, politicians and gangs, each with its own
 agenda.
 
-**Status:** concept phase. No game code yet — this repository holds the concept and the OpenSpec specifications the
-implementation will follow.
+![Night street in a generated city](docs/screenshots/street.png)
+
+**Status:** milestones M0–M3 implemented (2026-11-05). You can create a character, walk a generated city at night
+among citizens and traffic, eat, sleep, pay (or miss) rent, ride the metro, take jobs from fixers, and level up.
+Not yet: walking inside buildings, room-by-room missions in 3D, gadget and cyberware effects in play, the Matrix (M4)
+and the corporate-chess story (M5). Task-level status lives in each change's `tasks.md`.
+
+## Build and play
+
+```bash
+git clone --recurse-submodules https://github.com/stbange/silverrock.git
+```
+
+```bash
+cmake --preset linux-gcc-debug && cmake --build --preset linux-gcc-debug
+```
+
+```bash
+./build/linux-gcc-debug/silverrock
+```
+
+Controls: WASD move, mouse look, E interact (eat, sleep, talk to fixers, do and report jobs, ride the metro),
+T terminal, 1–4 quick slots, Shift sprint, C crouch, Space jump, Esc pause, F11 fullscreen. Gamepads and touch work too.
+
+Web build (needs the Emscripten SDK):
+
+```bash
+emcmake cmake -S . -B build/web -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build/web --target silverrock
+```
+
+Then serve `build/web/` with any static web server and open `silverrock.html`.
+
+## Tests
+
+| Suite | Command |
+|---|---|
+| Unit tests (78 tests) | `./build/linux-gcc-debug/sr_tests` |
+| Platform and GL tests (needs a display or Xvfb) | `xvfb-run -a ./build/linux-gcc-debug/sr_platform_tests` |
+| Headless game scenarios | `ctest --test-dir build/linux-gcc-debug -R game_` |
+| World sweep / balance report | `./build/linux-gcc-debug/sr_headless --sweep 2000` / `--balance 20` |
+| Browser end-to-end | `NODE_PATH=$(npm root -g) node tests/web/run.mjs build/web` |
+| Coverage gate | `cmake --preset linux-coverage && cmake --build --preset linux-coverage`, run the suites, then `python3 tools/coverage_gate.py build/linux-coverage` |
+| Quality-gate self-tests | `python3 tests/tools/test_tools.py` |
+| Spec traceability | `python3 tools/spectrace.py` |
 
 ## Concept
 

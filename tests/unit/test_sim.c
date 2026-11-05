@@ -347,11 +347,7 @@ static void test_mods_ammo(void) {
 }
 
 static void test_inventory_gadgets_crafting(void) {
-  SR_SPEC("equipment", "Overburdened");
-  SR_SPEC("equipment", "Quick slot use");
   SR_SPEC("equipment", "Crafting a gadget");
-  SR_SPEC("equipment", "Grapple line to a rooftop");
-  SR_SPEC("equipment", "Holo-decoy distracts");
   SrInventory inv;
   sr_inv_init(&inv);
   SR_CHECK(SR_GD_COUNT >= 16);
@@ -412,7 +408,6 @@ static void test_inventory_gadgets_crafting(void) {
 }
 
 static void test_cyberware_and_vendors(void) {
-  SR_SPEC("equipment", "Cyberware ability works");
   SR_SPEC("equipment", "Over capacity causes glitches");
   SR_SPEC("equipment", "Jailbreak removes the backdoor");
   SR_SPEC("equipment", "Stolen goods refused by a shop");
@@ -582,7 +577,6 @@ static void test_perception(void) {
   SR_SPEC("combat", "Noise draws investigation");
   SR_SPEC("combat", "Alert decays");
   SR_SPEC("combat", "Visibility meter reacts to light");
-  SR_SPEC("combat", "Difficulty changes enemy accuracy");
   SrPerceptInput in = {sr_v3(0, 0, -15), 0.0f, 0.0f, true, false, 400.0f, SR_DIFF_STANDARD};
   SrEnemy dark, bright;
   sr_enemy_init(&dark, sr_v3(0, 0, 0), 1, 100);
@@ -624,6 +618,21 @@ static void test_perception(void) {
   sr_body_discovered(&dead, sr_v3(0, 0, 0));
   SR_CHECK(sr_difficulty(SR_DIFF_STORY)->enemy_accuracy < sr_difficulty(SR_DIFF_STREET)->enemy_accuracy);
   for (int i = 0; i <= 4; i++) SR_CHECK(sr_alert_name((SrAlert)i)[0] != '\0');
+}
+
+static void test_difficulty_replay(void) {
+  SR_SPEC("combat", "Difficulty changes enemy accuracy");
+  SrEnemy e;
+  sr_enemy_init(&e, sr_v3(0, 0, 0), 1, 100);
+  int story = 0, street = 0;
+  for (uint64_t shot = 0; shot < 2000; shot++) { /* the same replayed shots on both settings */
+    story += sr_enemy_fire(&e, 15.0f, SR_DIFF_STORY, shot);
+    street += sr_enemy_fire(&e, 15.0f, SR_DIFF_STREET, shot);
+  }
+  SR_CHECK(story < street);
+  SR_CHECK(sr_enemy_fire(&e, 1.0f, SR_DIFF_STREET, 1) == sr_enemy_fire(&e, 1.0f, SR_DIFF_STREET, 1));
+  e.dead = true;
+  SR_CHECK(!sr_enemy_fire(&e, 1.0f, SR_DIFF_STREET, 1));
 }
 
 static void test_tactics_bodies(void) {
@@ -1311,6 +1320,7 @@ void suite_sim(void) {
   SR_RUN(test_takedown_ko);
   SR_RUN(test_health_flatline);
   SR_RUN(test_perception);
+  SR_RUN(test_difficulty_replay);
   SR_RUN(test_tactics_bodies);
   SR_RUN(test_progression);
   SR_RUN(test_heat);

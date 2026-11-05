@@ -147,7 +147,6 @@ static void test_scene_frame(void) {
   SR_SPEC("retro-rendering", "No void at the horizon");
   SR_SPEC("retro-rendering", "No rain under cover");
   SR_SPEC("world-environment", "Night at noon");
-  SR_SPEC("player-life", "Rent reminders");
   SrGame *g = g_game;
   SrSceneCache *s = (SrSceneCache *)calloc(1, sizeof *s);
   sr_scene_init(s, false);

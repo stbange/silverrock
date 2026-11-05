@@ -352,7 +352,6 @@ static void test_deltas(void) {
 static void test_save_roundtrip(void) {
   SR_SPEC("game-persistence", "Save and load round trip");
   SR_SPEC("game-persistence", "Save size bound");
-  SR_SPEC("game-persistence", "Stash keeps items");
   SR_SPEC("player-life", "Stash keeps items");
   SrGame *g = new_game(11);
   g->crowd_enabled = false;
@@ -605,7 +604,6 @@ static void test_touch_controls(void) {
   SR_SPEC("input-controls", "Simultaneous move and look");
   SR_SPEC("input-controls", "Safe area respected");
   SR_SPEC("input-controls", "Gadget wheel by long press");
-  SR_SPEC("input-controls", "Context icon on interact");
   SR_SPEC("input-controls", "Slow-down near a target");
   SR_SPEC("input-controls", "No assistance for the mouse");
   SrInput in;
@@ -776,6 +774,44 @@ static void test_autoplay_strategies(void) {
   sr_game_destroy(g);
 }
 
+static void test_quick_slots_and_weight(void) {
+  SR_SPEC("equipment", "Quick slot use");
+  SR_SPEC("equipment", "Overburdened");
+  SrGame *g = new_game(21);
+  g->crowd_enabled = false;
+  sr_inv_add(&g->player.inv, sr_item_simple(SR_IK_GADGET, SR_GD_MEDKIT, 2));
+  g->player.quick[1] = SR_GD_MEDKIT;
+  g->player.health = 20;
+  SrActionState a = idle();
+  a.pressed[SR_ACT_QUICK2] = a.down[SR_ACT_QUICK2] = true;
+  sr_game_step(g, &a);
+  SR_CHECK_EQ(sr_inv_count(&g->player.inv, SR_IK_GADGET, SR_GD_MEDKIT), 1);
+  SR_CHECK(g->player.health > 20);
+  SR_CHECK(!sr_game_use_quick(g, 2)); /* empty slot */
+  SR_CHECK(!sr_game_use_quick(g, 9));
+  g->player.quick[2] = SR_GD_CAMO; /* bound but not carried */
+  SR_CHECK(!sr_game_use_quick(g, 2));
+  /* the same walk with a heavy load covers less ground, and sprinting stops helping */
+  SrGame *h = new_game(21);
+  h->crowd_enabled = false;
+  for (int i = 0; i < 12; i++) sr_inv_add(&h->player.inv, sr_item_weapon(12, SR_STREET_MAKER_FIRST, 0, (uint32_t)i));
+  SR_CHECK(sr_inv_weight(&h->player.inv) > sr_carry_limit(h->player.prog.attr[SR_ATTR_BODY]));
+  g->player.pos = h->player.pos;
+  g->player.yaw = h->player.yaw = 3.14159f; /* face away from the building, down the sidewalk */
+  SrVec3 g0 = g->player.pos, h0 = h->player.pos;
+  SrActionState w = idle();
+  w.move_y = 1.0f;
+  w.down[SR_ACT_SPRINT] = true;
+  for (int i = 0; i < 30; i++) {
+    sr_game_step(g, &w);
+    sr_game_step(h, &w);
+  }
+  float dg = sr_v3_len(sr_v3_sub(g->player.pos, g0)), dh = sr_v3_len(sr_v3_sub(h->player.pos, h0));
+  SR_CHECK(dh < dg * 0.5f);
+  sr_game_destroy(h);
+  sr_game_destroy(g);
+}
+
 static void test_character_creation(void) {
   SR_SPEC("player-life", "Randomised appearance");
   SR_SPEC("player-life", "Background applies starting values");
@@ -830,6 +866,7 @@ static void test_performance_targets(void) {
 }
 
 void suite_game(void) {
+  SR_RUN(test_quick_slots_and_weight);
   SR_RUN(test_character_creation);
   SR_RUN(test_performance_targets);
   SR_RUN(test_fixed_timestep);

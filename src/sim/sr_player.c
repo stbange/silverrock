@@ -89,6 +89,7 @@ void sr_player_create(SrPlayer *p, const SrCity *c, const char *name, SrBackgrou
   p->rent_due = sr_rent_due_for(SR_START_TIME_S);
   p->equipped = -1;
   memset(p->quick, 255, sizeof p->quick);
+  p->quick[0] = SR_GD_MEDKIT;
   p->disguise.faction = -1;
   sr_inv_init(&p->inv);
   sr_inv_init(&p->stash);

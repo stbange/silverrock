@@ -123,6 +123,8 @@ SrResult sr_game_accept(SrGame *g, int32_t job);
 SrMissionResult sr_game_execute(SrGame *g, int32_t job, SrApproach a);
 int32_t sr_game_report(SrGame *g, int32_t job);
 void sr_game_fire(SrGame *g);
+/* Uses the gadget bound to a quick slot (0..3); false if empty or none carried. */
+bool sr_game_use_quick(SrGame *g, int slot);
 void sr_game_flatline(SrGame *g);
 
 /* Character creation: background choice and a randomisable appearance. */

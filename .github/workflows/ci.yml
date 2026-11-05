@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Layer dependency check
+        run: python3 tools/layercheck.py
+      - name: OpenSpec strict validation
+        run: npx --yes @fission-ai/openspec@1.16.0 validate --all --strict --no-interactive
+        env: { OPENSPEC_TELEMETRY: "0" }
+      - name: Spec traceability report
+        run: python3 tools/spectrace.py --report traceability.md
+      - name: Quality-gate self-tests
+        run: |
+          npm install -g @fission-ai/openspec@1.16.0
+          python3 tests/tools/test_tools.py
+        env: { OPENSPEC_TELEMETRY: "0" }
+      - uses: actions/upload-artifact@v4
+        with: { name: traceability, path: traceability.md }
+
+  linux-gcc-coverage:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build xvfb libgl1-mesa-dri libgl-dev libegl-dev libgles-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxfixes-dev
+          pip install gcovr
+      - name: Configure and build (coverage)
+        run: cmake --preset linux-coverage && cmake --build --preset linux-coverage
+      - name: Unit tests
+        run: ./build/linux-coverage/sr_tests
+      - name: Platform and GL tests (Mesa llvmpipe)
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" ./build/linux-coverage/sr_platform_tests
+        env: { SR_RENDER_OUT: "${{ github.workspace }}/render-out", LIBGL_ALWAYS_SOFTWARE: "1" }
+      - name: Coverage gate (95 % overall, 90 % per directory)
+        run: python3 tools/coverage_gate.py build/linux-coverage
+      - name: Game tests (headless scenarios)
+        run: ctest --test-dir build/linux-coverage -R game_ --output-on-failure
+      - name: Coverage report
+        if: always()
+        run: gcovr -r . --filter src/ build/linux-coverage --html-details coverage.html || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: coverage-and-render, path: "coverage*.html\nrender-out/" }
+
+  linux-clang-sanitizers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build clang
+      - name: Build with ASan + UBSan (engine)
+        run: cmake --preset linux-clang-asan -DSR_BUILD_APP=OFF && cmake --build --preset linux-clang-asan
+      - name: Unit and game tests under sanitizers
+        run: |
+          ./build/linux-clang-asan/sr_tests
+          ctest --test-dir build/linux-clang-asan -R game_ --output-on-failure
+        env: { ASAN_OPTIONS: "detect_leaks=1", UBSAN_OPTIONS: "halt_on_error=1" }
+
+  windows-msvc:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - name: Configure and build
+        run: |
+          cmake --preset windows-msvc
+          cmake --build --preset windows-msvc --target sr_tests sr_headless silverrock
+      - name: Unit and game tests
+        run: ctest --test-dir build/windows-msvc -C Debug -E platform --output-on-failure
+
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: mymindstorm/setup-emsdk@v14
+        with: { version: 4.0.10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Build (test hooks on)
+        run: emcmake cmake -S . -B build/web -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build/web --target silverrock sr_tests
+      - name: Unit tests as WebAssembly
+        run: bash tests/web/run_wasm_unit.sh build/web
+      - name: Download size budget
+        run: python3 tools/web_size_check.py build/web
+      - name: Browser end-to-end tests (desktop + mobile emulation)
+        run: |
+          npm install -g playwright@1.49.1
+          npx playwright install --with-deps chromium
+          NODE_PATH=$(npm root -g) node tests/web/run.mjs build/web
+      - name: Release build without test hooks
+        run: |
+          emcmake cmake -S . -B build/web-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DSR_TEST_HOOKS=OFF -DSR_BUILD_TESTS=OFF
+          cmake --build build/web-release --target silverrock
+          python3 tools/symbol_check.py build/web-release/silverrock.wasm build/web-release/silverrock.js
+          mkdir -p site && cp build/web-release/silverrock.{html,js,wasm} build/web-release/manifest.webmanifest site/
+          cp site/silverrock.html site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
+        with: { path: site }
+
+  deploy-pages:
+    if: github.ref == 'refs/heads/main'
+    needs: [web, linux-gcc-coverage, linux-clang-sanitizers, windows-msvc, lint]
+    runs-on: ubuntu-24.04
+    permissions: { pages: write, id-token: write }
+    environment: { name: github-pages, url: "${{ steps.deploy.outputs.page_url }}" }
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

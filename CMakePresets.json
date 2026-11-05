@@ -1,0 +1,22 @@
+{
+  "version": 6,
+  "configurePresets": [
+    { "name": "base", "hidden": true, "generator": "Ninja", "binaryDir": "${sourceDir}/build/${presetName}" },
+    { "name": "linux-gcc-debug", "inherits": "base", "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "CMAKE_C_COMPILER": "gcc" } },
+    { "name": "linux-clang-asan", "inherits": "base", "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "CMAKE_C_COMPILER": "clang", "SR_SANITIZE": "ON" } },
+    { "name": "linux-coverage", "inherits": "base", "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "CMAKE_C_COMPILER": "gcc", "SR_COVERAGE": "ON" } },
+    { "name": "linux-release", "inherits": "base", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "SR_TEST_HOOKS": "OFF", "SR_BUILD_TESTS": "OFF" } },
+    { "name": "windows-msvc", "generator": "Visual Studio 17 2022", "binaryDir": "${sourceDir}/build/${presetName}", "architecture": "x64" },
+    { "name": "web-debug", "inherits": "base", "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake", "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" } },
+    { "name": "web-release", "inherits": "base", "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } }
+  ],
+  "buildPresets": [
+    { "name": "linux-gcc-debug", "configurePreset": "linux-gcc-debug" },
+    { "name": "linux-clang-asan", "configurePreset": "linux-clang-asan" },
+    { "name": "linux-coverage", "configurePreset": "linux-coverage" },
+    { "name": "linux-release", "configurePreset": "linux-release" },
+    { "name": "windows-msvc", "configurePreset": "windows-msvc", "configuration": "Debug" },
+    { "name": "web-debug", "configurePreset": "web-debug" },
+    { "name": "web-release", "configurePreset": "web-release" }
+  ]
+}

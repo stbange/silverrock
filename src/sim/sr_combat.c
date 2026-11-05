@@ -223,3 +223,10 @@ const char *sr_alert_name(SrAlert a) {
   static const char *const n[4] = {"unaware", "suspicious", "searching", "combat"};
   return (unsigned)a < 4 ? n[a] : "?";
 }
+
+bool sr_enemy_fire(const SrEnemy *e, float distance, SrDifficulty d, uint64_t shot_key) {
+  if (e->dead || e->ko || e->surrendered) return false;
+  float base = 0.75f - SR_CLAMP(distance / 60.0f, 0.0f, 0.6f);
+  float chance = SR_CLAMP(base * sr_difficulty(d)->enemy_accuracy, 0.02f, 0.95f);
+  return (float)(sr_mix64(shot_key) % 10000) / 10000.0f < chance;
+}
