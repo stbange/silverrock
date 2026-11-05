@@ -77,6 +77,7 @@ typedef enum SrScreen {
 typedef struct SrMenu {
   int32_t building;
   bool ripperdoc;
+  bool housing; /* rows are apartments for rent (item type = housing tier) */
   int count;
   int sel;
   SrItem items[SR_MENU_MAX];
@@ -204,6 +205,9 @@ bool sr_game_ability(SrGame *g);
 void sr_game_shop_open(SrGame *g, int building);
 SrResult sr_game_shop_buy(SrGame *g, int row);
 void sr_game_shop_close(SrGame *g);
+/* Housing offers on the home terminal; moving keeps the stash and starts the new rent next week. */
+void sr_game_housing_open(SrGame *g);
+SrResult sr_game_move_home(SrGame *g, int tier);
 /* Stash: stores everything but the equipped weapon, ammo and quick-slot gadgets; takes it all
  * back when nothing is left to store. */
 SrResult sr_game_stash(SrGame *g);

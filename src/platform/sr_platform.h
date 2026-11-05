@@ -46,6 +46,7 @@ typedef struct SrApp {
 
 /* Initialises everything; headless skips window and GL. Returns false on fatal error. */
 bool sr_app_init(SrApp *a, int argc, char **argv);
+void sr_app_shop_tap(SrApp *a, float ny);
 void sr_app_event(SrApp *a, const SDL_Event *e);
 /* One frame: input, fixed steps, render, present. */
 void sr_app_iterate(SrApp *a);

@@ -5,6 +5,7 @@
 #include "game/sr_game.h"
 
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -405,12 +406,73 @@ void sr_game_shop_close(SrGame *g) {
   if (g->screen == SR_SCREEN_SHOP) g->screen = SR_SCREEN_PLAY;
 }
 
+void sr_game_housing_open(SrGame *g) {
+  SrMenu *m = &g->menu;
+  memset(m, 0, sizeof *m);
+  m->building = g->player.home;
+  m->housing = true;
+  for (int tier = 0; tier < SR_HOUSE_COUNT && m->count < SR_MENU_MAX; tier++) {
+    if (tier == g->player.tier) continue;
+    m->items[m->count] = sr_item_simple(SR_IK_NONE, tier, 1);
+    m->price[m->count] = sr_housing_def(tier)->rent;
+    m->jailbreak[m->count] = -1;
+    m->count++;
+  }
+  g->screen = SR_SCREEN_SHOP;
+}
+
+/* A free building for a housing tier: in the preferred district type, nearest to the old home. */
+static int find_home(const SrGame *g, int tier) {
+  const SrHousingDef *h = sr_housing_def(tier);
+  const SrBuilding *old = bld(g, g->player.home);
+  int best = -1;
+  int64_t bd = INT64_MAX;
+  for (int b = 0; b < g->city->building_count; b++) {
+    const SrBuilding *d = bld(g, b);
+    if (b == g->player.home || d->poi != SR_POI_NONE || (d->flags & SR_BF_MISSION)) continue;
+    int dist = g->city->blocks[d->block].district;
+    if (h->district_type >= 0 && (int)g->city->districts[dist].type != h->district_type) continue;
+    int64_t dx = (d->x0 - old->x0) / 100, dz = (d->y0 - old->y0) / 100;
+    if (dx * dx + dz * dz < bd) {
+      bd = dx * dx + dz * dz;
+      best = b;
+    }
+  }
+  return best;
+}
+
+SrResult sr_game_move_home(SrGame *g, int tier) {
+  int b = tier >= 0 && tier < SR_HOUSE_COUNT ? find_home(g, tier) : -1;
+  if (b < 0) return SR_ERR_NOT_FOUND;
+  bool was_home = g->site.active && g->site.in.apartment;
+  SrResult r = sr_player_move(&g->player, tier, b, sr_game_time(g));
+  if (r != SR_OK) {
+    sr_game_toast(g, "The landlord wants the deposit first.");
+    return r;
+  }
+  g->approach_building = -1;
+  if (was_home) {
+    sr_site_close(&g->site);
+    sr_game_skip(g, 2 * 3600, false); /* moving day */
+    sr_game_enter(g, b, SR_ENTRY_FRONT);
+  }
+  sr_player_message(&g->player, "Landlord", "Keys are yours. Your things are already in the new place.",
+                    sr_game_time(g));
+  sr_game_toast(g, "You moved. The new rent starts with the next due date.");
+  return SR_OK;
+}
+
 SrResult sr_game_shop_buy(SrGame *g, int row) {
   SrMenu *m = &g->menu;
   SrPlayer *p = &g->player;
   if (row < 0 || row >= m->count) return SR_ERR_INVALID;
   m->sel = row;
   int64_t t = sr_game_time(g);
+  if (m->housing) {
+    SrResult r = sr_game_move_home(g, m->items[row].type);
+    if (r == SR_OK) sr_game_shop_close(g);
+    return r;
+  }
   if (m->jailbreak[row] >= 0) {
     if (p->cred < m->price[row]) return SR_ERR_DENIED;
     sr_cyber_jailbreak(&p->cyber[m->jailbreak[row]]);

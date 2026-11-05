@@ -275,6 +275,9 @@ void sr_game_step(SrGame *g, const SrActionState *a) {
       sr_game_confirm_resume(g);
     else if (a && a->pressed[SR_ACT_PAUSE] && g->screen == SR_SCREEN_TERMINAL)
       g->screen = SR_SCREEN_PLAY;
+    else if (a && a->pressed[SR_ACT_INTERACT] && g->screen == SR_SCREEN_TERMINAL && g->site.active &&
+             g->site.in.apartment)
+      sr_game_housing_open(g); /* the home terminal lists apartments for rent */
     return;
   }
   float dt = (float)SR_STEP_DT;

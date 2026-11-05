@@ -320,6 +320,16 @@ static void create_tap(SrApp *a, float x, float y) {
     sr_game_create_randomize(a->game);
 }
 
+/* Shop by pointer: a row buys it, the bottom strip leaves. ny is normalised (0..1). */
+void sr_app_shop_tap(SrApp *a, float ny) {
+  if (ny > 0.88f) {
+    sr_game_shop_close(a->game);
+    return;
+  }
+  int row = sr_ui_shop_row_at(&a->ui, ny * (float)a->ui.h);
+  if (row >= 0 && row < a->game->menu.count) sr_game_shop_buy(a->game, row);
+}
+
 void sr_app_event(SrApp *a, const SDL_Event *e) {
   SrGame *g = a->game;
   switch (e->type) {
@@ -363,6 +373,10 @@ void sr_app_event(SrApp *a, const SDL_Event *e) {
         break;
       }
       if (down && g->screen == SR_SCREEN_PAUSE) sr_game_confirm_resume(g);
+      if (down && g->screen == SR_SCREEN_SHOP) {
+        sr_app_shop_tap(a, a->css_h > 0 ? e->button.y / a->css_h : 0.5f);
+        break;
+      }
       if (down && g->screen == SR_SCREEN_PLAY && !a->relative_mouse && a->window) {
         a->relative_mouse = SDL_SetWindowRelativeMouseMode(a->window, true); /* pointer lock on the web */
         a->input.pointer_lock_wanted = true;
@@ -385,6 +399,10 @@ void sr_app_event(SrApp *a, const SDL_Event *e) {
         break;
       }
       if (phase == 0 && g->screen == SR_SCREEN_PAUSE) sr_game_confirm_resume(g);
+      if (g->screen == SR_SCREEN_SHOP) {
+        if (phase == 0) sr_app_shop_tap(a, e->tfinger.y);
+        break;
+      }
       sr_input_touch(&a->input, (int64_t)e->tfinger.fingerID, e->tfinger.x, e->tfinger.y, phase);
       if (a->relative_mouse && a->window) {
         SDL_SetWindowRelativeMouseMode(a->window, false);

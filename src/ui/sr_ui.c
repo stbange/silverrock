@@ -260,7 +260,7 @@ static void terminal(SrUi *ui, const SrGame *g) {
     sr_ui_text(ui, x, y, buf, green, s);
     y += line;
   }
-  sr_ui_text(ui, x, (float)ui->h - m - line, "[ESC] CLOSE", green, s);
+  sr_ui_text(ui, x, (float)ui->h - m - line, g->site.active && g->site.in.apartment ? "[E] APARTMENTS  [ESC] CLOSE" : "[ESC] CLOSE", green, s);
 }
 
 static void touch_overlay(SrUi *ui, const SrGame *g, const SrInput *in) {
@@ -355,7 +355,10 @@ static void shop_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
   y += line * 1.5f;
   for (int i = 0; i < mn->count; i++) {
     char name[SR_NAME_LEN];
-    sr_item_name(g->city, &mn->items[i], name, sizeof name);
+    if (mn->housing)
+      snprintf(name, sizeof name, "%s, rent/week", sr_housing_def(mn->items[i].type)->name);
+    else
+      sr_item_name(g->city, &mn->items[i], name, sizeof name);
     snprintf(buf, sizeof buf, "%s%s  %d", mn->jailbreak[i] >= 0 ? "JAILBREAK " : "", name, mn->price[i]);
     if (i == mn->sel) sr_ui_rect(ui, x - 4, y - 2, (float)ui->w - 2 * x + 8, line, (SrColor){40, 60, 110, 200});
     sr_ui_text(ui, x, y, buf, i == mn->sel ? k_amber : k_white, s);

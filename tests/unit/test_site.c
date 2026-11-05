@@ -209,6 +209,49 @@ static void test_amenities(void) {
   sr_game_destroy(g);
 }
 
+static void test_moving_home(void) {
+  SR_SPEC("player-life", "Moving to a better apartment");
+  SrGame *g = game(40);
+  SrPlayer *p = &g->player;
+  p->cred = 50000;
+  sr_inv_add(&p->stash, sr_item_simple(SR_IK_COMPONENT, 0, 3));
+  int old = p->home, stash = p->stash.count;
+  int64_t due = p->rent_due;
+  face_prop(g, SR_PROP_TERMINAL);
+  SR_CHECK_EQ(sr_game_interact(g), SR_OK);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_TERMINAL);
+  SrActionState a;
+  memset(&a, 0, sizeof a);
+  a.pressed[SR_ACT_INTERACT] = true;
+  sr_game_step(g, &a);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_SHOP);
+  SR_CHECK(g->menu.housing);
+  int row = -1;
+  for (int i = 0; i < g->menu.count; i++)
+    if (g->menu.items[i].type == SR_HOUSE_MID) row = i;
+  SrUi ui;
+  sr_ui_init(&ui);
+  sr_ui_begin(&ui, 1280, 720, 2);
+  sr_ui_build(&ui, g, NULL, false);
+  sr_ui_free(&ui);
+  SR_CHECK_EQ(sr_game_shop_buy(g, row), SR_OK);
+  SR_CHECK(p->home != old);
+  SR_CHECK_EQ(p->tier, SR_HOUSE_MID);
+  SR_CHECK_EQ(p->rent, sr_housing_def(SR_HOUSE_MID)->rent);
+  SR_CHECK_EQ(p->rent_due, due); /* the new rent applies from the next due date */
+  SR_CHECK_EQ(p->stash.count, stash);
+  SR_CHECK(sr_game_inside(g) && g->site.building == p->home && g->site.in.tier == SR_HOUSE_MID);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_PLAY);
+  /* no deposit, no keys; nonsense tiers */
+  p->cred = 0;
+  SR_CHECK_EQ(sr_game_move_home(g, SR_HOUSE_LOFT), SR_ERR_DENIED);
+  SR_CHECK_EQ(sr_game_move_home(g, 77), SR_ERR_NOT_FOUND);
+  p->cred = 50000;
+  sr_game_leave(g);
+  SR_CHECK_EQ(sr_game_move_home(g, SR_HOUSE_STUDIO), SR_OK); /* from the street */
+  sr_game_destroy(g);
+}
+
 /* ---- site geometry --------------------------------------------------------------------- */
 
 static void test_site_geometry(void) {
@@ -1126,6 +1169,7 @@ void suite_site(void) {
   SR_RUN(test_mission_interior_props);
   SR_RUN(test_start_inside_apartment);
   SR_RUN(test_amenities);
+  SR_RUN(test_moving_home);
   SR_RUN(test_site_geometry);
   SR_RUN(test_stable_interiors);
   SR_RUN(test_guard_detection_and_alarm);

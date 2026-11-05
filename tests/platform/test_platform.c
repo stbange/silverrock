@@ -200,6 +200,37 @@ static void test_render_interiors(void) {
   free(th);
 }
 
+static void test_shop_taps(void) {
+  sr_app_start_game(&g_app, 0x5EEDC0DEull);
+  SrGame *g = g_app.game;
+  g->player.cred = 100000;
+  int shop = -1;
+  for (int b = 0; b < g->city->building_count && shop < 0; b++)
+    if (g->city->buildings[b].poi == SR_POI_CLINIC) shop = b;
+  sr_clock_set_seconds(&g->clock, 12 * 3600); /* clinics are open at noon */
+  sr_game_shop_open(g, shop);
+  sr_app_iterate(&g_app); /* builds the UI at window size */
+  float line = 11.0f * (float)g_app.ui.scale, top = 10.0f * (float)g_app.ui.scale + 6.0f * (float)g_app.ui.scale;
+  float row0 = (top + line * 1.5f + 2) / (float)g_app.ui.h;
+  int64_t cash = g->player.cred;
+  sr_app_shop_tap(&g_app, row0);
+  SR_CHECK(g->player.cred < cash);
+  SDL_Event e;
+  memset(&e, 0, sizeof e);
+  e.type = SDL_EVENT_FINGER_DOWN;
+  e.tfinger.x = 0.5f;
+  e.tfinger.y = 0.95f; /* bottom strip: leave */
+  sr_app_event(&g_app, &e);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_PLAY);
+  sr_game_shop_open(g, shop);
+  memset(&e, 0, sizeof e);
+  e.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+  e.button.button = SDL_BUTTON_LEFT;
+  e.button.y = g_app.css_h * 0.95f;
+  sr_app_event(&g_app, &e);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_PLAY);
+}
+
 static void test_retro_toggles(void) {
   SR_SPEC("retro-rendering", "Independent toggles");
   reference_scene(&g_app);
@@ -638,6 +669,7 @@ void suite_platform(void) {
   SR_RUN(test_render_city);
   SR_RUN(test_retro_toggles);
   SR_RUN(test_render_interiors);
+  SR_RUN(test_shop_taps);
   SR_RUN(test_letterbox_window);
   SR_RUN(test_focus_and_autosave);
   SR_RUN(test_settings_persist);

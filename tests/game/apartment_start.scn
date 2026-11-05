@@ -1,0 +1,21 @@
+# @spec player-life: New game start
+# @spec city-generation: Stable interiors
+# A new game starts inside the studio apartment: sleep, step out, come back in.
+seed        77
+newgame     background=street_kid
+expect      site.active == true
+expect      site.apartment == true
+face        bed
+expect      context == 13
+interact
+expect      clock.hour >= 5
+face        stash
+expect      context == 14
+face        exit
+expect      context == 12
+interact
+expect      site.active == false
+expect      player.y > 1
+expect      context == 4
+interact
+expect      site.active == true
