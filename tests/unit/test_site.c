@@ -215,6 +215,7 @@ static void test_amenities(void) {
   SR_CHECK_EQ(g->screen, SR_SCREEN_TERMINAL);
   sr_game_destroy(l);
   sr_game_destroy(g);
+  sr_memstore_free(&mem);
 }
 
 static void test_moving_home(void) {
@@ -386,6 +387,7 @@ static void test_stable_interiors(void) {
   SR_CHECK(t->guards[0].reported);
   sr_game_destroy(l);
   sr_game_destroy(g);
+  sr_memstore_free(&mem);
 }
 
 /* ---- guards, cameras, alarms ------------------------------------------------------------- */
