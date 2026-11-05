@@ -28,7 +28,7 @@ flowchart LR
 
 ### Status (2026-11-05)
 
-M0–M3 are implemented: 140 of 150 tasks done across the four changes, 78 unit tests plus platform, scenario,
+M0–M3 are implemented: 130 of 150 tasks done across the four changes, 78 unit tests plus platform, scenario,
 browser and gate self-tests, 98.8 % line coverage. Open items per change are listed at the end of each `tasks.md`;
 the largest are walkable interiors with room-by-room missions in 3D, gadget and cyberware effects in play, and
 manual checks on Windows hardware and real phones.
