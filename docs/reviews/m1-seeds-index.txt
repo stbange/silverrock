@@ -1,0 +1,50 @@
+seed_01 Elsby Strip (Entertainment) towards Quill Netware, 400 citizens
+seed_02 Lanyard Foundry (Industrial) towards Paragon Pharma, 181 citizens
+seed_03 Gallow Commons (Residential) towards Corvid Securities, 351 citizens
+seed_04 Rook Docks (Docks) towards Kestrel Systems, 130 citizens
+seed_05 Sable Foundry (Industrial) towards Myriad Arms, 173 citizens
+seed_06 Marrow Exchange (Commercial) towards Mbeki-Zamora, 400 citizens
+seed_07 Quayle Exchange (Commercial) towards Vantor Logistics, 400 citizens
+seed_08 Mercer Park (Research Campus) towards Ashgrove Pharma, 128 citizens
+seed_09 Osk Underway (Undercity) towards Mbeki-Reyes, 306 citizens
+seed_10 Tern Market (Commercial) towards Argent Securities, 400 citizens
+seed_11 Kessling Crown (Corporate Spire) towards Hexis Atmospherics, 391 citizens
+seed_12 Juniper Towers (Residential) towards Myriad Industries, 344 citizens
+seed_13 Pell Foundry (Industrial) towards Nadir Consolidated, 168 citizens
+seed_14 Pell Campus (Research Campus) towards Obelisk Consolidated, 133 citizens
+seed_15 Elsby Towers (Residential) towards Santangelo-Ferreira, 343 citizens
+seed_16 Rook Wharf (Docks) towards Quintero-Okonkwo, 128 citizens
+seed_17 Gallow Capitol (Civic Center) towards Varga-Halloway, 255 citizens
+seed_18 Bellwether Docks (Docks) towards Orison Atmospherics, 144 citizens
+seed_19 Kilroy Bazaar (Commercial) towards Brandt-Zamora, 400 citizens
+seed_20 Bellwether Spire (Corporate Spire) towards Dumont-Santangelo, 398 citizens
+seed_21 Pell Wharf (Docks) towards Ashgrove Logistics, 123 citizens
+seed_22 Harrow Sump (Undercity) towards Vantor Labs, 306 citizens
+seed_23 Lanyard Wharf (Docks) towards Lattice Pharma, 129 citizens
+seed_24 Osk Foundry (Industrial) towards Ashgrove Media Group, 177 citizens
+seed_25 Osk Exchange (Commercial) towards Jankowski-Adeyemi, 400 citizens
+seed_26 Vesper Crown (Corporate Spire) towards Hexis Consolidated, 390 citizens
+seed_27 Osk Capitol (Civic Center) towards Eze-Moreau, 230 citizens
+seed_28 Mercer Crown (Corporate Spire) towards Ferreira-Dumont, 374 citizens
+seed_29 Lanyard Exchange (Commercial) towards Hexis Media Group, 400 citizens
+seed_30 Osk Lights (Entertainment) towards Kestrel Pharma, 400 citizens
+seed_31 Vesper Scrap (Barrens) towards Navarro-Bastos, 65 citizens
+seed_32 Pell Exchange (Commercial) towards Vigil Netware, 400 citizens
+seed_33 Kessling Commons (Residential) towards Cinder Orbital, 335 citizens
+seed_34 Faraday Port (Docks) towards Vantor Industries, 128 citizens
+seed_35 Northam Spire (Corporate Spire) towards Solace Mutual, 358 citizens
+seed_36 Quayle Neon Mile (Entertainment) towards Hexis Netware, 400 citizens
+seed_37 Kilroy Blocks (Residential) towards Halcyon Netware, 328 citizens
+seed_38 Vesper Civic Center (Civic Center) towards Argent Netware, 257 citizens
+seed_39 Faraday Strip (Entertainment) towards Obelisk Logistics, 400 citizens
+seed_40 Osk Civic Center (Civic Center) towards Solace Pharma, 252 citizens
+seed_41 Vesper Depths (Undercity) towards Sable Grid, 293 citizens
+seed_42 Osk Depths (Undercity) towards Ferreira-Winter, 302 citizens
+seed_43 Kilroy Wharf (Docks) towards Vigil Atmospherics, 130 citizens
+seed_44 Sable Works (Industrial) towards Vigil Arms, 164 citizens
+seed_45 Sable Institute (Research Campus) towards Cinder Industries, 116 citizens
+seed_46 Calder Commons (Residential) towards Paragon Pharma, 345 citizens
+seed_47 Juniper Stacks (Residential) towards Myriad Capital, 353 citizens
+seed_48 Harrow Docks (Docks) towards Halcyon Industries, 126 citizens
+seed_49 Dunmore Depths (Undercity) towards Orison Cybernetics, 306 citizens
+seed_50 Sable Scrap (Barrens) towards Corvid Systems, 69 citizens

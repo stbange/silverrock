@@ -5,6 +5,7 @@
 #include "platform/sr_platform.h"
 #include "sr_test.h"
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -229,6 +230,71 @@ static void test_bloom(void) {
   g_app.game->settings.bloom = true;
   free(off);
   free(on);
+}
+
+/* Screenshot review aid: SR_SEED_SHOTS=dir renders one street view per seed (50 seeds) looking
+ * from a district centre towards the nearest megacorp HQ. Not a check; skipped otherwise. */
+static void test_seed_screenshots(void) {
+  const char *dir = getenv("SR_SEED_SHOTS");
+  if (!dir) return;
+  FILE *index = NULL;
+  char path[512];
+  snprintf(path, sizeof path, "%s/index.txt", dir);
+  index = fopen(path, "w");
+  for (int seed = 1; seed <= 50; seed++) {
+    sr_app_start_game(&g_app, (uint64_t)seed * 7919u);
+    SrGame *g = g_app.game;
+    sr_game_leave(g);
+    g->settings.dynamic_res = false;
+    g_app.fixed_frame_dt = 1.0 / 60.0;
+    const SrCity *c = g->city;
+    const SrDistrict *d = &c->districts[seed % c->district_count];
+    int blk = sr_city_block_at(c, d->cx, d->cy);
+    int32_t ox, oy;
+    sr_city_block_origin(blk, c->grid, &ox, &oy);
+    g->player.pos = sr_v3((float)ox / 100.0f + 8.0f, 1.7f, (float)oy / 100.0f + 8.0f);
+    const SrBuilding *hq = &c->buildings[c->factions.f[seed % c->factions.corp_count].hq_building];
+    float dx = (float)(hq->x0 + hq->x1) / 200.0f - g->player.pos.x,
+          dz = (float)(hq->y0 + hq->y1) / 200.0f - g->player.pos.z;
+    g->player.yaw = atan2f(-dx, -dz);
+    g->player.pitch = 0.12f;
+    sr_clock_set_seconds(&g->clock, 86400 + 22 * 3600);
+    for (int i = 0; i < 60; i++) sr_app_iterate(&g_app);
+    int w, h;
+    uint8_t *rgb = render_internal(&g_app, &w, &h);
+    if (rgb) {
+      char name[64];
+      snprintf(name, sizeof name, "seed_%02d", seed);
+      save_shot(name, rgb, w, h);
+      if (index)
+        fprintf(index, "%s %s (%s) towards %s, %d citizens\n", name, d->name, sr_district_type_name(d->type),
+                c->factions.f[seed % c->factions.corp_count].name, g->crowd.count);
+    }
+    free(rgb);
+  }
+  if (index) fclose(index);
+}
+
+static void test_many_games_keep_rendering(void) {
+  /* every new game builds new meshes; the backend must keep drawing after many games */
+  double first = 0;
+  for (int k = 0; k < 24; k++) {
+    reference_scene(&g_app);
+    int w, h;
+    uint8_t *rgb = render_internal(&g_app, &w, &h);
+    long sum = 0, sum2 = 0;
+    for (int i = 0; i < w * h; i++) {
+      int v = rgb[i * 3] + rgb[i * 3 + 1] + rgb[i * 3 + 2];
+      sum += v;
+      sum2 += (long)v * v;
+    }
+    double var = (double)sum2 / (w * h) - ((double)sum / (w * h)) * ((double)sum / (w * h));
+    if (k == 0) first = var;
+    SR_CHECK(var > first * 0.9);
+    free(rgb);
+  }
+  printf("  mesh slots reclaimed: %d\n", g_app.gfx.reclaimed);
+  SR_CHECK(g_app.gfx.reclaimed > 0);
 }
 
 static void test_shop_taps(void) {
@@ -702,6 +768,8 @@ void suite_platform(void) {
   SR_RUN(test_render_interiors);
   SR_RUN(test_shop_taps);
   SR_RUN(test_bloom);
+  SR_RUN(test_many_games_keep_rendering);
+  SR_RUN(test_seed_screenshots);
   SR_RUN(test_letterbox_window);
   SR_RUN(test_focus_and_autosave);
   SR_RUN(test_settings_persist);

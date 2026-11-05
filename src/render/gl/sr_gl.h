@@ -15,6 +15,8 @@ typedef struct SrGlMesh {
   unsigned vao, vbo, ibo;
   int count;
   bool used;
+  const void *owner;  /* the SrMesh this slot holds; a mesh only uses a slot it owns */
+  unsigned last_used; /* frame number, for reclaiming slots of meshes that are gone */
 } SrGlMesh;
 
 typedef struct SrGlBackend {
@@ -29,6 +31,8 @@ typedef struct SrGlBackend {
   int fbo_w, fbo_h;
   unsigned quad_vao, quad_vbo;
   SrGlMesh meshes[SR_GL_MAX_MESHES];
+  unsigned frame;
+  int reclaimed; /* slots taken over from meshes that are gone */
   int draw_calls;
   int triangles;
   char error[256];

@@ -108,6 +108,28 @@ static SrColor neon_for(const SrCity *c, int building) {
   return pal->neon[b->id % 3];
 }
 
+/* Barrens and Undercity blocks with empty lots get burning barrels: a light where there is none. */
+static int barrels(const SrCity *c, int blk, SrVec3 out[2]) {
+  const SrBlock *b = &c->blocks[blk];
+  SrDistrictType t = c->districts[b->district].type;
+  if (b->water || (t != SR_D_BARRENS && t != SR_D_UNDERCITY) || b->building_count >= 3) return 0;
+  int32_t ox, oy;
+  sr_city_block_origin(blk, c->grid, &ox, &oy);
+  int n = 0;
+  for (int k = 0; k < 2 - (b->building_count > 1); k++) {
+    uint64_t h = sr_mix64(c->seed ^ ((uint64_t)blk * 31u + (uint64_t)k));
+    float x = (float)ox / 100.0f + 22.0f + (float)(h % 50), z = (float)oy / 100.0f + 22.0f + (float)((h >> 16) % 50);
+    bool inside = false;
+    for (int i = 0; i < b->building_count; i++) {
+      const SrBuilding *bd = &c->buildings[b->first_building + i];
+      inside = inside ||
+               (x * 100 > bd->x0 - 200 && x * 100 < bd->x1 + 200 && z * 100 > bd->y0 - 200 && z * 100 < bd->y1 + 200);
+    }
+    if (!inside) out[n++] = sr_v3(x, 0, z);
+  }
+  return n;
+}
+
 static int block_lights(const SrCity *c, int blk, SrLight *out, int max) {
   int n = 0;
   const SrBlock *b = &c->blocks[blk];
@@ -136,19 +158,29 @@ static int block_lights(const SrCity *c, int blk, SrLight *out, int max) {
     l->g = nc.g / 255.0f;
     l->b = nc.b / 255.0f;
   }
+  SrVec3 fire[2];
+  int nf = barrels(c, blk, fire);
+  for (int i = 0; i < nf && n < max; i++) {
+    SrLight *l = &out[n++];
+    l->pos = sr_v3(fire[i].x, 1.6f, fire[i].z);
+    l->radius = 16.0f;
+    l->r = 1.0f;
+    l->g = 0.45f;
+    l->b = 0.12f;
+  }
   return n;
 }
 
 void sr_light_grid_build(SrLightGrid *lg, const SrCity *c) {
   sr_light_grid_free(lg);
   int blocks = c->grid * c->grid;
-  lg->lights = (SrLight *)malloc(sizeof(SrLight) * (size_t)blocks * 5);
+  lg->lights = (SrLight *)malloc(sizeof(SrLight) * (size_t)blocks * 7);
   if (!lg->lights) return; /* GCOVR_EXCL_LINE reason: malloc failure not injectable */
   lg->blocks = blocks;
   lg->city_seed = c->seed;
   for (int b = 0; b < blocks; b++) {
     lg->start[b] = (uint16_t)lg->count;
-    lg->count += block_lights(c, b, lg->lights + lg->count, 5);
+    lg->count += block_lights(c, b, lg->lights + lg->count, 7);
   }
   lg->start[blocks] = (uint16_t)lg->count;
 }
@@ -219,6 +251,14 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
                 (SrColor){60, 60, 66, 255}, SR_LAYER_WHITE, 0, 0);
     sr_mesh_box(m, sr_v3(x0 + st - 1.6f, 6.5f, z0 + st - 1.6f), sr_v3(x0 + st - 0.6f, 6.8f, z0 + st - 0.6f), lamp,
                 SR_LAYER_WHITE, 0, 255);
+  }
+  SrVec3 fire[2];
+  for (int i = 0, nf = barrels(c, blk, fire); i < nf; i++) { /* burning barrels */
+    sr_mesh_box(m, sr_v3(fire[i].x - 0.35f, 0, fire[i].z - 0.35f), sr_v3(fire[i].x + 0.35f, 0.9f, fire[i].z + 0.35f),
+                (SrColor){70, 50, 40, 255}, SR_LAYER_METAL, 0.5f, 0);
+    sr_mesh_box(m, sr_v3(fire[i].x - 0.28f, 0.9f, fire[i].z - 0.28f),
+                sr_v3(fire[i].x + 0.28f, 1.35f, fire[i].z + 0.28f), (SrColor){255, 140, 40, 255}, SR_LAYER_WHITE, 0,
+                255);
   }
   if (b->highway) { /* elevated highway deck overhead */
     sr_mesh_box(m, sr_v3(x0, 11.0f, z0 + 2), sr_v3(x0 + s, 12.0f, z0 + st - 2), shade(pal->ground, 80),

@@ -437,16 +437,25 @@ void sr_glb_shutdown(SrGlBackend *b) {
   sr_glb_context_lost(b);
 }
 
-/* Mesh handle = generation << 16 | (slot + 1). */
+/* Mesh handle = generation << 16 | (slot + 1). When every slot is taken (meshes of an earlier
+ * game or scene are gone without telling the backend), the least recently drawn slot is reused. */
 static SrGlMesh *mesh_slot(SrGlBackend *b, SrMesh *m) {
   unsigned slot = (m->gpu & 0xFFFFu);
   if (m->gpu && (m->gpu >> 16) == (b->generation & 0xFFFFu) && slot >= 1 && slot <= SR_GL_MAX_MESHES &&
-      b->meshes[slot - 1].used)
+      b->meshes[slot - 1].used && b->meshes[slot - 1].owner == m) {
+    b->meshes[slot - 1].last_used = b->frame;
     return &b->meshes[slot - 1];
+  }
+  int oldest = -1;
   for (int i = 0; i < SR_GL_MAX_MESHES; i++) {
     SrGlMesh *gm = &b->meshes[i];
-    if (gm->used) continue;
+    if (gm->used) {
+      if (gm->last_used != b->frame && (oldest < 0 || gm->last_used < b->meshes[oldest].last_used)) oldest = i;
+      continue;
+    }
     gm->used = true;
+    gm->owner = m;
+    gm->last_used = b->frame;
     pGenVertexArrays(1, &gm->vao);
     pGenBuffers(1, &gm->vbo);
     pGenBuffers(1, &gm->ibo);
@@ -467,7 +476,14 @@ static SrGlMesh *mesh_slot(SrGlBackend *b, SrMesh *m) {
     m->dirty = true;
     return gm;
   }
-  return NULL; /* GCOVR_EXCL_LINE reason: more meshes than slots never happens */
+  if (oldest < 0) return NULL;       /* GCOVR_EXCL_LINE reason: more live meshes in one frame than slots */
+  SrGlMesh *gm = &b->meshes[oldest]; /* buffers and attribute layout are reused as they are */
+  gm->owner = m;
+  gm->last_used = b->frame;
+  b->reclaimed++;
+  m->gpu = ((b->generation & 0xFFFFu) << 16) | (unsigned)(oldest + 1);
+  m->dirty = true;
+  return gm;
 }
 
 static void draw_mesh(SrGlBackend *b, SrMesh *m) {
@@ -509,6 +525,7 @@ static void set_lights(SrGlBackend *b, const SrFrame *f, const SrDraw *d) {
 
 void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, bool integer_scale) {
   if (!b->ready) return;
+  b->frame++;
   b->draw_calls = 0;
   b->triangles = 0;
   int iw = f && f->internal_w > 0 ? f->internal_w : 480, ih = f && f->internal_h > 0 ? f->internal_h : 270;
