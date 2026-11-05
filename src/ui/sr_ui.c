@@ -64,7 +64,7 @@ const char *sr_ui_context_label(SrContextKind k) {
     case SR_CTX_FOOD: return "EAT";
     case SR_CTX_SHOP: return "SHOP";
     case SR_CTX_FIXER: return "TALK TO FIXER";
-    case SR_CTX_HOME: return "SLEEP";
+    case SR_CTX_HOME: return "GO HOME";
     case SR_CTX_METRO: return "RIDE METRO";
     case SR_CTX_CAPSULE: return "RENT CAPSULE";
     case SR_CTX_JOB_TARGET: return "DO THE JOB";
@@ -116,7 +116,10 @@ int sr_ui_context_icon(const SrGame *g, const SrContext *c) {
   }
 }
 
+static int fit_scale(const char *t, int s, float max_w);
+
 static void centered_text(SrUi *ui, float y, const char *txt, SrColor c, int s) {
+  s = fit_scale(txt, s, (float)ui->w - 8.0f * (float)ui->scale);
   sr_ui_text(ui, (float)ui->w / 2 - (float)sr_ui_text_width(txt, s) / 2, y, txt, c, s);
 }
 
@@ -125,13 +128,37 @@ static void bar(SrUi *ui, float x, float y, float w, float h, float frac, SrColo
   sr_ui_rect(ui, x + 1, y + 1, (w - 2) * SR_CLAMP(frac, 0.0f, 1.0f), h - 2, c);
 }
 
-static void hud(SrUi *ui, const SrGame *g) {
+/* Largest text scale <= s at which a string fits in max_w pixels (at least 1). */
+static int fit_scale(const char *t, int s, float max_w) {
+  while (s > 1 && (float)sr_ui_text_width(t, s) > max_w) s--;
+  return s;
+}
+
+/* Text that never runs past max_w: shrinks first, then cuts the end. */
+static void text_fit(SrUi *ui, float x, float y, const char *t, SrColor c, int s, float max_w) {
+  int fs = fit_scale(t, s, max_w);
+  char buf[256];
+  snprintf(buf, sizeof buf, "%s", t);
+  int max_chars = (int)(max_w / (6.0f * (float)fs));
+  if (max_chars >= 0 && max_chars < (int)sizeof buf) buf[max_chars] = '\0';
+  sr_ui_text(ui, x, y, buf, c, fs);
+}
+
+static void hud(SrUi *ui, const SrGame *g, const SrInput *in) {
   const SrPlayer *p = &g->player;
   int s = ui->scale;
   float m = 6.0f * (float)s;
+  bool touch = in && in->scheme == SR_SCHEME_TOUCH;
+  float k = ui->px_per_css;
+  /* right edge of the free area: the touch buttons own the right-hand side */
+  float rx = touch ? sr_touch_buttons_left(&in->layout) * k - m : (float)ui->w - m;
   char buf[160];
   int64_t t = sr_game_time(g);
   sr_time_format(t, buf, sizeof buf);
+  float time_right = m + (float)sr_ui_text_width(buf, s);
+  /* a dark backing keeps the HUD column readable over bright walls and windows */
+  float col_h = touch ? 64.0f * (float)s : 46.0f * (float)s;
+  sr_ui_rect(ui, m / 2, m / 2, SR_MAX(time_right, m + 62.0f * (float)s) + m / 2, col_h, (SrColor){4, 6, 14, 120});
   sr_ui_text(ui, m, m, buf, k_cyan, s);
   snprintf(buf, sizeof buf, "%lld CRED", (long long)p->cred);
   sr_ui_text(ui, m, m + 10.0f * (float)s, buf, k_amber, s);
@@ -146,14 +173,27 @@ static void hud(SrUi *ui, const SrGame *g) {
   for (int i = 0; i < 5; i++)
     sr_ui_rect(ui, m + (float)i * 6.0f * (float)s, by + 3 * (bh + 2) + 2, 4.0f * (float)s, 4.0f * (float)s,
                i < heat ? k_red : (SrColor){60, 60, 70, 200});
-  /* district and weather, top right */
+  /* district and weather: top right, or under the bars on touch (the buttons own the top right) */
   int d = sr_city_district_at(g->city, (int32_t)(p->pos.x * 100), (int32_t)(p->pos.z * 100));
+  char weather[48];
   snprintf(buf, sizeof buf, "%s", d >= 0 ? g->city->districts[d].name : "Outside the city");
-  sr_ui_text(ui, (float)ui->w - m - (float)sr_ui_text_width(buf, s), m, buf, k_white, s);
-  snprintf(buf, sizeof buf, "%s", sr_weather_name(sr_weather_at(g->seed, t).to));
-  sr_ui_text(ui, (float)ui->w - m - (float)sr_ui_text_width(buf, s), m + 10.0f * (float)s, buf, k_cyan, s);
-  /* compass with megacorp landmarks */
+  snprintf(weather, sizeof weather, "%s", sr_weather_name(sr_weather_at(g->seed, t).to));
+  float left_w = (float)ui->w * 0.3f - m;
+  if (touch) {
+    float ty = by + 3 * (bh + 2) + 6.0f * (float)s;
+    text_fit(ui, m, ty, buf, k_white, s, left_w);
+    text_fit(ui, m, ty + 9.0f * (float)s, weather, k_cyan, s, left_w);
+  } else {
+    sr_ui_text(ui, (float)ui->w - m - (float)sr_ui_text_width(buf, s), m, buf, k_white, s);
+    sr_ui_text(ui, (float)ui->w - m - (float)sr_ui_text_width(weather, s), m + 10.0f * (float)s, weather, k_cyan, s);
+  }
+  /* compass with megacorp landmarks, between the HUD column and the top-right corner */
   float cw = (float)ui->w * 0.4f, cx = (float)ui->w / 2;
+  if (touch) {
+    float lo = SR_MAX((float)ui->w * 0.3f, time_right + 2 * m), hi = ((float)ui->w - (8.0f + 3 * 56.0f) * k) - m;
+    cw = SR_MAX(hi - lo, 40.0f);
+    cx = (lo + hi) / 2;
+  }
   sr_ui_rect(ui, cx - cw / 2, m, cw, 9.0f * (float)s, k_panel);
   for (int f = 0; f < g->city->factions.corp_count; f++) {
     const SrBuilding *b = &g->city->buildings[g->city->factions.f[f].hq_building];
@@ -170,7 +210,18 @@ static void hud(SrUi *ui, const SrGame *g) {
   sr_ui_rect(ui, (float)ui->w / 2 - (float)s, (float)ui->h / 2 - (float)s, 2.0f * (float)s, 2.0f * (float)s, k_white);
   /* context prompt with the interaction's icon */
   const char *label = sr_ui_context_label(g->ctx.kind);
-  if (label[0]) {
+  if (label[0] && touch) { /* on touch the label sits right above the interact button */
+    for (int i = 0; i < SR_TOUCH_BUTTONS; i++) {
+      const SrTouchButton *b = &in->layout.buttons[i];
+      if (b->action != SR_ACT_INTERACT) continue;
+      int ls = fit_scale(label, s, (float)ui->w * 0.45f);
+      float tw = (float)sr_ui_text_width(label, ls);
+      float x = SR_MIN(b->x * k + b->size * k / 2, (float)ui->w - m) - tw;
+      float y = (b->y - b->size / 2) * k - 7.0f * (float)ls - 8;
+      sr_ui_rect(ui, x - 4, y - 4, tw + 8, 7.0f * (float)ls + 8, k_panel);
+      sr_ui_text(ui, x, y, label, k_amber, ls);
+    }
+  } else if (label[0]) {
     snprintf(buf, sizeof buf, "[E] %s", label);
     float tw = (float)sr_ui_text_width(buf, s), ic = 9.0f * (float)s;
     float x0 = (float)ui->w / 2 - (tw + ic + 4) / 2;
@@ -188,12 +239,11 @@ static void hud(SrUi *ui, const SrGame *g) {
   }
   /* cyberware and gadget states */
   float sy = (float)ui->h - m - 18.0f * (float)s;
-  if (g->thermal) sr_ui_text(ui, (float)ui->w - m - (float)sr_ui_text_width("THERMAL", s), sy, "THERMAL", k_red, s);
+  if (g->thermal) sr_ui_text(ui, rx - (float)sr_ui_text_width("THERMAL", s), sy, "THERMAL", k_red, s);
   if (g->buff_camo > 0)
-    sr_ui_text(ui, (float)ui->w - m - (float)sr_ui_text_width("CAMO", s), sy - 9.0f * (float)s, "CAMO", k_cyan, s);
+    sr_ui_text(ui, rx - (float)sr_ui_text_width("CAMO", s), sy - 9.0f * (float)s, "CAMO", k_cyan, s);
   if (g->buff_reflex > 0)
-    sr_ui_text(ui, (float)ui->w - m - (float)sr_ui_text_width("REFLEX", s), sy - 18.0f * (float)s, "REFLEX", k_amber,
-               s);
+    sr_ui_text(ui, rx - (float)sr_ui_text_width("REFLEX", s), sy - 18.0f * (float)s, "REFLEX", k_amber, s);
   if (g->glitch_time > 0) { /* neural glitch: static bars over the view */
     for (int i = 0; i < 12; i++) {
       float y = (float)((g->steps * 37u + (uint64_t)i * 101u) % (uint64_t)ui->h);
@@ -211,17 +261,21 @@ static void hud(SrUi *ui, const SrGame *g) {
       float dist = sqrtf(powf((float)(tb->x0 + tb->x1) / 200.0f - p->pos.x, 2) +
                          powf((float)(tb->y0 + tb->y1) / 200.0f - p->pos.z, 2));
       snprintf(buf, sizeof buf, "%s: %s %.0fm", j->executed ? "REPORT" : "JOB", j->title, (double)dist);
-      sr_ui_text(ui, m, (float)ui->h - m - 7.0f * (float)s, buf, k_white, s);
+      text_fit(ui, m, (float)ui->h - m - 7.0f * (float)s, buf, k_white, s, rx - m);
     }
   }
-  if (g->toast_time > 0) {
-    float tw = (float)sr_ui_text_width(g->toast, s);
-    sr_ui_rect(ui, (float)ui->w / 2 - tw / 2 - 4, (float)ui->h * 0.25f - 4, tw + 8, 7.0f * (float)s + 8, k_panel);
-    sr_ui_text(ui, (float)ui->w / 2 - tw / 2, (float)ui->h * 0.25f, g->toast, k_white, s);
+  if (g->toast_time > 0) { /* centred in the free area, shrunk to fit */
+    float area = rx - m, mid = (m + rx) / 2;
+    int ts = fit_scale(g->toast, s, area - 8);
+    float tw = SR_MIN((float)sr_ui_text_width(g->toast, ts), area - 8);
+    float ty = touch ? SR_MAX((float)ui->h * 0.3f, m / 2 + col_h + m) : (float)ui->h * 0.25f;
+    sr_ui_rect(ui, mid - tw / 2 - 4, ty - 4, tw + 8, 7.0f * (float)ts + 8, k_panel);
+    text_fit(ui, mid - tw / 2, ty, g->toast, k_white, ts, area - 8);
   }
 }
 
 static void centered(SrUi *ui, float y, const char *txt, SrColor c, int s) {
+  s = fit_scale(txt, s, (float)ui->w - 8.0f * (float)ui->scale);
   sr_ui_text(ui, (float)ui->w / 2 - (float)sr_ui_text_width(txt, s) / 2, y, txt, c, s);
 }
 
@@ -310,7 +364,7 @@ static void create_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
   for (int b = 0; b < SR_BG_COUNT; b++) {
     const SrBackgroundDef *d = sr_background_def(b);
     snprintf(buf, sizeof buf, "%d %s  %d CRED", b + 1, d->name, d->cash);
-    sr_ui_text(ui, x, y, buf, b == g->create_bg ? k_amber : k_white, s);
+    text_fit(ui, x, y, buf, b == g->create_bg ? k_amber : k_white, s, (float)ui->w * 0.62f - x);
     y += line;
   }
   const SrBackgroundDef *d = sr_background_def(g->create_bg);
@@ -322,7 +376,7 @@ static void create_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
   }
   snprintf(buf, sizeof buf, "TRAINED: %s, %s", sr_skill_name((SrSkill)d->trained[0]),
            sr_skill_name((SrSkill)d->trained[1]));
-  sr_ui_text(ui, x, y + line * 0.3f, buf, k_cyan, s);
+  text_fit(ui, x, y + line * 0.3f, buf, k_cyan, s, (float)ui->w * 0.62f - x);
   /* appearance preview: a portrait built from the generated parts */
   SrAppearance a = sr_game_create_preview(g);
   static const SrColor skin[8] = {{250, 210, 180, 255}, {230, 180, 140, 255}, {200, 150, 110, 255}, {170, 120, 80, 255},
@@ -338,10 +392,10 @@ static void create_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
     sr_ui_rect(ui, px - 2 * u, py + u, 4 * u, 1.5f * u, hair);
   if (a.cyber) sr_ui_rect(ui, px - 1.5f * u, py + 4 * u, 3 * u, 0.6f * u, k_red);
   bool touch = in && in->scheme == SR_SCHEME_TOUCH;
-  sr_ui_text(ui, x, (float)ui->h - line * 1.5f,
-             touch ? "TAP LEFT: BACKGROUND  RIGHT: LOOK  BOTTOM RIGHT: START"
-                   : "1-5 BACKGROUND   R RANDOMISE LOOK   ENTER START",
-             k_amber, s);
+  text_fit(ui, x, (float)ui->h - line * 1.5f,
+           touch ? "TAP LEFT: BACKGROUND  RIGHT: LOOK  BOTTOM RIGHT: START"
+                 : "1-5 BACKGROUND   R RANDOMISE LOOK   ENTER START",
+           k_amber, s, (float)ui->w - 2 * x);
 }
 
 static void shop_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
@@ -362,12 +416,13 @@ static void shop_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
       sr_item_name(g->city, &mn->items[i], name, sizeof name);
     snprintf(buf, sizeof buf, "%s%s  %d", mn->jailbreak[i] >= 0 ? "JAILBREAK " : "", name, mn->price[i]);
     if (i == mn->sel) sr_ui_rect(ui, x - 4, y - 2, (float)ui->w - 2 * x + 8, line, (SrColor){40, 60, 110, 200});
-    sr_ui_text(ui, x, y, buf, i == mn->sel ? k_amber : k_white, s);
+    text_fit(ui, x, y, buf, i == mn->sel ? k_amber : k_white, s, (float)ui->w - 2 * x);
     y += line;
   }
   bool touch = in && in->scheme == SR_SCHEME_TOUCH;
-  sr_ui_text(ui, x, (float)ui->h - m - line,
-             touch ? "TAP A ROW TO BUY  //  TAP HERE TO LEAVE" : "W/S SELECT  E BUY  ESC LEAVE", k_amber, s);
+  text_fit(ui, x, (float)ui->h - m - line,
+           touch ? "TAP A ROW TO BUY  //  TAP HERE TO LEAVE" : "W/S SELECT  E BUY  ESC LEAVE", k_amber, s,
+           (float)ui->w - 2 * x);
 }
 
 int sr_ui_shop_row_at(const SrUi *ui, float y) {
@@ -394,9 +449,9 @@ void sr_ui_build(SrUi *ui, const SrGame *g, const SrInput *in, bool portrait) {
       centered(ui, (float)ui->h * 0.7f, in && in->scheme == SR_SCHEME_TOUCH ? "TAP TO START" : "PRESS ENTER TO START",
                k_amber, s);
       break;
-    case SR_SCREEN_PLAY: hud(ui, g); break;
+    case SR_SCREEN_PLAY: hud(ui, g, in); break;
     case SR_SCREEN_PAUSE:
-      hud(ui, g);
+      hud(ui, g, in);
       sr_ui_rect(ui, 0, 0, (float)ui->w, (float)ui->h, (SrColor){0, 0, 0, 160});
       centered(ui, (float)ui->h * 0.4f, "PAUSED", k_cyan, s * 2);
       centered(ui, (float)ui->h * 0.4f + 22.0f * (float)s,

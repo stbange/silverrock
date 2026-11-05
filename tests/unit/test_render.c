@@ -320,7 +320,7 @@ static void test_ui(void) {
   sr_ui_build(&ui, g, &in, true);
   SR_CHECK(ui.mesh.nv < 120);
   for (int c = 0; c <= SR_CTX_CLOSED + 1; c++) (void)sr_ui_context_label((SrContextKind)c);
-  SR_CHECK_STR(sr_ui_context_label(SR_CTX_HOME), "SLEEP");
+  SR_CHECK_STR(sr_ui_context_label(SR_CTX_HOME), "GO HOME");
   /* player outside the city: HUD still builds */
   SrVec3 keep = g->player.pos;
   g->player.pos = sr_v3(-100, 1.7f, -100);

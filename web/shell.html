@@ -4,12 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#05030c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Silverrock</title>
 <style>
   html, body { margin: 0; height: 100%; background: #05030c; color: #c8f0ff; overflow: hidden;
                font-family: monospace; touch-action: none; -webkit-user-select: none; user-select: none; }
-  #canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
+  /* fixed + inset 0 is the visible viewport: unlike 100vh it excludes the area under a phone's address bar */
+  #canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #hint { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); max-width: 90%; padding: 8px 12px;
+          background: rgba(8,10,20,0.85); border: 1px solid #50e6ff; font-size: 14px; display: none;
+          pointer-events: none; text-align: center; }
   #status { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
             text-align: center; padding: 16px; font-size: 16px; pointer-events: none; }
   #safe { position: fixed; top: env(safe-area-inset-top); bottom: env(safe-area-inset-bottom);
@@ -20,6 +27,7 @@
 <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
 <div id="safe"></div>
 <div id="status">Loading Silverrock&hellip;</div>
+<div id="hint">For full screen on iPhone: Share &rarr; Add to Home Screen, then start Silverrock from there.</div>
 <script>
   var statusEl = document.getElementById('status');
   var canvas = document.getElementById('canvas');
@@ -53,13 +61,35 @@
       Module._sr_web_set_safe_area(r.left, window.innerWidth - r.right, r.top, window.innerHeight - r.bottom);
     }
     window.addEventListener('resize', function () { setTimeout(pushSafeArea, 50); });
-    /* first tap on a phone: fullscreen and landscape where the browser allows it */
-    window.addEventListener('touchstart', function first() {
-      window.removeEventListener('touchstart', first);
+    /* phones and tablets: full screen (and landscape) on a tap. Browsers only allow it from a user
+       gesture that counts as activation (touchend/click, not touchstart), so try on every tap while
+       not in full screen: leaving it with the back gesture and tapping again goes back in. */
+    var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    function inFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+    function goFullscreen() {
+      if (!coarse || inFullscreen()) return;
       var el = document.documentElement;
-      if (el.requestFullscreen) el.requestFullscreen().catch(function () {});
-      if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {});
-    }, { passive: true });
+      var req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (!req) return;
+      var p = req.call(el, { navigationUI: 'hide' });
+      var lock = function () {
+        if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {});
+      };
+      if (p && p.then) p.then(lock).catch(function () {}); else lock();
+    }
+    window.addEventListener('touchend', goFullscreen, { passive: true });
+    window.addEventListener('click', goFullscreen);
+    document.addEventListener('fullscreenchange', function () { setTimeout(pushSafeArea, 100); });
+    document.addEventListener('webkitfullscreenchange', function () { setTimeout(pushSafeArea, 100); });
+    window.silverrockGoFullscreen = goFullscreen;
+    /* iPhone Safari has no full-screen API for pages: point to the home-screen app instead */
+    var ios = /iPhone|iPod/.test(navigator.userAgent);
+    var standalone = window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches);
+    if (ios && !standalone) {
+      var hint = document.getElementById('hint');
+      hint.style.display = 'block';
+      setTimeout(function () { hint.style.display = 'none'; }, 9000);
+    }
     canvas.addEventListener('webglcontextlost', function (e) {
       e.preventDefault();
       if (Module._sr_web_context_lost) Module._sr_web_context_lost();

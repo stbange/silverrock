@@ -1104,7 +1104,7 @@ static void test_interior_render_and_ui(void) {
   sr_ui_build(&ui, g, &in, false);
   int icons = 0;
   for (int v = 0; v < ui.mesh.nv; v++) icons += ui.mesh.v[v].layer == SR_LAYER_ICON_FIRST + SR_POI_FOOD;
-  SR_CHECK(icons >= 8); /* the prompt and the interact button */
+  SR_CHECK(icons >= 4); /* the interact button shows the icon */
   SR_CHECK_EQ(sr_ui_context_icon(g, &g->ctx), SR_POI_FOOD);
   for (int k = SR_CTX_FOOD; k < SR_CTX_COUNT; k++) {
     SrContext c = {(SrContextKind)k, -1, -1, -1, 1, -1};
@@ -1194,6 +1194,35 @@ static void test_light_grid(void) {
   sr_game_destroy(g);
 }
 
+static void test_touch_layout_fits_phones(void) {
+  SR_SPEC("input-controls", "Safe area respected");
+  /* landscape phones and tablets in CSS px, some with notch insets */
+  static const float k[][6] = {{568, 320, 0, 0, 0, 0}, {640, 360, 0, 0, 0, 0},    {667, 375, 0, 0, 0, 0},
+                               {740, 360, 0, 0, 0, 0}, {844, 390, 47, 47, 0, 21}, {932, 430, 59, 59, 0, 21},
+                               {915, 412, 0, 0, 0, 0}, {1024, 768, 0, 0, 20, 20}, {1180, 820, 0, 0, 24, 20}};
+  for (size_t c = 0; c < sizeof k / sizeof k[0]; c++) {
+    SrInput in;
+    sr_input_init(&in, true);
+    sr_input_set_screen(&in, k[c][0], k[c][1], k[c][2], k[c][3], k[c][4], k[c][5]);
+    const SrTouchLayout *l = &in.layout;
+    float cluster = sr_touch_top_cluster_bottom(l);
+    for (int i = 0; i < SR_TOUCH_BUTTONS; i++) {
+      const SrTouchButton *a = &l->buttons[i];
+      SR_CHECK(a->size >= 48);
+      SR_CHECK(sr_touch_button_in_safe_area(l, i));
+      bool top = a->action == SR_ACT_PAUSE || a->action == SR_ACT_MAP || a->action == SR_ACT_TERMINAL;
+      if (!top) SR_CHECK(a->y - a->size / 2 > cluster); /* below the top cluster */
+      SR_CHECK(a->x - a->size / 2 > l->width * 0.5f);   /* the left half is for the move stick */
+      for (int j = i + 1; j < SR_TOUCH_BUTTONS; j++) {  /* no two buttons overlap */
+        const SrTouchButton *b = &l->buttons[j];
+        float gap = (a->size + b->size) / 2;
+        SR_CHECK(fabsf(a->x - b->x) >= gap || fabsf(a->y - b->y) >= gap);
+      }
+    }
+    SR_CHECK(sr_touch_buttons_left(l) > l->width * 0.5f);
+  }
+}
+
 /* ---- scripts ------------------------------------------------------------------------------ */
 
 static void test_site_script_commands(void) {
@@ -1252,5 +1281,6 @@ void suite_site(void) {
   SR_RUN(test_interior_render_and_ui);
   SR_RUN(test_crowd_lod);
   SR_RUN(test_light_grid);
+  SR_RUN(test_touch_layout_fits_phones);
   SR_RUN(test_site_script_commands);
 }

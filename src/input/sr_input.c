@@ -24,28 +24,72 @@ const char *sr_key_name(SrKey k) {
   return (unsigned)k < SR_KEY_COUNT ? n[k] : "?";
 }
 
+/* Touch layout in CSS pixels, inside the safe area:
+ *  - top-right cluster (pause, terminal, map), so the HUD in the top-left stays clear;
+ *  - right-hand columns from the bottom up, their row spacing shrinking on short screens so the
+ *    highest button never reaches the top cluster; every button stays >= 48 CSS px;
+ *  - the left half belongs to the floating move stick. */
 void sr_touch_layout_build(SrTouchLayout *l) {
-  /* Buttons anchored to the bottom-right inside the safe area; sizes >= 48 CSS px. */
-  static const struct {
-    SrAction a;
-    float dx, dy, size;
-  } k[SR_TOUCH_BUTTONS] = {{SR_ACT_FIRE, 70, 80, 72},     {SR_ACT_AIM, 70, 170, 56},      {SR_ACT_JUMP, 160, 60, 56},
-                           {SR_ACT_CROUCH, 160, 130, 52}, {SR_ACT_INTERACT, 250, 60, 56}, {SR_ACT_RELOAD, 70, 250, 52},
-                           {SR_ACT_GADGET, 160, 210, 52}, {SR_ACT_JACKIN, 70, 320, 52},   {SR_ACT_MAP, 60, -40, 48},
-                           {SR_ACT_PAUSE, -40, -40, 48},  {SR_ACT_TERMINAL, 130, -40, 48}};
-  for (int i = 0; i < SR_TOUCH_BUTTONS; i++) {
-    SrTouchButton *b = &l->buttons[i];
-    b->action = k[i].a;
-    b->size = k[i].size;
-    if (k[i].dy < 0) { /* top row */
-      b->y = l->inset_t + 8 + b->size / 2;
-      b->x = k[i].dx < 0 ? l->inset_l + 8 + b->size / 2 : l->width - l->inset_r - k[i].dx;
-    } else {
-      b->x = l->width - l->inset_r - k[i].dx;
-      b->y = l->height - l->inset_b - k[i].dy;
+  /* columns from the right edge, each stacked bottom-up */
+  static const SrAction cols[3][4] = {{SR_ACT_FIRE, SR_ACT_AIM, SR_ACT_RELOAD, SR_ACT_JACKIN},
+                                      {SR_ACT_JUMP, SR_ACT_CROUCH, SR_ACT_GADGET, SR_ACT_COUNT},
+                                      {SR_ACT_INTERACT, SR_ACT_COUNT, SR_ACT_COUNT, SR_ACT_COUNT}};
+  static const float sizes[3][4] = {{72, 56, 52, 52}, {56, 52, 52, 0}, {60, 0, 0, 0}};
+  static const SrAction top[3] = {SR_ACT_PAUSE, SR_ACT_TERMINAL, SR_ACT_MAP};
+  float right = l->width - l->inset_r, bottom = l->height - l->inset_b, top_y = l->inset_t;
+  float floor_y = top_y + 8 + 48 + 8; /* nothing in the columns above the top cluster */
+  bool small = bottom - floor_y < 300;
+  int n = 0;
+  float x = right - 8 - (small ? 32 : 36);
+  for (int c = 0; c < 3; c++) {
+    float total = 0;
+    int count = 0;
+    for (int r = 0; r < 4 && cols[c][r] != SR_ACT_COUNT; r++, count++)
+      total += (c == 0 && r == 0 && small) ? 64 : sizes[c][r];
+    float gap = (bottom - 8 - floor_y - total) / (float)count;
+    gap = gap > 24 ? 24 : gap < 4 ? 4 : gap;
+    float y = bottom - 8;
+    for (int r = 0; r < count; r++) {
+      SrTouchButton *b = &l->buttons[n++];
+      b->action = cols[c][r];
+      b->size = (c == 0 && r == 0 && small) ? 64 : sizes[c][r];
+      b->x = x;
+      b->y = y - b->size / 2;
+      y -= b->size + gap;
     }
+    x -= c == 0 ? (small ? 32 : 36) + 30 + 10 : 28 + 30 + 12;
   }
+  for (int t = 0; t < 3; t++) {
+    SrTouchButton *b = &l->buttons[n++];
+    b->action = top[t];
+    b->size = 48;
+    b->y = top_y + 8 + 24;
+    b->x = right - 8 - 24 - (float)t * 56;
+  }
+  /* keep the historic slot order (fire, aim, jump, crouch, interact, reload, gadget, jack-in, map,
+   * pause, terminal): tests and saved layouts address buttons by index */
+  static const SrAction order[SR_TOUCH_BUTTONS] = {SR_ACT_FIRE,     SR_ACT_AIM,    SR_ACT_JUMP,    SR_ACT_CROUCH,
+                                                   SR_ACT_INTERACT, SR_ACT_RELOAD, SR_ACT_GADGET,  SR_ACT_JACKIN,
+                                                   SR_ACT_MAP,      SR_ACT_PAUSE,  SR_ACT_TERMINAL};
+  SrTouchButton sorted[SR_TOUCH_BUTTONS];
+  for (int i = 0; i < SR_TOUCH_BUTTONS; i++)
+    for (int j = 0; j < SR_TOUCH_BUTTONS; j++)
+      if (l->buttons[j].action == order[i]) sorted[i] = l->buttons[j];
+  memcpy(l->buttons, sorted, sizeof sorted);
   l->stick_radius = 60.0f;
+}
+
+/* Lowest y (CSS px) of the top button cluster: HUD text on the right must stay below it. */
+float sr_touch_top_cluster_bottom(const SrTouchLayout *l) { return l->inset_t + 8 + 48; }
+/* Left edge (CSS px) of the right-hand button area. */
+float sr_touch_buttons_left(const SrTouchLayout *l) {
+  float left = l->width;
+  for (int i = 0; i < SR_TOUCH_BUTTONS; i++) {
+    const SrTouchButton *b = &l->buttons[i];
+    if (b->action == SR_ACT_PAUSE || b->action == SR_ACT_MAP || b->action == SR_ACT_TERMINAL) continue;
+    if (b->x - b->size / 2 < left) left = b->x - b->size / 2;
+  }
+  return left;
 }
 
 void sr_input_set_screen(SrInput *in, float w, float h, float il, float ir, float it, float ib) {

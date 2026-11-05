@@ -183,6 +183,8 @@ SrActionState sr_input_tick(SrInput *in, double dt);
 void sr_touch_layout_build(SrTouchLayout *l);
 int sr_touch_hit_button(const SrTouchLayout *l, float css_x, float css_y);
 bool sr_touch_button_in_safe_area(const SrTouchLayout *l, int i);
+float sr_touch_top_cluster_bottom(const SrTouchLayout *l);
+float sr_touch_buttons_left(const SrTouchLayout *l);
 
 /* Aim assistance: returns the look multiplier for the current scheme when the crosshair is
  * `angle` radians away from a hostile target (negative: none in view). */

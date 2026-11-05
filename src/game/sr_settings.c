@@ -121,6 +121,10 @@ void sr_settings_internal_size(const SrSettings *s, int ww, int wh, int *w, int 
   if (s->internal_res >= 0 && s->internal_res < 3) {
     *w = presets[s->internal_res][0];
     *h = presets[s->internal_res][1];
+    if (ww > 0 && wh > 0) { /* follow the window's shape (wide phones): no side bars */
+      float aspect = SR_CLAMP((float)ww / (float)wh, 4.0f / 3.0f, 2.4f);
+      *w = ((int)((float)*h * aspect + 0.5f) + 1) & ~1;
+    }
   } else {
     *w = ww > 0 ? ww : 480;
     *h = wh > 0 ? wh : 270;

@@ -108,6 +108,28 @@ await test('mobile emulation uses touch controls', async () => {
   await ctx.close();
 });
 
+await test('mobile: a tap goes full screen and the game fills the screen', async () => {
+  // @spec input-controls: Mobile browser start
+  const ctx = await browser.newContext({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 2, isMobile: true,
+                                         hasTouch: true });
+  const page = await ctx.newPage();
+  await boot(page);
+  await page.touchscreen.tap(320, 180);
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => !!document.fullscreenElement), 'full screen after the first tap');
+  const r = await page.evaluate(() => {
+    const b = document.getElementById('canvas').getBoundingClientRect();
+    return [b.left, b.top, b.width, b.height, window.innerWidth, window.innerHeight];
+  });
+  expect(r[0] === 0 && r[1] === 0 && r[2] === r[4] && r[3] === r[5], `canvas fills the viewport: ${r}`);
+  await page.evaluate(() => document.exitFullscreen());
+  await page.waitForTimeout(300);
+  await page.touchscreen.tap(320, 180); /* tapping again goes back into full screen */
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => !!document.fullscreenElement), 'full screen again after leaving it');
+  await ctx.close();
+});
+
 await test('portrait shows the rotate prompt and pauses', async () => {
   // @spec input-controls: Portrait orientation
   const ctx = await browser.newContext({ ...devices['Pixel 7'] });
