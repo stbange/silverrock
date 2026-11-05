@@ -22,9 +22,7 @@ void sr_str_normalize(const char *src, char *dst, size_t cap) {
   if (cap) dst[o] = '\0';
 }
 
-bool sr_str_starts_with(const char *s, const char *prefix) {
-  return strncmp(s, prefix, strlen(prefix)) == 0;
-}
+bool sr_str_starts_with(const char *s, const char *prefix) { return strncmp(s, prefix, strlen(prefix)) == 0; }
 
 bool sr_parse_i64(const char *s, int64_t *out) {
   int64_t v = 0;

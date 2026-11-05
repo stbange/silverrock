@@ -7,15 +7,32 @@
 typedef enum SrAttr { SR_ATTR_BODY, SR_ATTR_REFLEX, SR_ATTR_TECH, SR_ATTR_MIND, SR_ATTR_COOL, SR_ATTR_COUNT } SrAttr;
 
 typedef enum SrSkill {
-  SR_SK_PISTOLS, SR_SK_LONGGUNS, SR_SK_HEAVY, SR_SK_MELEE, SR_SK_ATHLETICS, SR_SK_STEALTH,
-  SR_SK_NETRUNNING, SR_SK_ELECTRONICS, SR_SK_ENGINEERING, SR_SK_MEDICINE, SR_SK_PERSUASION,
-  SR_SK_STREETWISE, SR_SK_COUNT
+  SR_SK_PISTOLS,
+  SR_SK_LONGGUNS,
+  SR_SK_HEAVY,
+  SR_SK_MELEE,
+  SR_SK_ATHLETICS,
+  SR_SK_STEALTH,
+  SR_SK_NETRUNNING,
+  SR_SK_ELECTRONICS,
+  SR_SK_ENGINEERING,
+  SR_SK_MEDICINE,
+  SR_SK_PERSUASION,
+  SR_SK_STREETWISE,
+  SR_SK_COUNT
 } SrSkill;
 
-typedef enum SrCredTier { SR_CRED_NOBODY, SR_CRED_PAWN, SR_CRED_RUNNER, SR_CRED_OPERATOR, SR_CRED_KNIGHT, SR_CRED_LEGEND } SrCredTier;
+typedef enum SrCredTier {
+  SR_CRED_NOBODY,
+  SR_CRED_PAWN,
+  SR_CRED_RUNNER,
+  SR_CRED_OPERATOR,
+  SR_CRED_KNIGHT,
+  SR_CRED_LEGEND
+} SrCredTier;
 
-#define SR_MAX_LEVEL 50
-#define SR_MAX_SKILL_RANK 20
+#define SR_MAX_LEVEL       50
+#define SR_MAX_SKILL_RANK  20
 #define SR_PERKS_PER_SKILL 4
 
 typedef struct SrProgress {
@@ -26,10 +43,10 @@ typedef struct SrProgress {
   int32_t xp;
   int32_t perk_points;
   int32_t attr_points;
-  uint8_t perks[SR_SK_COUNT]; /* bitmask of bought perk tiers */
-  int32_t street_cred;           /* 0..100 */
+  uint8_t perks[SR_SK_COUNT];       /* bitmask of bought perk tiers */
+  int32_t street_cred;              /* 0..100 */
   int8_t standing[SR_MAX_FACTIONS]; /* -100..100 */
-  int32_t notifications;         /* incremented on rank-ups and tier changes */
+  int32_t notifications;            /* incremented on rank-ups and tier changes */
 } SrProgress;
 
 typedef enum SrSkillUse { SR_USE_TRIVIAL, SR_USE_HOSTILE, SR_USE_SUCCESS } SrSkillUse;

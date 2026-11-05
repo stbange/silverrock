@@ -30,7 +30,6 @@ int main(int argc, char **argv) {
 #define SR_SUITE(name) name();
 #include "suites.inc"
 #undef SR_SUITE
-  printf("%d tests, %d checks, %d failed\n", sr_test_state.tests_run, sr_test_state.checks,
-         sr_test_state.tests_failed);
+  printf("%d tests, %d checks, %d failed\n", sr_test_state.tests_run, sr_test_state.checks, sr_test_state.tests_failed);
   return sr_test_state.tests_failed ? EXIT_FAILURE : EXIT_SUCCESS;
 }

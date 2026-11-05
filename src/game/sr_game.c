@@ -9,12 +9,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define WALK_SPEED 4.0f
-#define SPRINT_SPEED 7.0f
-#define CROUCH_SPEED 2.0f
-#define PLAYER_RADIUS 0.35f
-#define EYE_HEIGHT 1.7f
-#define CROUCH_HEIGHT 1.1f
+#define WALK_SPEED     4.0f
+#define SPRINT_SPEED   7.0f
+#define CROUCH_SPEED   2.0f
+#define PLAYER_RADIUS  0.35f
+#define EYE_HEIGHT     1.7f
+#define CROUCH_HEIGHT  1.1f
 #define INTERACT_RANGE 6.0f
 
 int sr_loop_advance(SrLoop *l, double frame_dt) {
@@ -90,11 +90,10 @@ SrResult sr_game_build_world(SrGame *g, uint64_t seed, const SrCityOptions *opt)
   return SR_OK;
 }
 
-SrResult sr_game_new(SrGame *g, uint64_t seed, const SrCityOptions *opt, SrBackground bg,
-                     const char *name) {
+SrResult sr_game_new(SrGame *g, uint64_t seed, const SrCityOptions *opt, SrBackground bg, const char *name) {
   g->started = false;
   SrResult r = sr_game_build_world(g, seed, opt);
-  if (r != SR_OK) return r; /* GCOVR_EXCL_LINE reason: see build_world */
+  if (r != SR_OK) return r;                /* GCOVR_EXCL_LINE reason: see build_world */
   sr_population_generate(g->pop, g->city); /* fresh notables for a new game */
   sr_clock_init(&g->clock);
   g->clock.rate = g->settings.time_rate > 0 ? g->settings.time_rate : SR_DEFAULT_TIME_RATE;
@@ -115,8 +114,8 @@ SrResult sr_game_new(SrGame *g, uint64_t seed, const SrCityOptions *opt, SrBackg
   g->active_job = -1;
   g->on_ground = true;
   sr_game_teleport_building(g, g->player.home); /* step out onto the sidewalk */
-  sr_log(SR_LOG_INFO, "game", "new game in %s (%d districts, %d megacorps)", g->city->name,
-         g->city->district_count, g->city->factions.corp_count);
+  sr_log(SR_LOG_INFO, "game", "new game in %s (%d districts, %d megacorps)", g->city->name, g->city->district_count,
+         g->city->factions.corp_count);
   return SR_OK;
 }
 
@@ -206,8 +205,8 @@ static void move_player(SrGame *g, const SrActionState *a, float dt) {
   float speed = crouch ? CROUCH_SPEED : sprint ? SPRINT_SPEED : WALK_SPEED;
   if (sr_inv_weight(&p->inv) > sr_carry_limit(p->prog.attr[SR_ATTR_BODY])) speed = CROUCH_SPEED;
   float s = sinf(p->yaw), c = cosf(p->yaw);
-  float fx = -s, fz = -c;  /* forward */
-  float rx = c, rz = -s;   /* right */
+  float fx = -s, fz = -c; /* forward */
+  float rx = c, rz = -s;  /* right */
   float mx = a->move_x, my = a->move_y;
   float len = sqrtf(mx * mx + my * my);
   if (len > 1.0f) {
@@ -242,8 +241,10 @@ static void move_player(SrGame *g, const SrActionState *a, float dt) {
 void sr_game_step(SrGame *g, const SrActionState *a) {
   if (!g->started) return;
   if (g->screen != SR_SCREEN_PLAY) {
-    if (a && a->pressed[SR_ACT_PAUSE] && g->screen == SR_SCREEN_PAUSE) sr_game_confirm_resume(g);
-    else if (a && a->pressed[SR_ACT_PAUSE] && g->screen == SR_SCREEN_TERMINAL) g->screen = SR_SCREEN_PLAY;
+    if (a && a->pressed[SR_ACT_PAUSE] && g->screen == SR_SCREEN_PAUSE)
+      sr_game_confirm_resume(g);
+    else if (a && a->pressed[SR_ACT_PAUSE] && g->screen == SR_SCREEN_TERMINAL)
+      g->screen = SR_SCREEN_PLAY;
     return;
   }
   float dt = (float)SR_STEP_DT;
@@ -326,10 +327,9 @@ SrContext sr_game_context(SrGame *g) {
         int32_t ox, oy;
         sr_city_block_origin(b, g->city->grid, &ox, &oy);
         float sx = (float)ox / 100.0f + 4.0f, sz = (float)oy / 100.0f + 4.0f;
-        float d = sqrtf((sx - g->player.pos.x) * (sx - g->player.pos.x) + (sz - g->player.pos.z) * (sz - g->player.pos.z));
-        if (d < INTERACT_RANGE && d < ctx.distance) {
-          ctx = (SrContext){SR_CTX_METRO, -1, s, -1, d};
-        }
+        float d =
+            sqrtf((sx - g->player.pos.x) * (sx - g->player.pos.x) + (sz - g->player.pos.z) * (sz - g->player.pos.z));
+        if (d < INTERACT_RANGE && d < ctx.distance) { ctx = (SrContext){SR_CTX_METRO, -1, s, -1, d}; }
       }
       const SrBlock *blk = &g->city->blocks[b];
       for (int i = 0; i < blk->building_count; i++) {
@@ -341,19 +341,29 @@ SrContext sr_game_context(SrGame *g) {
         for (int j = 0; j < g->jobs.count; j++) {
           SrJob *jb = &g->jobs.jobs[j];
           if (jb->state != SR_JS_ACCEPTED) continue;
-          if (!jb->executed && jb->target_building == bi) { k = SR_CTX_JOB_TARGET; job = jb->id; }
-          else if (jb->executed && jb->client_building == bi) { k = SR_CTX_JOB_REPORT; job = jb->id; }
+          if (!jb->executed && jb->target_building == bi) {
+            k = SR_CTX_JOB_TARGET;
+            job = jb->id;
+          } else if (jb->executed && jb->client_building == bi) {
+            k = SR_CTX_JOB_REPORT;
+            job = jb->id;
+          }
         }
         if (k == SR_CTX_NONE) {
           switch (g->city->buildings[bi].poi) {
-          case SR_POI_FOOD: case SR_POI_BAR: case SR_POI_GROCERY: k = SR_CTX_FOOD; break;
-          case SR_POI_FIXER: k = SR_CTX_FIXER; break;
-          case SR_POI_HOME: k = bi == g->player.home ? SR_CTX_HOME : SR_CTX_NONE; break;
-          case SR_POI_CAPSULE: k = SR_CTX_CAPSULE; break;
-          case SR_POI_CLINIC: k = SR_CTX_CLINIC; break;
-          case SR_POI_GUNSHOP: case SR_POI_ELECTRONICS: case SR_POI_CLOTHING: case SR_POI_RIPPERDOC:
-          case SR_POI_FENCE: k = SR_CTX_SHOP; break;
-          default: break;
+            case SR_POI_FOOD:
+            case SR_POI_BAR:
+            case SR_POI_GROCERY: k = SR_CTX_FOOD; break;
+            case SR_POI_FIXER: k = SR_CTX_FIXER; break;
+            case SR_POI_HOME: k = bi == g->player.home ? SR_CTX_HOME : SR_CTX_NONE; break;
+            case SR_POI_CAPSULE: k = SR_CTX_CAPSULE; break;
+            case SR_POI_CLINIC: k = SR_CTX_CLINIC; break;
+            case SR_POI_GUNSHOP:
+            case SR_POI_ELECTRONICS:
+            case SR_POI_CLOTHING:
+            case SR_POI_RIPPERDOC:
+            case SR_POI_FENCE: k = SR_CTX_SHOP; break;
+            default: break;
           }
           if (bi == g->player.home) k = SR_CTX_HOME;
           if (k != SR_CTX_NONE && k != SR_CTX_HOME && !sr_poi_open(g->city, bi, t)) k = SR_CTX_CLOSED;
@@ -454,8 +464,7 @@ SrResult sr_game_walk_to(SrGame *g, int to) {
 }
 
 int sr_game_fixer(SrGame *g, int fixer, int out_ids[4]) {
-  return sr_jobs_fixer_offers(&g->jobs, g->city, fixer, sr_game_time(g), g->player.prog.street_cred,
-                              out_ids);
+  return sr_jobs_fixer_offers(&g->jobs, g->city, fixer, sr_game_time(g), g->player.prog.street_cred, out_ids);
 }
 
 SrResult sr_game_accept(SrGame *g, int32_t id) {
@@ -484,8 +493,7 @@ SrMissionResult sr_game_execute(SrGame *g, int32_t id, SrApproach a) {
     cr.look = sr_appearance_key(&g->player.look);
     cr.time = sr_game_time(g);
     sr_heat_crime(&g->heat, &cr);
-    if (res.witnessed || res.camera)
-      sr_progress_standing(&g->player.prog, j->target_faction, -15, true);
+    if (res.witnessed || res.camera) sr_progress_standing(&g->player.prog, j->target_faction, -15, true);
   }
   if (j->type == SR_JT_DELIVER && res.success) sr_game_report(g, id); /* handing over completes */
   return res;
@@ -509,8 +517,7 @@ bool sr_game_use_quick(SrGame *g, int slot) {
   int idx = sr_inv_find(&p->inv, SR_IK_GADGET, p->quick[slot]);
   if (idx < 0) return false;
   const SrGadgetDef *d = sr_gadget_def(p->quick[slot]);
-  if (d->category == SR_GC_CONSUMABLE && d->damage < 0)
-    p->health = SR_MIN(p->max_health, p->health - d->damage);
+  if (d->category == SR_GC_CONSUMABLE && d->damage < 0) p->health = SR_MIN(p->max_health, p->health - d->damage);
   sr_inv_remove_at(&p->inv, idx, 1);
   return true;
 }
@@ -569,60 +576,60 @@ SrResult sr_game_interact(SrGame *g) {
   SrContext c = sr_game_context(g);
   g->ctx = c;
   switch (c.kind) {
-  case SR_CTX_FOOD: return sr_game_eat_at(g, c.building);
-  case SR_CTX_HOME:
-    if (g->player.evicted) {
-      if (sr_player_pay_debt(&g->player, sr_game_time(g)) == SR_OK) {
-        sr_game_toast(g, "Debt paid. The door unlocks.");
-        return SR_OK;
+    case SR_CTX_FOOD: return sr_game_eat_at(g, c.building);
+    case SR_CTX_HOME:
+      if (g->player.evicted) {
+        if (sr_player_pay_debt(&g->player, sr_game_time(g)) == SR_OK) {
+          sr_game_toast(g, "Debt paid. The door unlocks.");
+          return SR_OK;
+        }
+        sr_game_toast(g, "Locked. You owe the landlord.");
+        return SR_ERR_DENIED;
       }
-      sr_game_toast(g, "Locked. You owe the landlord.");
-      return SR_ERR_DENIED;
+      return sr_game_sleep(g, 8, SR_SLEEP_HOME);
+    case SR_CTX_CAPSULE: return sr_game_sleep(g, 8, SR_SLEEP_CAPSULE);
+    case SR_CTX_FIXER: {
+      int ids[4];
+      int n = sr_game_fixer(g, c.building, ids);
+      for (int i = 0; i < n; i++) {
+        SrJob *j = sr_jobs_get(&g->jobs, ids[i]);
+        if (j && j->state == SR_JS_OFFERED && sr_game_accept(g, ids[i]) == SR_OK) {
+          char msg[128];
+          snprintf(msg, sizeof msg, "Job accepted: %s", j->title);
+          sr_game_toast(g, msg);
+          return SR_OK;
+        }
+      }
+      sr_game_toast(g, "No work for you today, choom.");
+      return SR_ERR_NOT_FOUND;
     }
-    return sr_game_sleep(g, 8, SR_SLEEP_HOME);
-  case SR_CTX_CAPSULE: return sr_game_sleep(g, 8, SR_SLEEP_CAPSULE);
-  case SR_CTX_FIXER: {
-    int ids[4];
-    int n = sr_game_fixer(g, c.building, ids);
-    for (int i = 0; i < n; i++) {
-      SrJob *j = sr_jobs_get(&g->jobs, ids[i]);
-      if (j && j->state == SR_JS_OFFERED && sr_game_accept(g, ids[i]) == SR_OK) {
-        char msg[128];
-        snprintf(msg, sizeof msg, "Job accepted: %s", j->title);
-        sr_game_toast(g, msg);
-        return SR_OK;
-      }
+    case SR_CTX_JOB_TARGET: {
+      SrJob *j = sr_jobs_get(&g->jobs, c.job);
+      SrApproach best = SR_AP_HAMMER;
+      for (int a = 0; a < SR_AP_COUNT; a++)
+        if (j->approaches & (1u << a)) {
+          best = (SrApproach)a;
+          break;
+        }
+      SrMissionResult r = sr_game_execute(g, c.job, best);
+      sr_game_toast(g, r.success ? "Objective complete. Report back." : "That went sideways.");
+      return r.success ? SR_OK : SR_ERR_DENIED;
     }
-    sr_game_toast(g, "No work for you today, choom.");
-    return SR_ERR_NOT_FOUND;
-  }
-  case SR_CTX_JOB_TARGET: {
-    SrJob *j = sr_jobs_get(&g->jobs, c.job);
-    SrApproach best = SR_AP_HAMMER;
-    for (int a = 0; a < SR_AP_COUNT; a++)
-      if (j->approaches & (1u << a)) {
-        best = (SrApproach)a;
-        break;
-      }
-    SrMissionResult r = sr_game_execute(g, c.job, best);
-    sr_game_toast(g, r.success ? "Objective complete. Report back." : "That went sideways.");
-    return r.success ? SR_OK : SR_ERR_DENIED;
-  }
-  case SR_CTX_JOB_REPORT: {
-    int32_t paid = sr_game_report(g, c.job);
-    char msg[64];
-    snprintf(msg, sizeof msg, "Paid %d cred.", paid);
-    sr_game_toast(g, msg);
-    return SR_OK;
-  }
-  case SR_CTX_METRO: {
-    int to = (c.station + 1) % g->city->station_count;
-    SrResult r = sr_game_metro(g, to);
-    if (r == SR_OK) sr_game_toast(g, "You ride the metro.");
-    return r;
-  }
-  case SR_CTX_CLOSED: sr_game_toast(g, "Closed. Come back later."); return SR_ERR_DENIED;
-  default: return SR_ERR_NOT_FOUND;
+    case SR_CTX_JOB_REPORT: {
+      int32_t paid = sr_game_report(g, c.job);
+      char msg[64];
+      snprintf(msg, sizeof msg, "Paid %d cred.", paid);
+      sr_game_toast(g, msg);
+      return SR_OK;
+    }
+    case SR_CTX_METRO: {
+      int to = (c.station + 1) % g->city->station_count;
+      SrResult r = sr_game_metro(g, to);
+      if (r == SR_OK) sr_game_toast(g, "You ride the metro.");
+      return r;
+    }
+    case SR_CTX_CLOSED: sr_game_toast(g, "Closed. Come back later."); return SR_ERR_DENIED;
+    default: return SR_ERR_NOT_FOUND;
   }
 }
 

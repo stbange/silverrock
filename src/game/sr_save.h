@@ -7,13 +7,20 @@
 #include "core/sr_mem.h"
 #include "game/sr_game.h"
 
-#define SR_SAVE_VERSION 2u
+#define SR_SAVE_VERSION   2u
 #define SR_AUTOSAVE_SLOTS 3
-#define SR_MANUAL_SLOTS 3
+#define SR_MANUAL_SLOTS   3
 
 typedef enum SrSection {
-  SR_SEC_END = 0, SR_SEC_CLOCK = 1, SR_SEC_PLAYER = 2, SR_SEC_NPCS = 3, SR_SEC_JOBS = 4,
-  SR_SEC_HEAT = 5, SR_SEC_EVENTS = 6, SR_SEC_DELTAS = 7, SR_SEC_META = 8
+  SR_SEC_END = 0,
+  SR_SEC_CLOCK = 1,
+  SR_SEC_PLAYER = 2,
+  SR_SEC_NPCS = 3,
+  SR_SEC_JOBS = 4,
+  SR_SEC_HEAT = 5,
+  SR_SEC_EVENTS = 6,
+  SR_SEC_DELTAS = 7,
+  SR_SEC_META = 8
 } SrSection;
 
 typedef struct SrSaveInfo {

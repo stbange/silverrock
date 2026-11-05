@@ -6,23 +6,39 @@
 
 #include "world/sr_world.h"
 
-#define SR_INT_MAX_W 6
-#define SR_INT_MAX_H 5
-#define SR_INT_MAX_ROOMS (SR_INT_MAX_W * SR_INT_MAX_H)
+#define SR_INT_MAX_W       6
+#define SR_INT_MAX_H       5
+#define SR_INT_MAX_ROOMS   (SR_INT_MAX_W * SR_INT_MAX_H)
 #define SR_INT_MAX_ENTRIES 6
 #define SR_INT_MAX_DEVICES 48
 
 typedef enum SrRoomType {
-  SR_ROOM_HALL, SR_ROOM_OFFICE, SR_ROOM_STORAGE, SR_ROOM_SECURITY, SR_ROOM_SERVER,
-  SR_ROOM_LAB, SR_ROOM_LOBBY, SR_ROOM_BAR, SR_ROOM_TARGET
+  SR_ROOM_HALL,
+  SR_ROOM_OFFICE,
+  SR_ROOM_STORAGE,
+  SR_ROOM_SECURITY,
+  SR_ROOM_SERVER,
+  SR_ROOM_LAB,
+  SR_ROOM_LOBBY,
+  SR_ROOM_BAR,
+  SR_ROOM_TARGET
 } SrRoomType;
 
 typedef enum SrEntryType {
-  SR_ENTRY_FRONT, SR_ENTRY_SERVICE, SR_ENTRY_VENT, SR_ENTRY_ROOF, SR_ENTRY_WINDOW
+  SR_ENTRY_FRONT,
+  SR_ENTRY_SERVICE,
+  SR_ENTRY_VENT,
+  SR_ENTRY_ROOF,
+  SR_ENTRY_WINDOW
 } SrEntryType;
 
 typedef enum SrDeviceType {
-  SR_DEV_DOOR, SR_DEV_CAMERA, SR_DEV_TURRET, SR_DEV_ALARM, SR_DEV_LIGHTS, SR_DEV_ELEVATOR
+  SR_DEV_DOOR,
+  SR_DEV_CAMERA,
+  SR_DEV_TURRET,
+  SR_DEV_ALARM,
+  SR_DEV_LIGHTS,
+  SR_DEV_ELEVATOR
 } SrDeviceType;
 
 typedef struct SrEntry {
@@ -42,9 +58,9 @@ typedef struct SrDevice {
 typedef struct SrInterior {
   uint32_t building;
   int w, h;
-  uint8_t rooms[SR_INT_MAX_ROOMS];  /* SrRoomType */
-  uint8_t doors[SR_INT_MAX_ROOMS];  /* bit0: door east, bit1: door south */
-  uint8_t vents[SR_INT_MAX_ROOMS];  /* bit0: vent east, bit1: vent south */
+  uint8_t rooms[SR_INT_MAX_ROOMS]; /* SrRoomType */
+  uint8_t doors[SR_INT_MAX_ROOMS]; /* bit0: door east, bit1: door south */
+  uint8_t vents[SR_INT_MAX_ROOMS]; /* bit0: vent east, bit1: vent south */
   int entry_count;
   SrEntry entries[SR_INT_MAX_ENTRIES];
   int device_count;
@@ -56,8 +72,7 @@ typedef struct SrInterior {
 
 void sr_interior_generate(const SrCity *c, int building, SrInterior *out);
 /* Rooms reachable from an entry, optionally allowing vents and locked doors. */
-bool sr_interior_reachable(const SrInterior *in, int from_room, int to_room, bool use_vents,
-                           bool through_locked);
+bool sr_interior_reachable(const SrInterior *in, int from_room, int to_room, bool use_vents, bool through_locked);
 /* Number of entries that reach the target using distinct openings. */
 int sr_interior_route_count(const SrInterior *in);
 bool sr_interior_security_chain_ok(const SrInterior *in);

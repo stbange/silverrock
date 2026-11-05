@@ -7,7 +7,13 @@
 
 #define SR_MAX_EVIDENCE 64
 
-typedef enum SrEvidenceType { SR_EVID_WITNESS, SR_EVID_CAMERA, SR_EVID_TRACE, SR_EVID_BODY, SR_EVID_PLANTED } SrEvidenceType;
+typedef enum SrEvidenceType {
+  SR_EVID_WITNESS,
+  SR_EVID_CAMERA,
+  SR_EVID_TRACE,
+  SR_EVID_BODY,
+  SR_EVID_PLANTED
+} SrEvidenceType;
 
 typedef struct SrEvidence {
   uint8_t type;
@@ -29,9 +35,9 @@ typedef struct SrHeat {
 
 typedef struct SrCrime {
   int8_t jurisdiction;
-  uint8_t severity;     /* 1 trespass .. 5 murder */
-  bool witnessed;       /* a witness saw it and reported */
-  bool camera;          /* a working camera recorded it and the footage was reviewed */
+  uint8_t severity; /* 1 trespass .. 5 murder */
+  bool witnessed;   /* a witness saw it and reported */
+  bool camera;      /* a working camera recorded it and the footage was reviewed */
   bool evidence_left;
   uint64_t look;
   int64_t time;
@@ -66,7 +72,7 @@ int sr_heat_attribution(const SrEvidence *ev, int n);
 /* Disguises */
 typedef enum SrAreaType { SR_AREA_PUBLIC, SR_AREA_MAINTENANCE, SR_AREA_SECURE, SR_AREA_EXEC } SrAreaType;
 typedef struct SrDisguise {
-  int8_t faction;   /* uniform of this faction, -1 none */
+  int8_t faction;    /* uniform of this faction, -1 none */
   uint8_t clearance; /* highest SrAreaType it covers */
   bool blown;
 } SrDisguise;

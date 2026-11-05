@@ -3,9 +3,7 @@
 SrFix sr_fix_mul(SrFix a, SrFix b) { return (SrFix)(((int64_t)a * (int64_t)b) >> 16); }
 
 SrFix sr_fix_div(SrFix a, SrFix b) {
-  if (b == 0) {
-    return a >= 0 ? INT32_MAX : INT32_MIN;
-  }
+  if (b == 0) { return a >= 0 ? INT32_MAX : INT32_MIN; }
   return (SrFix)(((int64_t)a * 65536) / b);
 }
 

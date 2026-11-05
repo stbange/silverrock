@@ -8,8 +8,8 @@
 
 typedef struct SrUi {
   SrMesh mesh;
-  int w, h;    /* UI resolution in pixels */
-  int scale;   /* integer text scale */
+  int w, h;         /* UI resolution in pixels */
+  int scale;        /* integer text scale */
   float px_per_css; /* device pixels per CSS pixel (1 on desktop) */
 } SrUi;
 

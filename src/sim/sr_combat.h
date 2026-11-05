@@ -19,20 +19,20 @@ typedef struct SrEnemy {
   float yaw;
   float health, max_health, armor;
   SrAlert alert;
-  float awareness;     /* 0..1+ */
-  float search_timer;  /* seconds left searching */
+  float awareness;    /* 0..1+ */
+  float search_timer; /* seconds left searching */
   SrVec3 investigate;
-  float morale;        /* 0..1 */
-  float ko_timer;      /* seconds until waking, when knocked out */
+  float morale;   /* 0..1 */
+  float ko_timer; /* seconds until waking, when knocked out */
   int8_t faction;
   bool drone, ko, dead, restrained, surrendered, heightened, called_reinforcements;
-  int8_t cyber;        /* augmentation level 0..5 */
+  int8_t cyber; /* augmentation level 0..5 */
 } SrEnemy;
 
 typedef struct SrPerceptInput {
   SrVec3 player_pos;
-  float light;      /* 0 darkness .. 1 bright neon */
-  float speed;      /* m/s */
+  float light; /* 0 darkness .. 1 bright neon */
+  float speed; /* m/s */
   bool crouched;
   bool camo;
   float visibility; /* weather visibility in metres */

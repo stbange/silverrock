@@ -95,6 +95,18 @@ class Traceability(unittest.TestCase):
         self.assertIn("MISSING cap2: Not yet", r.stdout)
 
 
+class CLint(unittest.TestCase):
+    def test_misformatted_fixture_fails(self):
+        fixture = os.path.join(ROOT, "tests", "tools", "fixtures", "misformatted.c")
+        r = run([sys.executable, os.path.join(TOOLS, "lint_c.py"), "--files", fixture])
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("misformatted", r.stdout)
+
+    def test_repository_is_formatted(self):
+        r = run([sys.executable, os.path.join(TOOLS, "lint_c.py")])
+        self.assertEqual(r.returncode, 0, r.stdout)
+
+
 class LayerCheck(unittest.TestCase):
     def test_forbidden_include(self):
         # @spec quality-gates: Forbidden include

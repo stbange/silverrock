@@ -10,32 +10,62 @@
 
 static const SrPalette k_palettes[SR_D_COUNT] = {
     /* fog, ambient, neon x3, ground */
-    {{20, 34, 52, 255}, {150, 190, 230, 255}, {{120, 230, 255, 255}, {230, 250, 255, 255}, {80, 160, 255, 255}}, {70, 80, 95, 255}},   /* spire: cold white & cyan */
-    {{28, 30, 44, 255}, {190, 190, 210, 255}, {{240, 240, 255, 255}, {70, 110, 255, 255}, {255, 60, 60, 255}}, {85, 85, 90, 255}},     /* civic: concrete, police blue */
-    {{40, 22, 40, 255}, {200, 160, 200, 255}, {{255, 200, 40, 255}, {40, 255, 120, 255}, {255, 70, 160, 255}}, {75, 70, 75, 255}},    /* commercial: every colour */
-    {{44, 12, 50, 255}, {210, 120, 230, 255}, {{255, 40, 200, 255}, {170, 60, 255, 255}, {255, 120, 240, 255}}, {60, 45, 65, 255}},   /* strip: magenta & violet */
-    {{14, 40, 44, 255}, {120, 200, 200, 255}, {{40, 240, 220, 255}, {255, 110, 180, 255}, {120, 255, 230, 255}}, {65, 75, 78, 255}},   /* residential: teal & pink */
-    {{48, 18, 12, 255}, {230, 160, 110, 255}, {{255, 60, 40, 255}, {255, 190, 60, 255}, {255, 120, 40, 255}}, {80, 60, 50, 255}},     /* old quarter: lanterns & gold */
-    {{50, 30, 10, 255}, {240, 170, 90, 255}, {{255, 160, 40, 255}, {255, 120, 20, 255}, {255, 200, 120, 255}}, {70, 62, 55, 255}},    /* industrial: sodium orange */
-    {{12, 26, 44, 255}, {120, 160, 220, 255}, {{60, 140, 255, 255}, {255, 180, 60, 255}, {200, 220, 255, 255}}, {55, 62, 72, 255}},   /* docks: blue & amber */
-    {{20, 40, 28, 255}, {170, 230, 190, 255}, {{120, 255, 160, 255}, {240, 255, 240, 255}, {60, 200, 120, 255}}, {75, 95, 80, 255}},   /* campus: sterile green */
-    {{10, 30, 12, 255}, {110, 200, 100, 255}, {{80, 255, 60, 255}, {255, 40, 40, 255}, {160, 255, 80, 255}}, {40, 48, 40, 255}},      /* undercity: toxic green & red */
-    {{16, 12, 10, 255}, {130, 100, 80, 255}, {{255, 110, 30, 255}, {200, 80, 30, 255}, {255, 160, 80, 255}}, {45, 40, 36, 255}},      /* barrens: fires */
+    {{20, 34, 52, 255},
+     {150, 190, 230, 255},
+     {{120, 230, 255, 255}, {230, 250, 255, 255}, {80, 160, 255, 255}},
+     {70, 80, 95, 255}}, /* spire: cold white & cyan */
+    {{28, 30, 44, 255},
+     {190, 190, 210, 255},
+     {{240, 240, 255, 255}, {70, 110, 255, 255}, {255, 60, 60, 255}},
+     {85, 85, 90, 255}}, /* civic: concrete, police blue */
+    {{40, 22, 40, 255},
+     {200, 160, 200, 255},
+     {{255, 200, 40, 255}, {40, 255, 120, 255}, {255, 70, 160, 255}},
+     {75, 70, 75, 255}}, /* commercial: every colour */
+    {{44, 12, 50, 255},
+     {210, 120, 230, 255},
+     {{255, 40, 200, 255}, {170, 60, 255, 255}, {255, 120, 240, 255}},
+     {60, 45, 65, 255}}, /* strip: magenta & violet */
+    {{14, 40, 44, 255},
+     {120, 200, 200, 255},
+     {{40, 240, 220, 255}, {255, 110, 180, 255}, {120, 255, 230, 255}},
+     {65, 75, 78, 255}}, /* residential: teal & pink */
+    {{48, 18, 12, 255},
+     {230, 160, 110, 255},
+     {{255, 60, 40, 255}, {255, 190, 60, 255}, {255, 120, 40, 255}},
+     {80, 60, 50, 255}}, /* old quarter: lanterns & gold */
+    {{50, 30, 10, 255},
+     {240, 170, 90, 255},
+     {{255, 160, 40, 255}, {255, 120, 20, 255}, {255, 200, 120, 255}},
+     {70, 62, 55, 255}}, /* industrial: sodium orange */
+    {{12, 26, 44, 255},
+     {120, 160, 220, 255},
+     {{60, 140, 255, 255}, {255, 180, 60, 255}, {200, 220, 255, 255}},
+     {55, 62, 72, 255}}, /* docks: blue & amber */
+    {{20, 40, 28, 255},
+     {170, 230, 190, 255},
+     {{120, 255, 160, 255}, {240, 255, 240, 255}, {60, 200, 120, 255}},
+     {75, 95, 80, 255}}, /* campus: sterile green */
+    {{10, 30, 12, 255},
+     {110, 200, 100, 255},
+     {{80, 255, 60, 255}, {255, 40, 40, 255}, {160, 255, 80, 255}},
+     {40, 48, 40, 255}}, /* undercity: toxic green & red */
+    {{16, 12, 10, 255},
+     {130, 100, 80, 255},
+     {{255, 110, 30, 255}, {200, 80, 30, 255}, {255, 160, 80, 255}},
+     {45, 40, 36, 255}}, /* barrens: fires */
 };
 
-const SrPalette *sr_palette(SrDistrictType t) {
-  return &k_palettes[(unsigned)t < SR_D_COUNT ? t : SR_D_RESIDENTIAL];
-}
+const SrPalette *sr_palette(SrDistrictType t) { return &k_palettes[(unsigned)t < SR_D_COUNT ? t : SR_D_RESIDENTIAL]; }
 
 SrColor sr_corp_color(int hue) {
   /* 24 hand-picked corporate colours; any two that are two steps apart differ clearly */
-  static const SrColor k[24] = {
-      {255, 40, 40, 255},  {255, 90, 30, 255},   {255, 150, 30, 255}, {255, 200, 40, 255},
-      {250, 250, 60, 255}, {190, 255, 40, 255},  {110, 255, 60, 255}, {40, 220, 90, 255},
-      {40, 255, 170, 255}, {30, 200, 200, 255},  {40, 240, 255, 255}, {60, 170, 255, 255},
-      {60, 110, 255, 255}, {70, 60, 255, 255},   {130, 60, 255, 255}, {180, 70, 255, 255},
-      {230, 70, 255, 255}, {255, 60, 220, 255},  {255, 60, 170, 255}, {255, 110, 150, 255},
-      {200, 200, 220, 255}, {255, 240, 200, 255}, {160, 120, 255, 255}, {255, 170, 120, 255}};
+  static const SrColor k[24] = {{255, 40, 40, 255},   {255, 90, 30, 255},   {255, 150, 30, 255},  {255, 200, 40, 255},
+                                {250, 250, 60, 255},  {190, 255, 40, 255},  {110, 255, 60, 255},  {40, 220, 90, 255},
+                                {40, 255, 170, 255},  {30, 200, 200, 255},  {40, 240, 255, 255},  {60, 170, 255, 255},
+                                {60, 110, 255, 255},  {70, 60, 255, 255},   {130, 60, 255, 255},  {180, 70, 255, 255},
+                                {230, 70, 255, 255},  {255, 60, 220, 255},  {255, 60, 170, 255},  {255, 110, 150, 255},
+                                {200, 200, 220, 255}, {255, 240, 200, 255}, {160, 120, 255, 255}, {255, 170, 120, 255}};
   return k[((hue % 24) + 24) % 24];
 }
 
@@ -138,19 +168,18 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
   }
   const SrPalette *pal = sr_palette(c->districts[b->district].type);
   /* streets (west and north strips of the block) and the sidewalk-lined lot */
-  sr_mesh_quad(m, sr_v3(x0, 0, z0 + s), sr_v3(x0 + st, 0, z0 + s), sr_v3(x0 + st, 0, z0),
-               sr_v3(x0, 0, z0), 0, 0, 1, s / st, white, SR_LAYER_ASPHALT, 0, 1);
-  sr_mesh_quad(m, sr_v3(x0 + st, 0, z0 + st), sr_v3(x0 + s, 0, z0 + st), sr_v3(x0 + s, 0, z0),
-               sr_v3(x0 + st, 0, z0), 0, 0, (s - st) / st, 1, white, SR_LAYER_ASPHALT, 0, 1);
-  sr_mesh_quad(m, sr_v3(x0 + st, 0.12f, z0 + s), sr_v3(x0 + s, 0.12f, z0 + s),
-               sr_v3(x0 + s, 0.12f, z0 + st), sr_v3(x0 + st, 0.12f, z0 + st), 0, 0, (s - st) / 4,
-               (s - st) / 4, pal->ground, SR_LAYER_SIDEWALK, 0, 1);
+  sr_mesh_quad(m, sr_v3(x0, 0, z0 + s), sr_v3(x0 + st, 0, z0 + s), sr_v3(x0 + st, 0, z0), sr_v3(x0, 0, z0), 0, 0, 1,
+               s / st, white, SR_LAYER_ASPHALT, 0, 1);
+  sr_mesh_quad(m, sr_v3(x0 + st, 0, z0 + st), sr_v3(x0 + s, 0, z0 + st), sr_v3(x0 + s, 0, z0), sr_v3(x0 + st, 0, z0), 0,
+               0, (s - st) / st, 1, white, SR_LAYER_ASPHALT, 0, 1);
+  sr_mesh_quad(m, sr_v3(x0 + st, 0.12f, z0 + s), sr_v3(x0 + s, 0.12f, z0 + s), sr_v3(x0 + s, 0.12f, z0 + st),
+               sr_v3(x0 + st, 0.12f, z0 + st), 0, 0, (s - st) / 4, (s - st) / 4, pal->ground, SR_LAYER_SIDEWALK, 0, 1);
   { /* street lamp at the intersection */
     SrColor lamp = pal->neon[blk % 3];
     sr_mesh_box(m, sr_v3(x0 + st - 1.2f, 0, z0 + st - 1.2f), sr_v3(x0 + st - 1.0f, 6.5f, z0 + st - 1.0f),
                 (SrColor){60, 60, 66, 255}, SR_LAYER_WHITE, 0, 0);
-    sr_mesh_box(m, sr_v3(x0 + st - 1.6f, 6.5f, z0 + st - 1.6f), sr_v3(x0 + st - 0.6f, 6.8f, z0 + st - 0.6f),
-                lamp, SR_LAYER_WHITE, 0, 255);
+    sr_mesh_box(m, sr_v3(x0 + st - 1.6f, 6.5f, z0 + st - 1.6f), sr_v3(x0 + st - 0.6f, 6.8f, z0 + st - 0.6f), lamp,
+                SR_LAYER_WHITE, 0, 255);
   }
   if (b->highway) { /* elevated highway deck overhead */
     sr_mesh_box(m, sr_v3(x0, 11.0f, z0 + 2), sr_v3(x0 + s, 12.0f, z0 + st - 2), shade(pal->ground, 80),
@@ -181,7 +210,10 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
         float th = h / (float)tiers;
         sr_mesh_box(m, sr_v3(lx0, y, lz0), sr_v3(lx1, y + th, lz1), tint, layer, 0.08f, 0);
         float dx = (lx1 - lx0) * taper, dz = (lz1 - lz0) * taper;
-        lx0 += dx; lx1 -= dx; lz0 += dz; lz1 -= dz;
+        lx0 += dx;
+        lx1 -= dx;
+        lz0 += dz;
+        lz1 -= dz;
         y += th;
       }
     } else {
@@ -194,15 +226,15 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
       int open = sr_deltas_get(d, bd->id) != 0; /* deltas can switch signs off */
       int em = open ? 255 : 40;
       sr_mesh_quad(m, sr_v3(cx - w, 3.2f, bz1 + 0.15f), sr_v3(cx + w, 3.2f, bz1 + 0.15f),
-                   sr_v3(cx + w, 5.4f, bz1 + 0.15f), sr_v3(cx - w, 5.4f, bz1 + 0.15f), 0, 1, 1, 0,
-                   neon, SR_LAYER_SIGN, em, 0);
+                   sr_v3(cx + w, 5.4f, bz1 + 0.15f), sr_v3(cx - w, 5.4f, bz1 + 0.15f), 0, 1, 1, 0, neon, SR_LAYER_SIGN,
+                   em, 0);
       sr_mesh_quad(m, sr_v3(cx - 1.0f, 3.3f, bz1 + 0.2f), sr_v3(cx + 1.0f, 3.3f, bz1 + 0.2f),
-                   sr_v3(cx + 1.0f, 5.3f, bz1 + 0.2f), sr_v3(cx - 1.0f, 5.3f, bz1 + 0.2f), 0, 1, 1, 0,
-                   neon, SR_LAYER_ICON_FIRST + bd->poi, em, 0);
+                   sr_v3(cx + 1.0f, 5.3f, bz1 + 0.2f), sr_v3(cx - 1.0f, 5.3f, bz1 + 0.2f), 0, 1, 1, 0, neon,
+                   SR_LAYER_ICON_FIRST + bd->poi, em, 0);
       /* awning: shelter from the rain */
       sr_mesh_quad(m, sr_v3(cx - w - 1, 3.0f, bz1 + 2.0f), sr_v3(cx + w + 1, 3.0f, bz1 + 2.0f),
-                   sr_v3(cx + w + 1, 3.0f, bz1), sr_v3(cx - w - 1, 3.0f, bz1), 0, 0, 1, 1,
-                   shade(neon, 40), SR_LAYER_WHITE, 0, 0);
+                   sr_v3(cx + w + 1, 3.0f, bz1), sr_v3(cx - w - 1, 3.0f, bz1), 0, 0, 1, 1, shade(neon, 40),
+                   SR_LAYER_WHITE, 0, 0);
     }
     /* rooftop props */
     if (h > 20.0f && (bd->id % 3) == 0) {
@@ -267,25 +299,21 @@ SrChunk *sr_chunk_get(SrChunkCache *cc, const SrCity *c, const SrDeltas *d, int 
 /* ---- characters ------------------------------------------------------------------------------- */
 
 static SrColor palette16(int i, int sat) {
-  static const SrColor k[16] = {{40, 40, 46, 255}, {200, 200, 205, 255}, {150, 30, 40, 255},
-                                {30, 60, 140, 255}, {40, 110, 60, 255}, {200, 160, 40, 255},
-                                {90, 50, 120, 255}, {20, 20, 22, 255}, {230, 90, 30, 255},
-                                {60, 160, 170, 255}, {170, 40, 140, 255}, {110, 80, 60, 255},
-                                {240, 240, 240, 255}, {80, 90, 100, 255}, {255, 40, 120, 255},
-                                {40, 220, 255, 255}};
+  static const SrColor k[16] = {{40, 40, 46, 255},    {200, 200, 205, 255}, {150, 30, 40, 255},  {30, 60, 140, 255},
+                                {40, 110, 60, 255},   {200, 160, 40, 255},  {90, 50, 120, 255},  {20, 20, 22, 255},
+                                {230, 90, 30, 255},   {60, 160, 170, 255},  {170, 40, 140, 255}, {110, 80, 60, 255},
+                                {240, 240, 240, 255}, {80, 90, 100, 255},   {255, 40, 120, 255}, {40, 220, 255, 255}};
   SrColor c = k[i & 15];
   if (!sat) c = shade(c, 80);
   return c;
 }
 
 void sr_build_character(const SrAppearance *a, SrVec3 p, SrVec3 dir, bool umbrella, SrMesh *m) {
-  static const SrColor skin[8] = {{250, 210, 180, 255}, {230, 180, 140, 255}, {200, 150, 110, 255},
-                                  {170, 120, 80, 255}, {140, 95, 60, 255}, {110, 70, 45, 255},
-                                  {80, 52, 35, 255}, {60, 40, 28, 255}};
-  static const SrColor hair[12] = {{20, 18, 16, 255}, {70, 45, 25, 255}, {160, 120, 60, 255},
-                                   {220, 210, 170, 255}, {150, 40, 30, 255}, {200, 200, 200, 255},
-                                   {255, 40, 160, 255}, {40, 255, 200, 255}, {120, 60, 255, 255},
-                                   {255, 230, 40, 255}, {40, 120, 255, 255}, {255, 90, 20, 255}};
+  static const SrColor skin[8] = {{250, 210, 180, 255}, {230, 180, 140, 255}, {200, 150, 110, 255}, {170, 120, 80, 255},
+                                  {140, 95, 60, 255},   {110, 70, 45, 255},   {80, 52, 35, 255},    {60, 40, 28, 255}};
+  static const SrColor hair[12] = {{20, 18, 16, 255},   {70, 45, 25, 255},    {160, 120, 60, 255}, {220, 210, 170, 255},
+                                   {150, 40, 30, 255},  {200, 200, 200, 255}, {255, 40, 160, 255}, {40, 255, 200, 255},
+                                   {120, 60, 255, 255}, {255, 230, 40, 255},  {40, 120, 255, 255}, {255, 90, 20, 255}};
   (void)dir;
   float bw = 0.22f + 0.04f * a->body; /* body type changes the silhouette width */
   float tall = 1.55f + 0.08f * (float)(a->body % 3);
@@ -293,35 +321,47 @@ void sr_build_character(const SrAppearance *a, SrVec3 p, SrVec3 dir, bool umbrel
   SrColor legs = shade(outfit, 60);
   float x = p.x, z = p.z;
   sr_mesh_box(m, sr_v3(x - bw, 0, z - 0.12f), sr_v3(x + bw, tall * 0.48f, z + 0.12f), legs, SR_LAYER_WHITE, 0, 0);
-  sr_mesh_box(m, sr_v3(x - bw - 0.04f, tall * 0.48f, z - 0.15f), sr_v3(x + bw + 0.04f, tall * 0.82f, z + 0.15f),
-              outfit, SR_LAYER_WHITE, 0, 0);
+  sr_mesh_box(m, sr_v3(x - bw - 0.04f, tall * 0.48f, z - 0.15f), sr_v3(x + bw + 0.04f, tall * 0.82f, z + 0.15f), outfit,
+              SR_LAYER_WHITE, 0, 0);
   float hs = 0.12f + 0.01f * (a->head % 3);
-  sr_mesh_box(m, sr_v3(x - hs, tall * 0.84f, z - hs), sr_v3(x + hs, tall * 0.84f + 2 * hs, z + hs),
-              skin[a->skin & 7], SR_LAYER_WHITE, 0, 0);
+  sr_mesh_box(m, sr_v3(x - hs, tall * 0.84f, z - hs), sr_v3(x + hs, tall * 0.84f + 2 * hs, z + hs), skin[a->skin & 7],
+              SR_LAYER_WHITE, 0, 0);
   float top = tall * 0.84f + 2 * hs;
   int style = a->hair % 12;
   if (style < 4) { /* mohawk / crest */
     sr_mesh_box(m, sr_v3(x - 0.03f, top, z - hs), sr_v3(x + 0.03f, top + 0.12f + 0.03f * style, z + hs),
                 hair[a->hair_color % 12], SR_LAYER_WHITE, 0, a->hair_color >= 6 ? 120 : 0);
   } else if (style < 9) { /* cap of hair */
-    sr_mesh_box(m, sr_v3(x - hs - 0.01f, top - 0.06f, z - hs - 0.01f), sr_v3(x + hs + 0.01f, top + 0.03f, z + hs + 0.01f),
-                hair[a->hair_color % 12], SR_LAYER_WHITE, 0, a->hair_color >= 6 ? 120 : 0);
+    sr_mesh_box(m, sr_v3(x - hs - 0.01f, top - 0.06f, z - hs - 0.01f),
+                sr_v3(x + hs + 0.01f, top + 0.03f, z + hs + 0.01f), hair[a->hair_color % 12], SR_LAYER_WHITE, 0,
+                a->hair_color >= 6 ? 120 : 0);
   }
   if (a->cyber) { /* glowing optics */
-    sr_mesh_box(m, sr_v3(x - hs * 0.8f, tall * 0.84f + hs * 1.1f, z + hs), sr_v3(x + hs * 0.8f, tall * 0.84f + hs * 1.35f, z + hs + 0.02f),
-                (SrColor){255, 40, 40, 255}, SR_LAYER_WHITE, 0, 255);
+    sr_mesh_box(m, sr_v3(x - hs * 0.8f, tall * 0.84f + hs * 1.1f, z + hs),
+                sr_v3(x + hs * 0.8f, tall * 0.84f + hs * 1.35f, z + hs + 0.02f), (SrColor){255, 40, 40, 255},
+                SR_LAYER_WHITE, 0, 255);
   }
   if (a->marker) { /* faction marker: halo, shoulder plates or mask by marker id */
     SrColor mk = sr_corp_color(a->marker * 5);
     switch (a->marker % 3) {
-    case 0: sr_mesh_box(m, sr_v3(x - 0.2f, top + 0.15f, z - 0.2f), sr_v3(x + 0.2f, top + 0.18f, z + 0.2f), mk, SR_LAYER_WHITE, 0, 255); break;
-    case 1: sr_mesh_box(m, sr_v3(x - bw - 0.12f, tall * 0.78f, z - 0.16f), sr_v3(x + bw + 0.12f, tall * 0.84f, z + 0.16f), mk, SR_LAYER_WHITE, 0, 60); break;
-    default: sr_mesh_box(m, sr_v3(x - hs, tall * 0.84f, z + hs), sr_v3(x + hs, tall * 0.84f + hs, z + hs + 0.02f), mk, SR_LAYER_WHITE, 0, 80); break;
+      case 0:
+        sr_mesh_box(m, sr_v3(x - 0.2f, top + 0.15f, z - 0.2f), sr_v3(x + 0.2f, top + 0.18f, z + 0.2f), mk,
+                    SR_LAYER_WHITE, 0, 255);
+        break;
+      case 1:
+        sr_mesh_box(m, sr_v3(x - bw - 0.12f, tall * 0.78f, z - 0.16f), sr_v3(x + bw + 0.12f, tall * 0.84f, z + 0.16f),
+                    mk, SR_LAYER_WHITE, 0, 60);
+        break;
+      default:
+        sr_mesh_box(m, sr_v3(x - hs, tall * 0.84f, z + hs), sr_v3(x + hs, tall * 0.84f + hs, z + hs + 0.02f), mk,
+                    SR_LAYER_WHITE, 0, 80);
+        break;
     }
   }
   if (umbrella) {
     SrColor uc = palette16(a->accessory + 3, 1);
-    sr_mesh_box(m, sr_v3(x - 0.55f, tall + 0.25f, z - 0.55f), sr_v3(x + 0.55f, tall + 0.3f, z + 0.55f), uc, SR_LAYER_WHITE, 0, 30);
+    sr_mesh_box(m, sr_v3(x - 0.55f, tall + 0.25f, z - 0.55f), sr_v3(x + 0.55f, tall + 0.3f, z + 0.55f), uc,
+                SR_LAYER_WHITE, 0, 30);
   }
 }
 
@@ -340,10 +380,12 @@ void sr_build_characters(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *
     float lx = fabsf(v->dir.x) > 0.5f ? 2.2f : 0.9f, lz = fabsf(v->dir.x) > 0.5f ? 0.9f : 2.2f;
     SrColor body = sr_corp_color(v->color);
     body = shade(body, 45);
-    sr_mesh_box(out, sr_v3(v->pos.x - lx, 0.3f, v->pos.z - lz), sr_v3(v->pos.x + lx, 1.3f, v->pos.z + lz), body, SR_LAYER_METAL, 0.5f, 0);
+    sr_mesh_box(out, sr_v3(v->pos.x - lx, 0.3f, v->pos.z - lz), sr_v3(v->pos.x + lx, 1.3f, v->pos.z + lz), body,
+                SR_LAYER_METAL, 0.5f, 0);
     SrVec3 f = sr_v3_add(v->pos, sr_v3_scale(v->dir, 2.25f));
     SrVec3 b = sr_v3_sub(v->pos, sr_v3_scale(v->dir, 2.25f));
-    sr_mesh_box(out, sr_v3(f.x - 0.4f, 0.6f, f.z - 0.4f), sr_v3(f.x + 0.4f, 0.9f, f.z + 0.4f), (SrColor){255, 250, 220, 255}, SR_LAYER_WHITE, 0, 255);
+    sr_mesh_box(out, sr_v3(f.x - 0.4f, 0.6f, f.z - 0.4f), sr_v3(f.x + 0.4f, 0.9f, f.z + 0.4f),
+                (SrColor){255, 250, 220, 255}, SR_LAYER_WHITE, 0, 255);
     sr_mesh_box(out, sr_v3(b.x - 0.4f, 0.6f, b.z - 0.4f), sr_v3(b.x + 0.4f, 0.9f, b.z + 0.4f),
                 v->stopped ? (SrColor){255, 30, 30, 255} : (SrColor){150, 20, 20, 255}, SR_LAYER_WHITE, 0, 255);
   }
@@ -402,8 +444,7 @@ void sr_build_skyline(const SrCity *c, SrMesh *out) {
     SrVec3 p0 = sr_v3(cx + cosf(a0) * radius, -5, cz + sinf(a0) * radius);
     SrVec3 p1 = sr_v3(cx + cosf(a1) * radius, -5, cz + sinf(a1) * radius);
     SrColor col = {18, 16, 26, 255};
-    sr_mesh_quad(out, p1, p0, sr_v3(p0.x, h, p0.z), sr_v3(p1.x, h, p1.z), 0, 8, 2, 0, col,
-                 SR_LAYER_WIN_GLASS, 40, 0);
+    sr_mesh_quad(out, p1, p0, sr_v3(p0.x, h, p0.z), sr_v3(p1.x, h, p1.z), 0, 8, 2, 0, col, SR_LAYER_WIN_GLASS, 40, 0);
   }
 }
 
@@ -468,7 +509,9 @@ void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) 
   f->fog[1] = pal->fog.g / 255.0f;
   f->fog[2] = pal->fog.b / 255.0f;
   if (sky.daylight) {
-    f->fog[0] = sky.r; f->fog[1] = sky.g; f->fog[2] = sky.b;
+    f->fog[0] = sky.r;
+    f->fog[1] = sky.g;
+    f->fog[2] = sky.b;
   }
   f->sky[0] = sky.r * 0.5f + f->fog[0] * 0.5f;
   f->sky[1] = sky.g * 0.5f + f->fog[1] * 0.5f;

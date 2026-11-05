@@ -32,8 +32,7 @@ static void test_appearance(void) {
   for (int b = 0; b < c->grid * c->grid; b += 37) {
     int n = sr_ambient_generate(c, b, 22 * 3600, amb, 20);
     for (int i = 0; i < n; i++) {
-      for (int j = 0; j < i; j++)
-        SR_CHECK(sr_appearance_key(&amb[i].look) != sr_appearance_key(&amb[j].look));
+      for (int j = 0; j < i; j++) SR_CHECK(sr_appearance_key(&amb[i].look) != sr_appearance_key(&amb[j].look));
       if (amb[i].faction >= 0) SR_CHECK_EQ(amb[i].look.marker, c->factions.f[amb[i].faction].marker);
     }
   }
@@ -155,7 +154,7 @@ static void test_reactions_and_rumours(void) {
   sr_events_add(&log, &ev);
   SR_CHECK(sr_bark(c, &log, 2, 5000, 1, bark, sizeof bark));
   SR_CHECK(strstr(bark, "sabotage") != NULL);
-  SR_CHECK(!sr_bark(c, &log, 3, 5000, 1, bark, sizeof bark));      /* other district */
+  SR_CHECK(!sr_bark(c, &log, 3, 5000, 1, bark, sizeof bark));         /* other district */
   SR_CHECK(!sr_bark(c, &log, 2, 1000 + 90000, 1, bark, sizeof bark)); /* older than a day */
   for (int i = 0; i < 200; i++) sr_events_add(&log, &ev);
   SR_CHECK_EQ(sr_events_size(&log), SR_MAX_EVENTS);
@@ -261,7 +260,8 @@ static void test_weapons(void) {
   SrWeaponStats sa = sr_weapon_stats(c->seed, &a), sb = sr_weapon_stats(c->seed, &b);
   SR_CHECK(memcmp(&sa, &sb, sizeof sa) == 0);
   int maker = -1;
-  for (int k = 0; k < c->factions.corp_count; k++) if (sr_maker_valid(c, k)) maker = k;
+  for (int k = 0; k < c->factions.corp_count; k++)
+    if (sr_maker_valid(c, k)) maker = k;
   SR_CHECK(maker >= 0);
   int8_t tend[4];
   sr_maker_tendency(c->seed, maker, tend);
@@ -367,17 +367,17 @@ static void test_inventory_gadgets_crafting(void) {
   SR_CHECK(!sr_inv_remove_at(&inv, idx, 0));
   for (int i = 0; i < 10; i++) sr_inv_add(&inv, sr_item_weapon(12, SR_STREET_MAKER_FIRST, 0, (uint32_t)i));
   SR_CHECK(sr_inv_weight(&inv) > sr_carry_limit(3));
-  SrItem kinds[] = {sr_item_simple(SR_IK_AMMO, 0, 10), sr_item_simple(SR_IK_FOOD, 0, 1),
+  SrItem kinds[] = {sr_item_simple(SR_IK_AMMO, 0, 10),     sr_item_simple(SR_IK_FOOD, 0, 1),
                     sr_item_simple(SR_IK_COMPONENT, 0, 1), sr_item_simple(SR_IK_OUTFIT, 0, 1),
-                    sr_item_simple(SR_IK_DECK, 0, 1), sr_item_simple(SR_IK_PAYDATA, 0, 1)};
+                    sr_item_simple(SR_IK_DECK, 0, 1),      sr_item_simple(SR_IK_PAYDATA, 0, 1)};
   for (size_t i = 0; i < SR_ARRAY_LEN(kinds); i++) SR_CHECK(sr_item_weight(&kinds[i]) > 0);
   /* crafting */
   SrInventory c2;
   sr_inv_init(&c2);
   SR_CHECK(!sr_craft(&c2, 1u << SR_GD_SMOKE, SR_GD_SMOKE)); /* no components */
   sr_inv_add(&c2, sr_item_simple(SR_IK_COMPONENT, 0, 3));
-  SR_CHECK(!sr_craft(&c2, 0, SR_GD_SMOKE));                 /* no blueprint */
-  SR_CHECK(!sr_craft(&c2, 0xFFFFFFFFu, SR_GD_CAMO));         /* no recipe */
+  SR_CHECK(!sr_craft(&c2, 0, SR_GD_SMOKE));          /* no blueprint */
+  SR_CHECK(!sr_craft(&c2, 0xFFFFFFFFu, SR_GD_CAMO)); /* no recipe */
   SR_CHECK(sr_craft(&c2, 1u << SR_GD_SMOKE, SR_GD_SMOKE));
   SR_CHECK_EQ(sr_inv_count(&c2, SR_IK_GADGET, SR_GD_SMOKE), 1);
   SR_CHECK_EQ(sr_inv_count(&c2, SR_IK_COMPONENT, 0), 1);
@@ -456,8 +456,7 @@ static void test_cyberware_and_vendors(void) {
   for (int p = 0; p < SR_POI_COUNT; p++) {
     if (shops[p] < 0) continue;
     int n = sr_vendor_stock(c, shops[p], 3, stock, 16);
-    if (p == SR_POI_GUNSHOP || p == SR_POI_ELECTRONICS || p == SR_POI_RIPPERDOC || p == SR_POI_FOOD)
-      SR_CHECK(n > 0);
+    if (p == SR_POI_GUNSHOP || p == SR_POI_ELECTRONICS || p == SR_POI_RIPPERDOC || p == SR_POI_FOOD) SR_CHECK(n > 0);
     for (int i = 0; i < n; i++) {
       SR_CHECK(sr_price_at(c, shops[p], &stock[i]) >= 1);
       char nm[96];
@@ -465,10 +464,10 @@ static void test_cyberware_and_vendors(void) {
       SR_CHECK(nm[0] != '\0');
     }
   }
-  SrItem misc[] = {sr_item_simple(SR_IK_AMMO, 1, 1), sr_item_simple(SR_IK_MOD, 1, 1),
+  SrItem misc[] = {sr_item_simple(SR_IK_AMMO, 1, 1),      sr_item_simple(SR_IK_MOD, 1, 1),
                    sr_item_simple(SR_IK_COMPONENT, 0, 1), sr_item_simple(SR_IK_PAYDATA, 2, 1),
-                   sr_item_simple(SR_IK_OUTFIT, 2, 1), sr_item_simple(SR_IK_DECK, 1, 1),
-                   sr_item_simple(SR_IK_JOB, 0, 1), sr_item_simple(SR_IK_NONE, 0, 1)};
+                   sr_item_simple(SR_IK_OUTFIT, 2, 1),    sr_item_simple(SR_IK_DECK, 1, 1),
+                   sr_item_simple(SR_IK_JOB, 0, 1),       sr_item_simple(SR_IK_NONE, 0, 1)};
   for (size_t i = 0; i < SR_ARRAY_LEN(misc); i++) {
     char nm[64];
     sr_item_name(c, &misc[i], nm, sizeof nm);
@@ -821,8 +820,8 @@ static void test_disguise_attribution(void) {
   SR_CHECK(!d.blown);
   sr_disguise_action(&d, true);
   SR_CHECK(sr_is_trespassing(&d, 2, SR_AREA_MAINTENANCE));
-  SrEvidence ev[3] = {{SR_EVID_PLANTED, 0, 4, 1, 0, 0}, {SR_EVID_PLANTED, 0, 4, 1, 0, 0},
-                      {SR_EVID_CAMERA, 0, -2, 1, 0, 0}};
+  SrEvidence ev[3] = {
+      {SR_EVID_PLANTED, 0, 4, 1, 0, 0}, {SR_EVID_PLANTED, 0, 4, 1, 0, 0}, {SR_EVID_CAMERA, 0, -2, 1, 0, 0}};
   SR_CHECK_EQ(sr_heat_attribution(ev, 2), 4);
   SR_CHECK_EQ(sr_heat_attribution(ev, 3), 4);
   SR_CHECK_EQ(sr_heat_attribution(&ev[2], 1), -2);
@@ -1225,9 +1224,8 @@ static void test_job_approaches(void) {
       j.id = i * 10 + a;
       j.state = SR_JS_ACCEPTED;
       p.health = p.max_health;
-      p.prog.skill_rank[SR_SK_STEALTH] = p.prog.skill_rank[SR_SK_PERSUASION] =
-          p.prog.skill_rank[SR_SK_NETRUNNING] = p.prog.skill_rank[SR_SK_LONGGUNS] =
-              p.prog.skill_rank[SR_SK_PISTOLS] = 15;
+      p.prog.skill_rank[SR_SK_STEALTH] = p.prog.skill_rank[SR_SK_PERSUASION] = p.prog.skill_rank[SR_SK_NETRUNNING] =
+          p.prog.skill_rank[SR_SK_LONGGUNS] = p.prog.skill_rank[SR_SK_PISTOLS] = 15;
       SrMissionResult r = sr_job_execute(c, &j, &p, (SrApproach)a, (uint64_t)i);
       if (!(j.approaches & (1u << a))) SR_CHECK(!r.success && r.alarm);
       done[a] += r.success;

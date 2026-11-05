@@ -45,8 +45,7 @@ void sr_glb_shutdown(SrGlBackend *b);
 /* Forget every GPU object after a lost context (handles are invalid, nothing is deleted). */
 void sr_glb_context_lost(SrGlBackend *b);
 /* Renders the frame at internal resolution, the UI at window resolution, and presents. */
-void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int win_w, int win_h,
-                   bool integer_scale);
+void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int win_w, int win_h, bool integer_scale);
 /* Reads the internal framebuffer (RGB, bottom-up rows flipped to top-down). */
 bool sr_glb_read_internal(SrGlBackend *b, uint8_t *rgb, int w, int h);
 bool sr_glb_read_window(SrGlBackend *b, uint8_t *rgb, int x, int y, int w, int h);

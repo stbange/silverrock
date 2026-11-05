@@ -13,9 +13,8 @@ void sr_jobs_init(SrJobBoard *b) {
 }
 
 const char *sr_job_type_name(SrJobType t) {
-  static const char *const n[SR_JT_COUNT] = {"Delivery", "Debt Collection", "Find Item",
-                                             "Plant Bug", "Surveillance", "Theft", "Data Theft",
-                                             "Sabotage", "Hideout Raid", "Extraction"};
+  static const char *const n[SR_JT_COUNT] = {"Delivery", "Debt Collection", "Find Item", "Plant Bug",    "Surveillance",
+                                             "Theft",    "Data Theft",      "Sabotage",  "Hideout Raid", "Extraction"};
   return (unsigned)t < SR_JT_COUNT ? n[t] : "?";
 }
 
@@ -25,8 +24,7 @@ const char *sr_approach_name(SrApproach a) {
 }
 
 void sr_tier_pay_range(int tier, int32_t *lo, int32_t *hi) {
-  static const int32_t ranges[5][2] = {{40, 200}, {200, 800}, {800, 3000}, {3000, 12000},
-                                       {10000, 50000}};
+  static const int32_t ranges[5][2] = {{40, 200}, {200, 800}, {800, 3000}, {3000, 12000}, {10000, 50000}};
   tier = SR_CLAMP(tier, 0, 4);
   *lo = ranges[tier][0];
   *hi = ranges[tier][1];
@@ -45,8 +43,8 @@ int sr_max_tier_for_cred(int32_t cred) {
 }
 
 static bool site_job(SrJobType t) {
-  return t == SR_JT_PLANT || t == SR_JT_THEFT || t == SR_JT_STEAL_DATA || t == SR_JT_SABOTAGE ||
-         t == SR_JT_RAID || t == SR_JT_EXTRACT;
+  return t == SR_JT_PLANT || t == SR_JT_THEFT || t == SR_JT_STEAL_DATA || t == SR_JT_SABOTAGE || t == SR_JT_RAID ||
+         t == SR_JT_EXTRACT;
 }
 
 static int pick_building(const SrCity *c, SrRng *r, int poi, int owner_kind, int exclude_owner) {
@@ -91,42 +89,42 @@ bool sr_job_generate(const SrCity *c, SrJobType type, uint64_t key, int64_t t, S
   j->dest_building = -1;
   const SrFactions *fs = &c->factions;
   switch (type) {
-  case SR_JT_DELIVER:
-    j->target_building = pick_building(c, &r, -1, -1, -1);
-    j->dest_building = j->target_building;
-    while (c->buildings[j->target_building].poi == SR_POI_NONE ||
-           c->buildings[j->target_building].poi >= SR_POI_FIRST_SPECIAL)
-      j->target_building = j->dest_building = pick_building(c, &r, -1, -1, -1);
-    if (sr_rng_chance(&r, 400)) j->client_faction = (int8_t)(fs->gang_first + sr_rng_range(&r, 0, fs->gang_count - 1));
-    break;
-  case SR_JT_COLLECT:
-  case SR_JT_FIND:
-  case SR_JT_SURVEIL:
-    j->target_building = pick_building(c, &r, SR_POI_NONE, -1, -1);
-    if (type == SR_JT_SURVEIL) {
-      int tb = pick_building(c, &r, SR_POI_CORP_FACILITY, SR_FK_CORP, -1);
-      j->target_building = tb;
-      j->target_faction = c->buildings[tb].owner;
-      j->client_faction = (int8_t)rival_of(c, j->target_faction, &r);
-    } else if (sr_rng_chance(&r, 500)) {
-      j->client_faction = (int8_t)(fs->gang_first + sr_rng_range(&r, 0, fs->gang_count - 1));
+    case SR_JT_DELIVER:
+      j->target_building = pick_building(c, &r, -1, -1, -1);
+      j->dest_building = j->target_building;
+      while (c->buildings[j->target_building].poi == SR_POI_NONE ||
+             c->buildings[j->target_building].poi >= SR_POI_FIRST_SPECIAL)
+        j->target_building = j->dest_building = pick_building(c, &r, -1, -1, -1);
+      if (sr_rng_chance(&r, 400))
+        j->client_faction = (int8_t)(fs->gang_first + sr_rng_range(&r, 0, fs->gang_count - 1));
+      break;
+    case SR_JT_COLLECT:
+    case SR_JT_FIND:
+    case SR_JT_SURVEIL:
+      j->target_building = pick_building(c, &r, SR_POI_NONE, -1, -1);
+      if (type == SR_JT_SURVEIL) {
+        int tb = pick_building(c, &r, SR_POI_CORP_FACILITY, SR_FK_CORP, -1);
+        j->target_building = tb;
+        j->target_faction = c->buildings[tb].owner;
+        j->client_faction = (int8_t)rival_of(c, j->target_faction, &r);
+      } else if (sr_rng_chance(&r, 500)) {
+        j->client_faction = (int8_t)(fs->gang_first + sr_rng_range(&r, 0, fs->gang_count - 1));
+      }
+      break;
+    case SR_JT_RAID: {
+      int g = fs->gang_first + sr_rng_range(&r, 0, fs->gang_count - 1);
+      j->target_building = fs->f[g].hq_building;
+      j->target_faction = (int8_t)g;
+      j->client_faction = (int8_t)rival_of(c, g, &r);
+      break;
     }
-    break;
-  case SR_JT_RAID: {
-    int g = fs->gang_first + sr_rng_range(&r, 0, fs->gang_count - 1);
-    j->target_building = fs->f[g].hq_building;
-    j->target_faction = (int8_t)g;
-    j->client_faction = (int8_t)rival_of(c, g, &r);
-    break;
-  }
-  default: { /* corporate sites */
-    int b = pick_building(c, &r, sr_rng_chance(&r, 800) ? SR_POI_CORP_FACILITY : SR_POI_CORP_HQ,
-                          SR_FK_CORP, -1);
-    j->target_building = b;
-    j->target_faction = c->buildings[b].owner;
-    j->client_faction = (int8_t)rival_of(c, j->target_faction, &r);
-    break;
-  }
+    default: { /* corporate sites */
+      int b = pick_building(c, &r, sr_rng_chance(&r, 800) ? SR_POI_CORP_FACILITY : SR_POI_CORP_HQ, SR_FK_CORP, -1);
+      j->target_building = b;
+      j->target_faction = c->buildings[b].owner;
+      j->client_faction = (int8_t)rival_of(c, j->target_faction, &r);
+      break;
+    }
   }
   if (j->target_building < 0) return false; /* GCOVR_EXCL_LINE reason: cities always have targets */
   if (j->client_faction >= 0 && j->client_faction == j->target_faction) j->client_faction = -1;
@@ -160,16 +158,14 @@ uint8_t sr_job_validate_approaches(const SrCity *c, const SrJob *j) {
   for (int e = 0; e < in.entry_count; e++) {
     SrEntryType et = in.entries[e].type;
     bool crawl = et == SR_ENTRY_VENT || et == SR_ENTRY_ROOF || et == SR_ENTRY_WINDOW;
-    if (crawl && sr_interior_reachable(&in, in.entries[e].room, in.target_room, true, false))
-      m |= 1u << SR_AP_GHOST;
+    if (crawl && sr_interior_reachable(&in, in.entries[e].room, in.target_room, true, false)) m |= 1u << SR_AP_GHOST;
   }
   const SrBuilding *b = &c->buildings[j->target_building];
   if (b->owner >= 0 || b->poi < SR_POI_FIRST_SPECIAL) m |= 1u << SR_AP_FACE; /* uniforms, IDs */
   if ((b->flags & SR_BF_NETWORKED) && sr_interior_security_chain_ok(&in) &&
       sr_interior_reachable(&in, in.entries[0].room, in.target_room, false, true))
     m |= 1u << SR_AP_RUNNER;
-  if (sr_interior_reachable(&in, in.entries[0].room, in.target_room, false, true) &&
-      in.guards <= 4 + 3 * (j->tier + 1))
+  if (sr_interior_reachable(&in, in.entries[0].room, in.target_room, false, true) && in.guards <= 4 + 3 * (j->tier + 1))
     m |= 1u << SR_AP_HAMMER;
   return m;
 }
@@ -203,10 +199,9 @@ static SrJob *board_push(SrJobBoard *b, const SrJob *j) {
 }
 
 static SrJobType pick_type(SrRng *r, int max_tier) {
-  static const SrJobType by_tier[3][4] = {
-      {SR_JT_DELIVER, SR_JT_COLLECT, SR_JT_FIND, SR_JT_DELIVER},
-      {SR_JT_PLANT, SR_JT_SURVEIL, SR_JT_THEFT, SR_JT_SURVEIL},
-      {SR_JT_STEAL_DATA, SR_JT_SABOTAGE, SR_JT_RAID, SR_JT_EXTRACT}};
+  static const SrJobType by_tier[3][4] = {{SR_JT_DELIVER, SR_JT_COLLECT, SR_JT_FIND, SR_JT_DELIVER},
+                                          {SR_JT_PLANT, SR_JT_SURVEIL, SR_JT_THEFT, SR_JT_SURVEIL},
+                                          {SR_JT_STEAL_DATA, SR_JT_SABOTAGE, SR_JT_RAID, SR_JT_EXTRACT}};
   int tier = sr_rng_range(r, 0, SR_MIN(max_tier, 2));
   return by_tier[tier][sr_rng_range(r, 0, 3)];
 }
@@ -214,7 +209,8 @@ static SrJobType pick_type(SrRng *r, int max_tier) {
 static bool make_job(const SrCity *c, SrRng *r, int max_tier, uint64_t key, int64_t t, SrJob *j) {
   for (int attempt = 0; attempt < 8; attempt++) {
     SrJobType type = pick_type(r, max_tier);
-    if (!sr_job_generate(c, type, key * 16u + (uint64_t)attempt, t, j)) continue; /* GCOVR_EXCL_LINE reason: generation always binds for these types */
+    if (!sr_job_generate(c, type, key * 16u + (uint64_t)attempt, t, j))
+      continue;                                  /* GCOVR_EXCL_LINE reason: generation always binds for these types */
     if (count_bits(j->approaches) < 2) continue; /* never offer a job without a choice */
     if (max_tier >= 3 && j->tier == 2 && sr_rng_chance(r, 400)) { /* Operator-level variant */
       int32_t lo, hi;
@@ -229,8 +225,7 @@ static bool make_job(const SrCity *c, SrRng *r, int max_tier, uint64_t key, int6
   return false;
 }
 
-int sr_jobs_fixer_offers(SrJobBoard *b, const SrCity *c, int fixer, int64_t t, int32_t cred,
-                         int out_ids[4]) {
+int sr_jobs_fixer_offers(SrJobBoard *b, const SrCity *c, int fixer, int64_t t, int32_t cred, int out_ids[4]) {
   int64_t day = t / SR_DAY_S;
   SrRng r = sr_rng_stream(c->seed, "fixer", (uint64_t)fixer, (uint64_t)day);
   /* already offered today? return the existing offers */
@@ -238,8 +233,7 @@ int sr_jobs_fixer_offers(SrJobBoard *b, const SrCity *c, int fixer, int64_t t, i
   bool offered_today = false;
   for (int i = 0; i < b->count; i++) {
     SrJob *j = &b->jobs[i];
-    if (j->source != SR_SRC_FIXER || j->client_building != fixer || j->offered / SR_DAY_S != day)
-      continue;
+    if (j->source != SR_SRC_FIXER || j->client_building != fixer || j->offered / SR_DAY_S != day) continue;
     offered_today = true; /* one batch per fixer per day */
     if (j->state == SR_JS_OFFERED && n < 4) out_ids[n++] = j->id;
   }
@@ -249,7 +243,8 @@ int sr_jobs_fixer_offers(SrJobBoard *b, const SrCity *c, int fixer, int64_t t, i
   for (int k = 0; k < want; k++) {
     SrJob j;
     uint64_t key = sr_hash_combine((uint64_t)fixer * 1000u + (uint64_t)k, (uint64_t)day);
-    if (!make_job(c, &r, max_tier, key, t, &j)) continue; /* GCOVR_EXCL_LINE reason: generation always binds for these types */
+    if (!make_job(c, &r, max_tier, key, t, &j))
+      continue; /* GCOVR_EXCL_LINE reason: generation always binds for these types */
     j.source = SR_SRC_FIXER;
     j.client_building = fixer;
     SrJob *s = board_push(b, &j);
@@ -324,8 +319,7 @@ SrResult sr_job_negotiate(SrJob *j, const SrPlayer *p, uint64_t seed) {
   return SR_ERR_DENIED;
 }
 
-static int weapon_skill(const SrPlayer *p, float *damage, bool *lethal, uint64_t city_seed,
-                        SrSkill *which) {
+static int weapon_skill(const SrPlayer *p, float *damage, bool *lethal, uint64_t city_seed, SrSkill *which) {
   *damage = 5.0f;
   *lethal = false;
   *which = SR_SK_MELEE;
@@ -335,8 +329,7 @@ static int weapon_skill(const SrPlayer *p, float *damage, bool *lethal, uint64_t
   SrWeaponStats s = sr_weapon_stats(city_seed, w);
   *damage = s.damage;
   *lethal = s.lethal;
-  static const SrSkill by_cat[SR_WC_COUNT] = {SR_SK_PISTOLS, SR_SK_LONGGUNS, SR_SK_HEAVY,
-                                              SR_SK_PISTOLS, SR_SK_MELEE};
+  static const SrSkill by_cat[SR_WC_COUNT] = {SR_SK_PISTOLS, SR_SK_LONGGUNS, SR_SK_HEAVY, SR_SK_PISTOLS, SR_SK_MELEE};
   *which = by_cat[sr_archetype(w->type)->category];
   return p->prog.skill_rank[*which];
 }
@@ -368,26 +361,25 @@ SrMissionResult sr_job_execute(const SrCity *c, SrJob *j, SrPlayer *p, SrApproac
   int skill = 0;
   SrSkill used = SR_SK_STEALTH;
   switch (a) {
-  case SR_AP_GHOST:
-    skill = sk[SR_SK_STEALTH] * 4 + at[SR_ATTR_COOL] * 3 +
-            (sr_inv_count(&p->inv, SR_IK_GADGET, SR_GD_CAMO) ? 15 : 0);
-    used = SR_SK_STEALTH;
-    break;
-  case SR_AP_FACE:
-    skill = sk[SR_SK_PERSUASION] * 4 + at[SR_ATTR_COOL] * 3 +
-            (sr_inv_count(&p->inv, SR_IK_GADGET, SR_GD_FAKEID) ? 15 : 0);
-    used = SR_SK_PERSUASION;
-    break;
-  case SR_AP_RUNNER: {
-    int deck = sr_inv_find(&p->inv, SR_IK_DECK, -1);
-    skill = deck < 0 ? -100 : sk[SR_SK_NETRUNNING] * 4 + at[SR_ATTR_MIND] * 3 + p->inv.items[deck].type * 10;
-    used = SR_SK_NETRUNNING;
-    break;
-  }
-  default:
-    skill = wskill * 4 + at[SR_ATTR_BODY] * 2 + at[SR_ATTR_REFLEX] * 2 + (int)(wdmg / 2.0f);
-    used = wskill_id;
-    break;
+    case SR_AP_GHOST:
+      skill = sk[SR_SK_STEALTH] * 4 + at[SR_ATTR_COOL] * 3 + (sr_inv_count(&p->inv, SR_IK_GADGET, SR_GD_CAMO) ? 15 : 0);
+      used = SR_SK_STEALTH;
+      break;
+    case SR_AP_FACE:
+      skill = sk[SR_SK_PERSUASION] * 4 + at[SR_ATTR_COOL] * 3 +
+              (sr_inv_count(&p->inv, SR_IK_GADGET, SR_GD_FAKEID) ? 15 : 0);
+      used = SR_SK_PERSUASION;
+      break;
+    case SR_AP_RUNNER: {
+      int deck = sr_inv_find(&p->inv, SR_IK_DECK, -1);
+      skill = deck < 0 ? -100 : sk[SR_SK_NETRUNNING] * 4 + at[SR_ATTR_MIND] * 3 + p->inv.items[deck].type * 10;
+      used = SR_SK_NETRUNNING;
+      break;
+    }
+    default:
+      skill = wskill * 4 + at[SR_ATTR_BODY] * 2 + at[SR_ATTR_REFLEX] * 2 + (int)(wdmg / 2.0f);
+      used = wskill_id;
+      break;
   }
   if (!site_job((SrJobType)j->type) && a != SR_AP_HAMMER) {
     skill += sk[SR_SK_STREETWISE] * 3 + 10; /* street jobs are about knowing people */
@@ -398,7 +390,10 @@ SrMissionResult sr_job_execute(const SrCity *c, SrJob *j, SrPlayer *p, SrApproac
     res.alarm = site_job((SrJobType)j->type);
     res.success = ok || sr_rng_chance(&r, 500);
     int downed = res.success ? guards : guards / 2;
-    if (lethal) res.kills = downed; else res.knockouts = downed;
+    if (lethal)
+      res.kills = downed;
+    else
+      res.knockouts = downed;
     res.damage = (float)SR_MAX(5, difficulty - skill / 2) * (ok ? 0.5f : 1.0f);
   } else if (ok) {
     res.success = true;
@@ -412,8 +407,7 @@ SrMissionResult sr_job_execute(const SrCity *c, SrJob *j, SrPlayer *p, SrApproac
   res.witnessed = res.alarm || (a == SR_AP_FACE && sr_rng_chance(&r, 150));
   res.camera = cams > 0 && res.alarm;
   /* skills grow with real use */
-  sr_progress_use_skill(&p->prog, used, res.success ? SR_USE_SUCCESS : SR_USE_HOSTILE,
-                        10 + 5 * j->tier);
+  sr_progress_use_skill(&p->prog, used, res.success ? SR_USE_SUCCESS : SR_USE_HOSTILE, 10 + 5 * j->tier);
   p->health -= res.damage;
   if (p->health < 1.0f) p->health = 1.0f; /* the game layer handles flatlining from combat */
   p->kills += res.kills;
@@ -422,8 +416,7 @@ SrMissionResult sr_job_execute(const SrCity *c, SrJob *j, SrPlayer *p, SrApproac
   j->alarms += res.alarm ? 1 : 0;
   if (res.success) {
     j->executed = true;
-    if (j->type == SR_JT_THEFT || j->type == SR_JT_FIND || j->type == SR_JT_EXTRACT ||
-        j->type == SR_JT_STEAL_DATA) {
+    if (j->type == SR_JT_THEFT || j->type == SR_JT_FIND || j->type == SR_JT_EXTRACT || j->type == SR_JT_STEAL_DATA) {
       SrItem it = sr_item_simple(j->type == SR_JT_STEAL_DATA ? SR_IK_PAYDATA : SR_IK_JOB, j->tier, 1);
       it.job = (int16_t)j->id;
       if (j->type == SR_JT_THEFT) it.flags |= SR_IF_STOLEN;
@@ -442,13 +435,11 @@ SrMissionResult sr_job_execute(const SrCity *c, SrJob *j, SrPlayer *p, SrApproac
 
 static void remove_job_items(SrPlayer *p, int32_t id) {
   for (int i = p->inv.count - 1; i >= 0; i--)
-    if ((p->inv.items[i].kind == SR_IK_JOB || p->inv.items[i].kind == SR_IK_PAYDATA) &&
-        p->inv.items[i].job == id)
+    if ((p->inv.items[i].kind == SR_IK_JOB || p->inv.items[i].kind == SR_IK_PAYDATA) && p->inv.items[i].job == id)
       sr_inv_remove_at(&p->inv, i, p->inv.items[i].count);
 }
 
-static void job_event(SrEventLog *log, const SrCity *c, const SrJob *j, SrEventType type,
-                      int64_t t, bool attributed) {
+static void job_event(SrEventLog *log, const SrCity *c, const SrJob *j, SrEventType type, int64_t t, bool attributed) {
   if (!log) return;
   SrWorldEvent ev;
   memset(&ev, 0, sizeof ev);
@@ -459,16 +450,16 @@ static void job_event(SrEventLog *log, const SrCity *c, const SrJob *j, SrEventT
   ev.victim_faction = j->target_faction;
   ev.blamed_faction = (int8_t)(attributed ? -2 : -1);
   ev.significant = j->tier >= 1;
-  snprintf(ev.text, sizeof ev.text, "the %s at %s",
-           sr_job_type_name((SrJobType)j->type), c->buildings[j->target_building].name[0]
-               ? c->buildings[j->target_building].name : c->districts[ev.district].name);
+  snprintf(ev.text, sizeof ev.text, "the %s at %s", sr_job_type_name((SrJobType)j->type),
+           c->buildings[j->target_building].name[0] ? c->buildings[j->target_building].name
+                                                    : c->districts[ev.district].name);
   sr_events_add(log, &ev);
 }
 
 int32_t sr_job_complete(SrJob *j, SrPlayer *p, int64_t t, SrEventLog *log, const SrCity *c) {
   if (j->state != SR_JS_ACCEPTED || !j->executed) return 0;
-  bool violated = ((j->constraints & SR_JC_NO_KILLS) && j->kills > 0) ||
-                  ((j->constraints & SR_JC_NO_ALARMS) && j->alarms > 0);
+  bool violated =
+      ((j->constraints & SR_JC_NO_KILLS) && j->kills > 0) || ((j->constraints & SR_JC_NO_ALARMS) && j->alarms > 0);
   remove_job_items(p, j->id);
   if (violated && j->constraint_fails) {
     j->state = SR_JS_FAILED;
@@ -489,9 +480,9 @@ int32_t sr_job_complete(SrJob *j, SrPlayer *p, int64_t t, SrEventLog *log, const
   /* Street Cred grows only with work at the edge of what you can do */
   if (j->tier >= sr_max_tier_for_cred(p->prog.street_cred)) sr_progress_add_cred(&p->prog, j->tier + 1);
   sr_progress_standing(&p->prog, j->client_faction, 5, true);
-  SrEventType et = j->type == SR_JT_SABOTAGE ? SR_EV_SABOTAGE
+  SrEventType et = j->type == SR_JT_SABOTAGE                               ? SR_EV_SABOTAGE
                    : j->type == SR_JT_THEFT || j->type == SR_JT_STEAL_DATA ? SR_EV_THEFT
-                                                                         : SR_EV_JOB_DONE;
+                                                                           : SR_EV_JOB_DONE;
   job_event(log, c, j, et, t, j->alarms > 0);
   return pay;
 }
@@ -507,7 +498,8 @@ int sr_jobs_tick(SrJobBoard *b, SrPlayer *p, int64_t t, SrEventLog *log) {
       b->failed++;
       failed++;
       if (log) {
-        SrWorldEvent ev = {SR_EV_JOB_FAILED, t, -1, j->target_building, j->target_faction, -1, false, "missed deadline"};
+        SrWorldEvent ev = {SR_EV_JOB_FAILED,  t,  -1,    j->target_building,
+                           j->target_faction, -1, false, "missed deadline"};
         sr_events_add(log, &ev);
       }
     } else if (j->state == SR_JS_OFFERED && t > j->deadline) {

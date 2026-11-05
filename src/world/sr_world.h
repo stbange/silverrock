@@ -6,32 +6,58 @@
 
 #include "core/sr_types.h"
 
-#define SR_GEN_VERSION 1u
-#define SR_BLOCK_CM 9600   /* block pitch including the street */
-#define SR_STREET_CM 1600  /* street width */
-#define SR_MAX_GRID 42
-#define SR_MAX_BLOCKS (SR_MAX_GRID * SR_MAX_GRID)
-#define SR_MAX_BUILDINGS (SR_MAX_BLOCKS * 4)
-#define SR_MAX_DISTRICTS 14
-#define SR_MAX_STATIONS 24
+#define SR_GEN_VERSION     1u
+#define SR_BLOCK_CM        9600 /* block pitch including the street */
+#define SR_STREET_CM       1600 /* street width */
+#define SR_MAX_GRID        42
+#define SR_MAX_BLOCKS      (SR_MAX_GRID * SR_MAX_GRID)
+#define SR_MAX_BUILDINGS   (SR_MAX_BLOCKS * 4)
+#define SR_MAX_DISTRICTS   14
+#define SR_MAX_STATIONS    24
 #define SR_MAX_METRO_EDGES 48
-#define SR_MAX_SKYWAYS 160
-#define SR_MAX_FACTIONS 32
-#define SR_NAME_LEN 40
+#define SR_MAX_SKYWAYS     160
+#define SR_MAX_FACTIONS    32
+#define SR_NAME_LEN        40
 
 typedef enum SrDistrictType {
-  SR_D_SPIRE, SR_D_CIVIC, SR_D_COMMERCIAL, SR_D_ENTERTAINMENT, SR_D_RESIDENTIAL,
-  SR_D_OLDQUARTER, SR_D_INDUSTRIAL, SR_D_DOCKS, SR_D_CAMPUS, SR_D_UNDERCITY, SR_D_BARRENS,
+  SR_D_SPIRE,
+  SR_D_CIVIC,
+  SR_D_COMMERCIAL,
+  SR_D_ENTERTAINMENT,
+  SR_D_RESIDENTIAL,
+  SR_D_OLDQUARTER,
+  SR_D_INDUSTRIAL,
+  SR_D_DOCKS,
+  SR_D_CAMPUS,
+  SR_D_UNDERCITY,
+  SR_D_BARRENS,
   SR_D_COUNT
 } SrDistrictType;
 
 typedef enum SrPoi {
-  SR_POI_NONE, SR_POI_FOOD, SR_POI_BAR, SR_POI_CLINIC, SR_POI_RIPPERDOC, SR_POI_GUNSHOP,
-  SR_POI_ELECTRONICS, SR_POI_CLOTHING, SR_POI_FENCE, SR_POI_CAPSULE, SR_POI_MATRIX_BOOTH,
-  SR_POI_FIXER, SR_POI_POLICE, SR_POI_GROCERY, SR_POI_UV_BOOTH,
+  SR_POI_NONE,
+  SR_POI_FOOD,
+  SR_POI_BAR,
+  SR_POI_CLINIC,
+  SR_POI_RIPPERDOC,
+  SR_POI_GUNSHOP,
+  SR_POI_ELECTRONICS,
+  SR_POI_CLOTHING,
+  SR_POI_FENCE,
+  SR_POI_CAPSULE,
+  SR_POI_MATRIX_BOOTH,
+  SR_POI_FIXER,
+  SR_POI_POLICE,
+  SR_POI_GROCERY,
+  SR_POI_UV_BOOTH,
   /* special places assigned by generation, not by weight tables */
-  SR_POI_CITY_HALL, SR_POI_CORP_HQ, SR_POI_CORP_FACILITY, SR_POI_GANG_HIDEOUT, SR_POI_MEDIA,
-  SR_POI_HOME, SR_POI_COUNT
+  SR_POI_CITY_HALL,
+  SR_POI_CORP_HQ,
+  SR_POI_CORP_FACILITY,
+  SR_POI_GANG_HIDEOUT,
+  SR_POI_MEDIA,
+  SR_POI_HOME,
+  SR_POI_COUNT
 } SrPoi;
 #define SR_POI_FIRST_SPECIAL SR_POI_CITY_HALL
 
@@ -72,7 +98,7 @@ typedef struct SrBuilding {
   uint8_t style;
   uint8_t poi;
   uint8_t flags;
-  int8_t owner; /* faction index or -1 */
+  int8_t owner;          /* faction index or -1 */
   uint8_t silhouette[4]; /* landmark shape parameters: tiers, taper, crown, width */
   char name[SR_NAME_LEN];
 } SrBuilding;
@@ -93,17 +119,37 @@ typedef struct SrSkyway {
 /* ---- factions ---------------------------------------------------------- */
 
 typedef enum SrFactionKind {
-  SR_FK_CORP, SR_FK_GANG, SR_FK_GOV, SR_FK_POLICE, SR_FK_MEDIA, SR_FK_COLLECTIVE, SR_FK_UNION,
+  SR_FK_CORP,
+  SR_FK_GANG,
+  SR_FK_GOV,
+  SR_FK_POLICE,
+  SR_FK_MEDIA,
+  SR_FK_COLLECTIVE,
+  SR_FK_UNION,
   SR_FK_CHURCH
 } SrFactionKind;
 
 typedef enum SrSector {
-  SR_SEC_ARMS, SR_SEC_CYBER, SR_SEC_BIO, SR_SEC_MEDIA, SR_SEC_NET, SR_SEC_FINANCE,
-  SR_SEC_ENERGY, SR_SEC_LOGISTICS, SR_SEC_CONSTRUCTION, SR_SEC_ORBITAL, SR_SEC_COUNT
+  SR_SEC_ARMS,
+  SR_SEC_CYBER,
+  SR_SEC_BIO,
+  SR_SEC_MEDIA,
+  SR_SEC_NET,
+  SR_SEC_FINANCE,
+  SR_SEC_ENERGY,
+  SR_SEC_LOGISTICS,
+  SR_SEC_CONSTRUCTION,
+  SR_SEC_ORBITAL,
+  SR_SEC_COUNT
 } SrSector;
 
 typedef enum SrDoctrine {
-  SR_DOC_SHARK, SR_DOC_FORTRESS, SR_DOC_SPIDER, SR_DOC_PROPHET, SR_DOC_VULTURE, SR_DOC_COUNT
+  SR_DOC_SHARK,
+  SR_DOC_FORTRESS,
+  SR_DOC_SPIDER,
+  SR_DOC_PROPHET,
+  SR_DOC_VULTURE,
+  SR_DOC_COUNT
 } SrDoctrine;
 
 typedef struct SrFaction {
@@ -161,7 +207,7 @@ typedef struct SrCity {
   uint32_t gen_version;
   SrCityOptions opt;
   char name[SR_NAME_LEN];
-  int grid; /* grid x grid blocks */
+  int grid;       /* grid x grid blocks */
   int coast_side; /* 0 west, 1 east, 2 north, 3 south, 4 inland */
   SrBlock blocks[SR_MAX_BLOCKS];
   int district_count;

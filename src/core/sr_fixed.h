@@ -8,7 +8,7 @@
 typedef int32_t SrFix;
 
 #define SR_FIX_ONE ((SrFix)65536)
-#define SR_FIX(i) ((SrFix)((i) * 65536))
+#define SR_FIX(i)  ((SrFix)((i) * 65536))
 
 SrFix sr_fix_mul(SrFix a, SrFix b);
 SrFix sr_fix_div(SrFix a, SrFix b);

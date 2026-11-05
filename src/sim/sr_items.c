@@ -63,27 +63,24 @@ static const SrGadgetDef k_gadgets[SR_GD_COUNT] = {
 };
 
 static const SrCyberDef k_cyber[] = {
-    {"Reflex Booster", SR_CS_NEURAL, 3, 3500},   {"Memory Expansion", SR_CS_NEURAL, 2, 2200},
-    {"Thermal Optics", SR_CS_OPTICS, 2, 1800},   {"Netsight Optics", SR_CS_OPTICS, 2, 2400},
-    {"Smartlink", SR_CS_ARMS, 2, 2600},          {"Mono-Claws", SR_CS_ARMS, 3, 3900},
-    {"Lockpick Fingers", SR_CS_HANDS, 1, 900},   {"Data Jack", SR_CS_HANDS, 1, 1200},
-    {"Jump Boosters", SR_CS_LEGS, 3, 3200},      {"Silent Steps", SR_CS_LEGS, 1, 1100},
-    {"Subdermal Armour", SR_CS_SKIN, 3, 3000},   {"Chameleon Skin", SR_CS_SKIN, 4, 6500},
-    {"Toxin Filter", SR_CS_TORSO, 1, 800},       {"Second Heart", SR_CS_TORSO, 4, 9000},
-    {"Stabiliser Spine", SR_CS_SPINE, 2, 2100},  {"Interface Port", SR_CS_SPINE, 2, 2800},
+    {"Reflex Booster", SR_CS_NEURAL, 3, 3500},  {"Memory Expansion", SR_CS_NEURAL, 2, 2200},
+    {"Thermal Optics", SR_CS_OPTICS, 2, 1800},  {"Netsight Optics", SR_CS_OPTICS, 2, 2400},
+    {"Smartlink", SR_CS_ARMS, 2, 2600},         {"Mono-Claws", SR_CS_ARMS, 3, 3900},
+    {"Lockpick Fingers", SR_CS_HANDS, 1, 900},  {"Data Jack", SR_CS_HANDS, 1, 1200},
+    {"Jump Boosters", SR_CS_LEGS, 3, 3200},     {"Silent Steps", SR_CS_LEGS, 1, 1100},
+    {"Subdermal Armour", SR_CS_SKIN, 3, 3000},  {"Chameleon Skin", SR_CS_SKIN, 4, 6500},
+    {"Toxin Filter", SR_CS_TORSO, 1, 800},      {"Second Heart", SR_CS_TORSO, 4, 9000},
+    {"Stabiliser Spine", SR_CS_SPINE, 2, 2100}, {"Interface Port", SR_CS_SPINE, 2, 2800},
 };
 
 static const SrFoodDef k_food[] = {
     {"Street Noodles", 35, 12}, {"Food Pack", 25, 8}, {"Bar Meal", 50, 25}, {"Synth Bar", 15, 5}};
 
-static const SrRecipe k_recipes[] = {
-    {SR_GD_SMOKE, 2}, {SR_GD_FLASH, 3}, {SR_GD_FRAG, 4}, {SR_GD_LURE, 1}, {SR_GD_MEDKIT, 2},
-    {SR_GD_EMP, 5},   {SR_GD_DATASPIKE, 6}};
+static const SrRecipe k_recipes[] = {{SR_GD_SMOKE, 2},  {SR_GD_FLASH, 3}, {SR_GD_FRAG, 4},     {SR_GD_LURE, 1},
+                                     {SR_GD_MEDKIT, 2}, {SR_GD_EMP, 5},   {SR_GD_DATASPIKE, 6}};
 
 int sr_archetype_count(void) { return (int)SR_ARRAY_LEN(k_archetypes); }
-const SrArchetype *sr_archetype(int i) {
-  return i >= 0 && i < sr_archetype_count() ? &k_archetypes[i] : NULL;
-}
+const SrArchetype *sr_archetype(int i) { return i >= 0 && i < sr_archetype_count() ? &k_archetypes[i] : NULL; }
 const SrGadgetDef *sr_gadget_def(int g) { return g >= 0 && g < SR_GD_COUNT ? &k_gadgets[g] : NULL; }
 int sr_cyber_count(void) { return (int)SR_ARRAY_LEN(k_cyber); }
 const SrCyberDef *sr_cyber_def(int i) { return i >= 0 && i < sr_cyber_count() ? &k_cyber[i] : NULL; }
@@ -91,31 +88,31 @@ int sr_food_count(void) { return (int)SR_ARRAY_LEN(k_food); }
 const SrFoodDef *sr_food_def(int i) { return i >= 0 && i < sr_food_count() ? &k_food[i] : NULL; }
 
 const char *sr_mod_name(int m) {
-  static const char *const n[SR_MOD_COUNT] = {"none", "Suppressor", "Compensator", "Red Dot",
-                                              "Scope", "Extended Mag", "Weapon Light",
-                                              "Smart Chip"};
+  static const char *const n[SR_MOD_COUNT] = {"none",  "Suppressor",   "Compensator",  "Red Dot",
+                                              "Scope", "Extended Mag", "Weapon Light", "Smart Chip"};
   return m >= 0 && m < SR_MOD_COUNT ? n[m] : "?";
 }
 
 SrModSlot sr_mod_slot(SrMod m) {
   switch (m) {
-  case SR_MOD_SUPPRESSOR: case SR_MOD_COMPENSATOR: return SR_SLOT_MUZZLE;
-  case SR_MOD_REDDOT: case SR_MOD_SCOPE: return SR_SLOT_OPTIC;
-  case SR_MOD_EXTMAG: return SR_SLOT_MAG;
-  case SR_MOD_LIGHT: return SR_SLOT_UNDER;
-  default: return SR_SLOT_CHIP;
+    case SR_MOD_SUPPRESSOR:
+    case SR_MOD_COMPENSATOR: return SR_SLOT_MUZZLE;
+    case SR_MOD_REDDOT:
+    case SR_MOD_SCOPE: return SR_SLOT_OPTIC;
+    case SR_MOD_EXTMAG: return SR_SLOT_MAG;
+    case SR_MOD_LIGHT: return SR_SLOT_UNDER;
+    default: return SR_SLOT_CHIP;
   }
 }
 
 const char *sr_ammo_name(int a) {
-  static const char *const n[SR_AMMO_COUNT] = {"Standard", "Armour-Piercing", "Hollow-Point",
-                                               "EMP", "Incendiary", "Gel", "Tracker"};
+  static const char *const n[SR_AMMO_COUNT] = {"Standard", "Armour-Piercing", "Hollow-Point", "EMP", "Incendiary",
+                                               "Gel",      "Tracker"};
   return a >= 0 && a < SR_AMMO_COUNT ? n[a] : "?";
 }
 
 const char *sr_rarity_name(int r) {
-  static const char *const n[SR_RAR_COUNT] = {"Street", "Standard", "Military", "Prototype",
-                                              "Signature"};
+  static const char *const n[SR_RAR_COUNT] = {"Street", "Standard", "Military", "Prototype", "Signature"};
   return r >= 0 && r < SR_RAR_COUNT ? n[r] : "?";
 }
 
@@ -207,23 +204,32 @@ SrWeaponStats sr_weapon_stats(uint64_t city_seed, const SrItem *w) {
   s.style = (uint8_t)sr_maker_style(w->maker);
   for (int slot = 0; slot < SR_SLOT_COUNT; slot++) {
     switch (w->mods[slot]) {
-    case SR_MOD_SUPPRESSOR: s.noise *= 0.35f; break;
-    case SR_MOD_COMPENSATOR: s.spread *= 0.8f; break;
-    case SR_MOD_REDDOT: s.spread *= 0.9f; break;
-    case SR_MOD_SCOPE: s.range *= 1.5f; break;
-    case SR_MOD_EXTMAG: s.mag = s.mag * 3 / 2; break;
-    case SR_MOD_SMARTCHIP: s.spread *= 0.7f; break;
-    default: break;
+      case SR_MOD_SUPPRESSOR: s.noise *= 0.35f; break;
+      case SR_MOD_COMPENSATOR: s.spread *= 0.8f; break;
+      case SR_MOD_REDDOT: s.spread *= 0.9f; break;
+      case SR_MOD_SCOPE: s.range *= 1.5f; break;
+      case SR_MOD_EXTMAG: s.mag = s.mag * 3 / 2; break;
+      case SR_MOD_SMARTCHIP: s.spread *= 0.7f; break;
+      default: break;
     }
   }
   if (a->category != SR_WC_MELEE) {
     switch (w->ammo) {
-    case SR_AMMO_AP: s.penetration += 0.5f; s.damage *= 0.9f; break;
-    case SR_AMMO_HOLLOW: s.damage *= 1.25f; s.penetration -= 0.3f; break;
-    case SR_AMMO_EMP: s.damage_type = SR_DMG_EMP; break;
-    case SR_AMMO_INCENDIARY: s.damage_type = SR_DMG_THERMAL; break;
-    case SR_AMMO_GEL: s.damage *= 0.7f; s.lethal = false; break;
-    default: break;
+      case SR_AMMO_AP:
+        s.penetration += 0.5f;
+        s.damage *= 0.9f;
+        break;
+      case SR_AMMO_HOLLOW:
+        s.damage *= 1.25f;
+        s.penetration -= 0.3f;
+        break;
+      case SR_AMMO_EMP: s.damage_type = SR_DMG_EMP; break;
+      case SR_AMMO_INCENDIARY: s.damage_type = SR_DMG_THERMAL; break;
+      case SR_AMMO_GEL:
+        s.damage *= 0.7f;
+        s.lethal = false;
+        break;
+      default: break;
     }
   }
   if (s.penetration < 0) s.penetration = 0;
@@ -233,54 +239,54 @@ SrWeaponStats sr_weapon_stats(uint64_t city_seed, const SrItem *w) {
 float sr_item_weight(const SrItem *it) {
   float w = 0.2f;
   switch (it->kind) {
-  case SR_IK_WEAPON: w = sr_archetype(it->type) ? sr_archetype(it->type)->weight : 1.0f; break;
-  case SR_IK_GADGET: w = sr_gadget_def(it->type) ? sr_gadget_def(it->type)->weight : 0.3f; break;
-  case SR_IK_AMMO: w = 0.02f; break;
-  case SR_IK_FOOD: w = 0.3f; break;
-  case SR_IK_COMPONENT: w = 0.1f; break;
-  case SR_IK_OUTFIT: w = 1.0f; break;
-  case SR_IK_DECK: w = 1.2f; break;
-  default: break;
+    case SR_IK_WEAPON: w = sr_archetype(it->type) ? sr_archetype(it->type)->weight : 1.0f; break;
+    case SR_IK_GADGET: w = sr_gadget_def(it->type) ? sr_gadget_def(it->type)->weight : 0.3f; break;
+    case SR_IK_AMMO: w = 0.02f; break;
+    case SR_IK_FOOD: w = 0.3f; break;
+    case SR_IK_COMPONENT: w = 0.1f; break;
+    case SR_IK_OUTFIT: w = 1.0f; break;
+    case SR_IK_DECK: w = 1.2f; break;
+    default: break;
   }
   return w * (float)(it->count ? it->count : 1);
 }
 
 int32_t sr_item_base_price(const SrItem *it) {
   switch (it->kind) {
-  case SR_IK_WEAPON: {
-    const SrArchetype *a = sr_archetype(it->type);
-    return a ? a->price * (2 + it->rarity) / 2 : 0;
-  }
-  case SR_IK_GADGET: return sr_gadget_def(it->type) ? sr_gadget_def(it->type)->price : 0;
-  case SR_IK_FOOD: return sr_food_def(it->type) ? sr_food_def(it->type)->price : 0;
-  case SR_IK_CYBER: return sr_cyber_def(it->type) ? sr_cyber_def(it->type)->price * (1 + it->grade) : 0;
-  case SR_IK_AMMO: return 1 + it->type;
-  case SR_IK_MOD: return 300;
-  case SR_IK_COMPONENT: return 15;
-  case SR_IK_PAYDATA: return 500 + 250 * it->type;
-  case SR_IK_OUTFIT: return 150;
-  case SR_IK_DECK: return 800 * (1 + it->type);
-  default: return 0;
+    case SR_IK_WEAPON: {
+      const SrArchetype *a = sr_archetype(it->type);
+      return a ? a->price * (2 + it->rarity) / 2 : 0;
+    }
+    case SR_IK_GADGET: return sr_gadget_def(it->type) ? sr_gadget_def(it->type)->price : 0;
+    case SR_IK_FOOD: return sr_food_def(it->type) ? sr_food_def(it->type)->price : 0;
+    case SR_IK_CYBER: return sr_cyber_def(it->type) ? sr_cyber_def(it->type)->price * (1 + it->grade) : 0;
+    case SR_IK_AMMO: return 1 + it->type;
+    case SR_IK_MOD: return 300;
+    case SR_IK_COMPONENT: return 15;
+    case SR_IK_PAYDATA: return 500 + 250 * it->type;
+    case SR_IK_OUTFIT: return 150;
+    case SR_IK_DECK: return 800 * (1 + it->type);
+    default: return 0;
   }
 }
 
 void sr_item_name(const SrCity *c, const SrItem *it, char *out, size_t cap) {
   char maker[SR_NAME_LEN];
   switch (it->kind) {
-  case SR_IK_WEAPON:
-    sr_maker_name(c, it->maker, maker, sizeof maker);
-    snprintf(out, cap, "%s %s (%s)", maker, sr_archetype(it->type)->name, sr_rarity_name(it->rarity));
-    break;
-  case SR_IK_GADGET: snprintf(out, cap, "%s", sr_gadget_def(it->type)->name); break;
-  case SR_IK_FOOD: snprintf(out, cap, "%s", sr_food_def(it->type)->name); break;
-  case SR_IK_CYBER: snprintf(out, cap, "%s", sr_cyber_def(it->type)->name); break;
-  case SR_IK_AMMO: snprintf(out, cap, "%s Rounds", sr_ammo_name(it->type)); break;
-  case SR_IK_MOD: snprintf(out, cap, "%s", sr_mod_name(it->type)); break;
-  case SR_IK_PAYDATA: snprintf(out, cap, "Paydata (grade %d)", it->type); break;
-  case SR_IK_JOB: snprintf(out, cap, "Sealed Package"); break;
-  case SR_IK_DECK: snprintf(out, cap, "Cyberdeck Mk %d", it->type + 1); break;
-  case SR_IK_OUTFIT: snprintf(out, cap, "Outfit %d", it->type); break;
-  default: snprintf(out, cap, "Components"); break;
+    case SR_IK_WEAPON:
+      sr_maker_name(c, it->maker, maker, sizeof maker);
+      snprintf(out, cap, "%s %s (%s)", maker, sr_archetype(it->type)->name, sr_rarity_name(it->rarity));
+      break;
+    case SR_IK_GADGET: snprintf(out, cap, "%s", sr_gadget_def(it->type)->name); break;
+    case SR_IK_FOOD: snprintf(out, cap, "%s", sr_food_def(it->type)->name); break;
+    case SR_IK_CYBER: snprintf(out, cap, "%s", sr_cyber_def(it->type)->name); break;
+    case SR_IK_AMMO: snprintf(out, cap, "%s Rounds", sr_ammo_name(it->type)); break;
+    case SR_IK_MOD: snprintf(out, cap, "%s", sr_mod_name(it->type)); break;
+    case SR_IK_PAYDATA: snprintf(out, cap, "Paydata (grade %d)", it->type); break;
+    case SR_IK_JOB: snprintf(out, cap, "Sealed Package"); break;
+    case SR_IK_DECK: snprintf(out, cap, "Cyberdeck Mk %d", it->type + 1); break;
+    case SR_IK_OUTFIT: snprintf(out, cap, "Outfit %d", it->type); break;
+    default: snprintf(out, cap, "Components"); break;
   }
 }
 
@@ -310,8 +316,7 @@ bool sr_remove_mod(SrItem *w, SrModSlot slot, SrInventory *inv) {
 void sr_inv_init(SrInventory *inv) { memset(inv, 0, sizeof *inv); }
 
 static bool stackable(SrItemKind k) {
-  return k == SR_IK_AMMO || k == SR_IK_GADGET || k == SR_IK_FOOD || k == SR_IK_COMPONENT ||
-         k == SR_IK_MOD;
+  return k == SR_IK_AMMO || k == SR_IK_GADGET || k == SR_IK_FOOD || k == SR_IK_COMPONENT || k == SR_IK_MOD;
 }
 
 bool sr_inv_add(SrInventory *inv, SrItem it) {
@@ -350,8 +355,7 @@ int sr_inv_find(const SrInventory *inv, SrItemKind kind, int type) {
 int sr_inv_count(const SrInventory *inv, SrItemKind kind, int type) {
   int n = 0;
   for (int i = 0; i < inv->count; i++)
-    if (inv->items[i].kind == kind && (type < 0 || inv->items[i].type == type))
-      n += inv->items[i].count;
+    if (inv->items[i].kind == kind && (type < 0 || inv->items[i].type == type)) n += inv->items[i].count;
   return n;
 }
 
@@ -428,64 +432,67 @@ int sr_vendor_stock(const SrCity *c, int building, int64_t day, SrItem *out, int
   SrRng r = sr_rng_stream(c->seed, "stock", (uint64_t)building, (uint64_t)day);
   int n = 0;
   int poi = c->buildings[building].poi;
-#define PUSH(item) do { if (n < max) out[n++] = (item); } while (0)
+#define PUSH(item)                                                                                                     \
+  do {                                                                                                                 \
+    if (n < max) out[n++] = (item);                                                                                    \
+  } while (0)
   switch (poi) {
-  case SR_POI_FOOD:
-    PUSH(sr_item_simple(SR_IK_FOOD, 0, 1));
-    PUSH(sr_item_simple(SR_IK_FOOD, 3, 1));
-    break;
-  case SR_POI_BAR: PUSH(sr_item_simple(SR_IK_FOOD, 2, 1)); break;
-  case SR_POI_GROCERY:
-    PUSH(sr_item_simple(SR_IK_FOOD, 1, 1));
-    PUSH(sr_item_simple(SR_IK_FOOD, 3, 1));
-    break;
-  case SR_POI_CLINIC:
-    PUSH(sr_item_simple(SR_IK_GADGET, SR_GD_MEDKIT, 1));
-    PUSH(sr_item_simple(SR_IK_GADGET, SR_GD_TRAUMA, 1));
-    PUSH(sr_item_simple(SR_IK_GADGET, SR_GD_PAINKILLER, 1));
-    break;
-  case SR_POI_GUNSHOP: {
-    for (int k = 0; k < 5; k++) {
-      int maker = SR_STREET_MAKER_FIRST + sr_rng_range(&r, 0, 1);
-      int corp = sr_rng_range(&r, 0, c->factions.corp_count - 1);
-      if (sr_maker_valid(c, corp) && sr_rng_chance(&r, 600)) maker = corp;
+    case SR_POI_FOOD:
+      PUSH(sr_item_simple(SR_IK_FOOD, 0, 1));
+      PUSH(sr_item_simple(SR_IK_FOOD, 3, 1));
+      break;
+    case SR_POI_BAR: PUSH(sr_item_simple(SR_IK_FOOD, 2, 1)); break;
+    case SR_POI_GROCERY:
+      PUSH(sr_item_simple(SR_IK_FOOD, 1, 1));
+      PUSH(sr_item_simple(SR_IK_FOOD, 3, 1));
+      break;
+    case SR_POI_CLINIC:
+      PUSH(sr_item_simple(SR_IK_GADGET, SR_GD_MEDKIT, 1));
+      PUSH(sr_item_simple(SR_IK_GADGET, SR_GD_TRAUMA, 1));
+      PUSH(sr_item_simple(SR_IK_GADGET, SR_GD_PAINKILLER, 1));
+      break;
+    case SR_POI_GUNSHOP: {
+      for (int k = 0; k < 5; k++) {
+        int maker = SR_STREET_MAKER_FIRST + sr_rng_range(&r, 0, 1);
+        int corp = sr_rng_range(&r, 0, c->factions.corp_count - 1);
+        if (sr_maker_valid(c, corp) && sr_rng_chance(&r, 600)) maker = corp;
+        int arch = sr_rng_range(&r, 0, sr_archetype_count() - 1);
+        int rarity = sr_rng_range(&r, 0, 2);
+        uint32_t wseed = sr_rng_u32(&r);
+        PUSH(sr_item_weapon(arch, maker, rarity, wseed));
+      }
+      PUSH(sr_item_simple(SR_IK_AMMO, SR_AMMO_STANDARD, 30));
+      PUSH(sr_item_simple(SR_IK_AMMO, SR_AMMO_GEL, 30));
+      PUSH(sr_item_simple(SR_IK_MOD, SR_MOD_SUPPRESSOR, 1));
+      break;
+    }
+    case SR_POI_ELECTRONICS:
+      for (int g = SR_GD_FRAG; g <= SR_GD_CAMO && n < max; g += 2 + sr_rng_range(&r, 0, 2))
+        PUSH(sr_item_simple(SR_IK_GADGET, g, 1));
+      PUSH(sr_item_simple(SR_IK_DECK, 1, 1));
+      PUSH(sr_item_simple(SR_IK_COMPONENT, 0, 5));
+      break;
+    case SR_POI_RIPPERDOC:
+      for (int k = 0; k < 4; k++) {
+        SrItem cy = sr_item_simple(SR_IK_CYBER, sr_rng_range(&r, 0, sr_cyber_count() - 1), 1);
+        cy.grade = (uint8_t)sr_rng_range(&r, 0, 2);
+        cy.maker = (int8_t)sr_rng_range(&r, 0, c->factions.corp_count - 1);
+        if (cy.grade > 0) cy.flags |= SR_IF_BACKDOOR; /* corporate chrome phones home */
+        cy.seed = sr_rng_u32(&r);
+        PUSH(cy);
+      }
+      break;
+    case SR_POI_CLOTHING:
+      for (int k = 0; k < 3; k++) PUSH(sr_item_simple(SR_IK_OUTFIT, sr_rng_range(&r, 1, 12), 1));
+      break;
+    case SR_POI_FENCE: {
       int arch = sr_rng_range(&r, 0, sr_archetype_count() - 1);
-      int rarity = sr_rng_range(&r, 0, 2);
       uint32_t wseed = sr_rng_u32(&r);
-      PUSH(sr_item_weapon(arch, maker, rarity, wseed));
+      PUSH(sr_item_weapon(arch, SR_STREET_MAKER_FIRST, 2, wseed));
+      out[n - 1].flags |= SR_IF_BLACKMARKET;
+      break;
     }
-    PUSH(sr_item_simple(SR_IK_AMMO, SR_AMMO_STANDARD, 30));
-    PUSH(sr_item_simple(SR_IK_AMMO, SR_AMMO_GEL, 30));
-    PUSH(sr_item_simple(SR_IK_MOD, SR_MOD_SUPPRESSOR, 1));
-    break;
-  }
-  case SR_POI_ELECTRONICS:
-    for (int g = SR_GD_FRAG; g <= SR_GD_CAMO && n < max; g += 2 + sr_rng_range(&r, 0, 2))
-      PUSH(sr_item_simple(SR_IK_GADGET, g, 1));
-    PUSH(sr_item_simple(SR_IK_DECK, 1, 1));
-    PUSH(sr_item_simple(SR_IK_COMPONENT, 0, 5));
-    break;
-  case SR_POI_RIPPERDOC:
-    for (int k = 0; k < 4; k++) {
-      SrItem cy = sr_item_simple(SR_IK_CYBER, sr_rng_range(&r, 0, sr_cyber_count() - 1), 1);
-      cy.grade = (uint8_t)sr_rng_range(&r, 0, 2);
-      cy.maker = (int8_t)sr_rng_range(&r, 0, c->factions.corp_count - 1);
-      if (cy.grade > 0) cy.flags |= SR_IF_BACKDOOR; /* corporate chrome phones home */
-      cy.seed = sr_rng_u32(&r);
-      PUSH(cy);
-    }
-    break;
-  case SR_POI_CLOTHING:
-    for (int k = 0; k < 3; k++) PUSH(sr_item_simple(SR_IK_OUTFIT, sr_rng_range(&r, 1, 12), 1));
-    break;
-  case SR_POI_FENCE: {
-    int arch = sr_rng_range(&r, 0, sr_archetype_count() - 1);
-    uint32_t wseed = sr_rng_u32(&r);
-    PUSH(sr_item_weapon(arch, SR_STREET_MAKER_FIRST, 2, wseed));
-    out[n - 1].flags |= SR_IF_BLACKMARKET;
-    break;
-  }
-  default: break;
+    default: break;
   }
 #undef PUSH
   return n;
@@ -497,13 +504,11 @@ bool sr_vendor_buys(const SrCity *c, int building, const SrItem *it) {
   if (poi == SR_POI_FENCE) return true;
   if (it->flags & SR_IF_STOLEN) return false;
   switch (poi) {
-  case SR_POI_GUNSHOP: return it->kind == SR_IK_WEAPON || it->kind == SR_IK_AMMO || it->kind == SR_IK_MOD;
-  case SR_POI_ELECTRONICS: return it->kind == SR_IK_GADGET || it->kind == SR_IK_DECK || it->kind == SR_IK_PAYDATA;
-  case SR_POI_RIPPERDOC: return it->kind == SR_IK_CYBER;
-  default: return false;
+    case SR_POI_GUNSHOP: return it->kind == SR_IK_WEAPON || it->kind == SR_IK_AMMO || it->kind == SR_IK_MOD;
+    case SR_POI_ELECTRONICS: return it->kind == SR_IK_GADGET || it->kind == SR_IK_DECK || it->kind == SR_IK_PAYDATA;
+    case SR_POI_RIPPERDOC: return it->kind == SR_IK_CYBER;
+    default: return false;
   }
 }
 
-bool sr_vendor_sells_blackmarket(int streetwise, int standing) {
-  return streetwise >= 5 || standing >= 50;
-}
+bool sr_vendor_sells_blackmarket(int streetwise, int standing) { return streetwise >= 5 || standing >= 50; }

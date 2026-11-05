@@ -29,14 +29,28 @@ typedef struct {
   size_t offset;
 } Field;
 
-#define F(name, type) {#name, type, offsetof(SrSettings, name)}
-static const Field k_fields[] = {
-    F(internal_res, T_INT), F(integer_scale, T_BOOL), F(fullscreen, T_BOOL), F(dither, T_BOOL),
-    F(quantize, T_BOOL), F(vertex_snap, T_BOOL), F(affine, T_BOOL), F(crt, T_BOOL),
-    F(dynamic_res, T_BOOL), F(mouse_sensitivity, T_FLOAT), F(touch_sensitivity, T_FLOAT),
-    F(aim_assist, T_FLOAT), F(toggle_aim, T_BOOL), F(toggle_crouch, T_BOOL),
-    F(toggle_sprint, T_BOOL), F(ui_scale, T_INT), F(volume, T_INT), F(difficulty, T_INT),
-    F(time_rate, T_INT), F(bindings, T_STR)};
+#define F(name, type)                                                                                                  \
+  { #name, type, offsetof(SrSettings, name) }
+static const Field k_fields[] = {F(internal_res, T_INT),
+                                 F(integer_scale, T_BOOL),
+                                 F(fullscreen, T_BOOL),
+                                 F(dither, T_BOOL),
+                                 F(quantize, T_BOOL),
+                                 F(vertex_snap, T_BOOL),
+                                 F(affine, T_BOOL),
+                                 F(crt, T_BOOL),
+                                 F(dynamic_res, T_BOOL),
+                                 F(mouse_sensitivity, T_FLOAT),
+                                 F(touch_sensitivity, T_FLOAT),
+                                 F(aim_assist, T_FLOAT),
+                                 F(toggle_aim, T_BOOL),
+                                 F(toggle_crouch, T_BOOL),
+                                 F(toggle_sprint, T_BOOL),
+                                 F(ui_scale, T_INT),
+                                 F(volume, T_INT),
+                                 F(difficulty, T_INT),
+                                 F(time_rate, T_INT),
+                                 F(bindings, T_STR)};
 #undef F
 
 int sr_settings_parse(SrSettings *s, const char *text) {
@@ -60,23 +74,23 @@ int sr_settings_parse(SrSettings *s, const char *text) {
       char *dst = (char *)s + k_fields[i].offset;
       int64_t iv;
       switch (k_fields[i].type) {
-      case T_INT:
-        if (!sr_parse_i64(val, &iv)) break;
-        *(int *)dst = (int)iv;
-        applied++;
-        break;
-      case T_BOOL:
-        *(bool *)dst = strcmp(val, "1") == 0 || strcmp(val, "true") == 0;
-        applied++;
-        break;
-      case T_FLOAT:
-        *(float *)dst = (float)atof(val);
-        applied++;
-        break;
-      default:
-        sr_strlcpy(dst, val, sizeof s->bindings);
-        applied++;
-        break;
+        case T_INT:
+          if (!sr_parse_i64(val, &iv)) break;
+          *(int *)dst = (int)iv;
+          applied++;
+          break;
+        case T_BOOL:
+          *(bool *)dst = strcmp(val, "1") == 0 || strcmp(val, "true") == 0;
+          applied++;
+          break;
+        case T_FLOAT:
+          *(float *)dst = (float)atof(val);
+          applied++;
+          break;
+        default:
+          sr_strlcpy(dst, val, sizeof s->bindings);
+          applied++;
+          break;
       }
     }
   }
@@ -90,10 +104,10 @@ void sr_settings_write(const SrSettings *s, char *out, size_t cap) {
     const char *src = (const char *)s + k_fields[i].offset;
     int n = 0;
     switch (k_fields[i].type) {
-    case T_INT: n = snprintf(out + o, cap - o, "%s=%d\n", k_fields[i].key, *(const int *)src); break;
-    case T_BOOL: n = snprintf(out + o, cap - o, "%s=%d\n", k_fields[i].key, *(const bool *)src ? 1 : 0); break;
-    case T_FLOAT: n = snprintf(out + o, cap - o, "%s=%.5f\n", k_fields[i].key, (double)*(const float *)src); break;
-    default: n = snprintf(out + o, cap - o, "%s=%s\n", k_fields[i].key, src); break;
+      case T_INT: n = snprintf(out + o, cap - o, "%s=%d\n", k_fields[i].key, *(const int *)src); break;
+      case T_BOOL: n = snprintf(out + o, cap - o, "%s=%d\n", k_fields[i].key, *(const bool *)src ? 1 : 0); break;
+      case T_FLOAT: n = snprintf(out + o, cap - o, "%s=%.5f\n", k_fields[i].key, (double)*(const float *)src); break;
+      default: n = snprintf(out + o, cap - o, "%s=%s\n", k_fields[i].key, src); break;
     }
     if (n < 0) break; /* GCOVR_EXCL_LINE reason: snprintf does not fail here */
     o += (size_t)n;

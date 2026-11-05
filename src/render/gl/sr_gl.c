@@ -20,67 +20,67 @@
 
 /* ---- entry points ---------------------------------------------------------------------- */
 
-#define SR_GL_FUNCS(X)                                                                         \
-  X(void, Viewport, (GLint, GLint, GLsizei, GLsizei))                                          \
-  X(void, ClearColor, (GLfloat, GLfloat, GLfloat, GLfloat))                                    \
-  X(void, Clear, (GLbitfield))                                                                 \
-  X(void, Enable, (GLenum))                                                                    \
-  X(void, Disable, (GLenum))                                                                   \
-  X(void, BlendFunc, (GLenum, GLenum))                                                         \
-  X(void, DepthFunc, (GLenum))                                                                 \
-  X(void, DepthMask, (GLboolean))                                                              \
-  X(void, GenVertexArrays, (GLsizei, GLuint *))                                                \
-  X(void, BindVertexArray, (GLuint))                                                           \
-  X(void, DeleteVertexArrays, (GLsizei, const GLuint *))                                       \
-  X(void, GenBuffers, (GLsizei, GLuint *))                                                     \
-  X(void, BindBuffer, (GLenum, GLuint))                                                        \
-  X(void, BufferData, (GLenum, GLsizeiptr, const void *, GLenum))                              \
-  X(void, DeleteBuffers, (GLsizei, const GLuint *))                                            \
-  X(void, VertexAttribPointer, (GLuint, GLint, GLenum, GLboolean, GLsizei, const void *))      \
-  X(void, EnableVertexAttribArray, (GLuint))                                                   \
-  X(GLuint, CreateShader, (GLenum))                                                            \
-  X(void, ShaderSource, (GLuint, GLsizei, const GLchar *const *, const GLint *))               \
-  X(void, CompileShader, (GLuint))                                                             \
-  X(void, GetShaderiv, (GLuint, GLenum, GLint *))                                              \
-  X(void, GetShaderInfoLog, (GLuint, GLsizei, GLsizei *, GLchar *))                            \
-  X(GLuint, CreateProgram, (void))                                                             \
-  X(void, AttachShader, (GLuint, GLuint))                                                      \
-  X(void, BindAttribLocation, (GLuint, GLuint, const GLchar *))                                \
-  X(void, LinkProgram, (GLuint))                                                               \
-  X(void, GetProgramiv, (GLuint, GLenum, GLint *))                                             \
-  X(void, GetProgramInfoLog, (GLuint, GLsizei, GLsizei *, GLchar *))                           \
-  X(void, UseProgram, (GLuint))                                                                \
-  X(void, DeleteShader, (GLuint))                                                              \
-  X(void, DeleteProgram, (GLuint))                                                             \
-  X(GLint, GetUniformLocation, (GLuint, const GLchar *))                                       \
-  X(void, Uniform1i, (GLint, GLint))                                                           \
-  X(void, Uniform1f, (GLint, GLfloat))                                                         \
-  X(void, Uniform2f, (GLint, GLfloat, GLfloat))                                                \
-  X(void, Uniform3f, (GLint, GLfloat, GLfloat, GLfloat))                                       \
-  X(void, Uniform3fv, (GLint, GLsizei, const GLfloat *))                                       \
-  X(void, Uniform4fv, (GLint, GLsizei, const GLfloat *))                                       \
-  X(void, UniformMatrix4fv, (GLint, GLsizei, GLboolean, const GLfloat *))                      \
-  X(void, GenTextures, (GLsizei, GLuint *))                                                    \
-  X(void, BindTexture, (GLenum, GLuint))                                                       \
-  X(void, DeleteTextures, (GLsizei, const GLuint *))                                           \
-  X(void, TexImage2D, (GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void *)) \
-  X(void, TexImage3D, (GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, const void *)) \
-  X(void, TexParameteri, (GLenum, GLenum, GLint))                                              \
-  X(void, ActiveTexture, (GLenum))                                                             \
-  X(void, PixelStorei, (GLenum, GLint))                                                        \
-  X(void, GenFramebuffers, (GLsizei, GLuint *))                                                \
-  X(void, BindFramebuffer, (GLenum, GLuint))                                                   \
-  X(void, FramebufferTexture2D, (GLenum, GLenum, GLenum, GLuint, GLint))                       \
-  X(void, FramebufferRenderbuffer, (GLenum, GLenum, GLenum, GLuint))                           \
-  X(GLenum, CheckFramebufferStatus, (GLenum))                                                  \
-  X(void, DeleteFramebuffers, (GLsizei, const GLuint *))                                       \
-  X(void, GenRenderbuffers, (GLsizei, GLuint *))                                               \
-  X(void, BindRenderbuffer, (GLenum, GLuint))                                                  \
-  X(void, RenderbufferStorage, (GLenum, GLenum, GLsizei, GLsizei))                             \
-  X(void, DeleteRenderbuffers, (GLsizei, const GLuint *))                                      \
-  X(void, DrawElements, (GLenum, GLsizei, GLenum, const void *))                               \
-  X(void, DrawArrays, (GLenum, GLint, GLsizei))                                                \
-  X(void, ReadPixels, (GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void *))                \
+#define SR_GL_FUNCS(X)                                                                                                 \
+  X(void, Viewport, (GLint, GLint, GLsizei, GLsizei))                                                                  \
+  X(void, ClearColor, (GLfloat, GLfloat, GLfloat, GLfloat))                                                            \
+  X(void, Clear, (GLbitfield))                                                                                         \
+  X(void, Enable, (GLenum))                                                                                            \
+  X(void, Disable, (GLenum))                                                                                           \
+  X(void, BlendFunc, (GLenum, GLenum))                                                                                 \
+  X(void, DepthFunc, (GLenum))                                                                                         \
+  X(void, DepthMask, (GLboolean))                                                                                      \
+  X(void, GenVertexArrays, (GLsizei, GLuint *))                                                                        \
+  X(void, BindVertexArray, (GLuint))                                                                                   \
+  X(void, DeleteVertexArrays, (GLsizei, const GLuint *))                                                               \
+  X(void, GenBuffers, (GLsizei, GLuint *))                                                                             \
+  X(void, BindBuffer, (GLenum, GLuint))                                                                                \
+  X(void, BufferData, (GLenum, GLsizeiptr, const void *, GLenum))                                                      \
+  X(void, DeleteBuffers, (GLsizei, const GLuint *))                                                                    \
+  X(void, VertexAttribPointer, (GLuint, GLint, GLenum, GLboolean, GLsizei, const void *))                              \
+  X(void, EnableVertexAttribArray, (GLuint))                                                                           \
+  X(GLuint, CreateShader, (GLenum))                                                                                    \
+  X(void, ShaderSource, (GLuint, GLsizei, const GLchar *const *, const GLint *))                                       \
+  X(void, CompileShader, (GLuint))                                                                                     \
+  X(void, GetShaderiv, (GLuint, GLenum, GLint *))                                                                      \
+  X(void, GetShaderInfoLog, (GLuint, GLsizei, GLsizei *, GLchar *))                                                    \
+  X(GLuint, CreateProgram, (void))                                                                                     \
+  X(void, AttachShader, (GLuint, GLuint))                                                                              \
+  X(void, BindAttribLocation, (GLuint, GLuint, const GLchar *))                                                        \
+  X(void, LinkProgram, (GLuint))                                                                                       \
+  X(void, GetProgramiv, (GLuint, GLenum, GLint *))                                                                     \
+  X(void, GetProgramInfoLog, (GLuint, GLsizei, GLsizei *, GLchar *))                                                   \
+  X(void, UseProgram, (GLuint))                                                                                        \
+  X(void, DeleteShader, (GLuint))                                                                                      \
+  X(void, DeleteProgram, (GLuint))                                                                                     \
+  X(GLint, GetUniformLocation, (GLuint, const GLchar *))                                                               \
+  X(void, Uniform1i, (GLint, GLint))                                                                                   \
+  X(void, Uniform1f, (GLint, GLfloat))                                                                                 \
+  X(void, Uniform2f, (GLint, GLfloat, GLfloat))                                                                        \
+  X(void, Uniform3f, (GLint, GLfloat, GLfloat, GLfloat))                                                               \
+  X(void, Uniform3fv, (GLint, GLsizei, const GLfloat *))                                                               \
+  X(void, Uniform4fv, (GLint, GLsizei, const GLfloat *))                                                               \
+  X(void, UniformMatrix4fv, (GLint, GLsizei, GLboolean, const GLfloat *))                                              \
+  X(void, GenTextures, (GLsizei, GLuint *))                                                                            \
+  X(void, BindTexture, (GLenum, GLuint))                                                                               \
+  X(void, DeleteTextures, (GLsizei, const GLuint *))                                                                   \
+  X(void, TexImage2D, (GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void *))                   \
+  X(void, TexImage3D, (GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, const void *))          \
+  X(void, TexParameteri, (GLenum, GLenum, GLint))                                                                      \
+  X(void, ActiveTexture, (GLenum))                                                                                     \
+  X(void, PixelStorei, (GLenum, GLint))                                                                                \
+  X(void, GenFramebuffers, (GLsizei, GLuint *))                                                                        \
+  X(void, BindFramebuffer, (GLenum, GLuint))                                                                           \
+  X(void, FramebufferTexture2D, (GLenum, GLenum, GLenum, GLuint, GLint))                                               \
+  X(void, FramebufferRenderbuffer, (GLenum, GLenum, GLenum, GLuint))                                                   \
+  X(GLenum, CheckFramebufferStatus, (GLenum))                                                                          \
+  X(void, DeleteFramebuffers, (GLsizei, const GLuint *))                                                               \
+  X(void, GenRenderbuffers, (GLsizei, GLuint *))                                                                       \
+  X(void, BindRenderbuffer, (GLenum, GLuint))                                                                          \
+  X(void, RenderbufferStorage, (GLenum, GLenum, GLsizei, GLsizei))                                                     \
+  X(void, DeleteRenderbuffers, (GLsizei, const GLuint *))                                                              \
+  X(void, DrawElements, (GLenum, GLsizei, GLenum, const void *))                                                       \
+  X(void, DrawArrays, (GLenum, GLint, GLsizei))                                                                        \
+  X(void, ReadPixels, (GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void *))                                        \
   X(GLenum, GetError, (void))
 
 #define DECLARE(ret, name, args) static ret(GLAPIENTRY_ *p##name) args;
@@ -96,8 +96,8 @@ bool sr_gl_load(SrGlGetProc get) {
   return true;
 #else
   bool ok = true;
-#define LOAD(ret, name, args)                                                                  \
-  p##name = (ret(GLAPIENTRY_ *) args)get("gl" #name);                                          \
+#define LOAD(ret, name, args)                                                                                          \
+  p##name = (ret(GLAPIENTRY_ *) args)get("gl" #name);                                                                  \
   if (!p##name) ok = false;
   SR_GL_FUNCS(LOAD)
 #undef LOAD
@@ -146,31 +146,29 @@ static const char *k_world_vs =
     "  v_fogz = -(u_view * vec4(a_pos, 1.0)).z;\n"
     "}\n";
 
-static const char *k_world_fs =
-    "uniform highp sampler2DArray u_tex;\n"
-    "uniform vec3 u_fog;\n"
-    "uniform vec2 u_fogr;\n"
-    "in vec4 v_color;\n"
-    "in vec3 v_uvw;\n"
-    "flat in float v_layer;\n"
-    "in float v_fogz;\n"
-    "in float v_em;\n"
-    "out vec4 o_color;\n"
-    "void main() {\n"
-    "  vec4 t = texture(u_tex, vec3(v_uvw.xy / v_uvw.z, v_layer));\n"
-    "  if (t.a < 0.5) discard;\n"
-    "  vec4 c = t * v_color;\n"
-    "  float lum = max(t.r, max(t.g, t.b));\n"
-    "  c.rgb += t.rgb * step(0.78, lum) * step(t.b, 0.99) * 1.1;\n"
-    "  float f = clamp((v_fogz - u_fogr.x) / (u_fogr.y - u_fogr.x), 0.0, 1.0);\n"
-    "  f *= 1.0 - 0.7 * v_em;\n" /* neon glows through fog: same formula as sr_fog_factor */
-    "  o_color = vec4(mix(c.rgb, u_fog, f), c.a);\n"
-    "}\n";
+static const char *k_world_fs = "uniform highp sampler2DArray u_tex;\n"
+                                "uniform vec3 u_fog;\n"
+                                "uniform vec2 u_fogr;\n"
+                                "in vec4 v_color;\n"
+                                "in vec3 v_uvw;\n"
+                                "flat in float v_layer;\n"
+                                "in float v_fogz;\n"
+                                "in float v_em;\n"
+                                "out vec4 o_color;\n"
+                                "void main() {\n"
+                                "  vec4 t = texture(u_tex, vec3(v_uvw.xy / v_uvw.z, v_layer));\n"
+                                "  if (t.a < 0.5) discard;\n"
+                                "  vec4 c = t * v_color;\n"
+                                "  float lum = max(t.r, max(t.g, t.b));\n"
+                                "  c.rgb += t.rgb * step(0.78, lum) * step(t.b, 0.99) * 1.1;\n"
+                                "  float f = clamp((v_fogz - u_fogr.x) / (u_fogr.y - u_fogr.x), 0.0, 1.0);\n"
+                                "  f *= 1.0 - 0.7 * v_em;\n" /* neon glows through fog: same formula as sr_fog_factor */
+                                "  o_color = vec4(mix(c.rgb, u_fog, f), c.a);\n"
+                                "}\n";
 
-static const char *k_post_vs =
-    "layout(location=0) in vec2 a_pos;\n"
-    "out vec2 v_uv;\n"
-    "void main() { v_uv = a_pos * 0.5 + 0.5; gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
+static const char *k_post_vs = "layout(location=0) in vec2 a_pos;\n"
+                               "out vec2 v_uv;\n"
+                               "void main() { v_uv = a_pos * 0.5 + 0.5; gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
 
 static const char *k_post_fs =
     "uniform sampler2D u_tex;\n"
@@ -196,8 +194,7 @@ static const char *k_post_fs =
     "}\n";
 
 void sr_gl_shader_source(bool gles, bool fragment, bool post, char *out, size_t cap) {
-  const char *pre = gles ? "#version 300 es\nprecision highp float;\nprecision highp int;\n"
-                         : "#version 330 core\n";
+  const char *pre = gles ? "#version 300 es\nprecision highp float;\nprecision highp int;\n" : "#version 330 core\n";
   const char *body = post ? (fragment ? k_post_fs : k_post_vs) : (fragment ? k_world_fs : k_world_vs);
   snprintf(out, cap, "%s%s", pre, body);
 }
@@ -244,13 +241,12 @@ static unsigned link_program(SrGlBackend *b, bool post) {
 
 static void upload_textures(SrGlBackend *b) {
   uint8_t *pixels = (uint8_t *)malloc((size_t)SR_TEX_SIZE * SR_TEX_SIZE * 4 * SR_TEX_LAYERS);
-  for (int l = 0; l < SR_TEX_LAYERS; l++)
-    sr_texgen_layer(l, pixels + (size_t)l * SR_TEX_SIZE * SR_TEX_SIZE * 4);
+  for (int l = 0; l < SR_TEX_LAYERS; l++) sr_texgen_layer(l, pixels + (size_t)l * SR_TEX_SIZE * SR_TEX_SIZE * 4);
   pGenTextures(1, &b->tex_array);
   pBindTexture(GL_TEXTURE_2D_ARRAY, b->tex_array);
   pPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  pTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, SR_TEX_SIZE, SR_TEX_SIZE, SR_TEX_LAYERS, 0, GL_RGBA,
-              GL_UNSIGNED_BYTE, pixels);
+  pTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, SR_TEX_SIZE, SR_TEX_SIZE, SR_TEX_LAYERS, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+              pixels);
   pTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   pTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   pTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -455,8 +451,10 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
     pUniform3f(b->u_fog, f->fog[0], f->fog[1], f->fog[2]);
     for (int i = 0; i < f->ndraws; i++) {
       const SrDraw *d = &f->draws[i];
-      if (d->pass == SR_PASS_NOFOG) pUniform2f(b->u_fogr, 1e6f, 2e6f);
-      else pUniform2f(b->u_fogr, f->fog_start, f->fog_end);
+      if (d->pass == SR_PASS_NOFOG)
+        pUniform2f(b->u_fogr, 1e6f, 2e6f);
+      else
+        pUniform2f(b->u_fogr, f->fog_start, f->fog_end);
       set_lights(b, f, d);
       draw_mesh(b, d->mesh);
     }
@@ -511,8 +509,7 @@ bool sr_glb_read_internal(SrGlBackend *b, uint8_t *rgb, int w, int h) {
   pBindFramebuffer(GL_FRAMEBUFFER, 0);
   for (int y = 0; y < h; y++)
     for (int x = 0; x < w; x++)
-      for (int k = 0; k < 3; k++)
-        rgb[((size_t)(h - 1 - y) * w + x) * 3 + k] = rgba[((size_t)y * w + x) * 4 + k];
+      for (int k = 0; k < 3; k++) rgb[((size_t)(h - 1 - y) * w + x) * 3 + k] = rgba[((size_t)y * w + x) * 4 + k];
   free(rgba);
   return pGetError() == GL_NO_ERROR;
 }
@@ -525,8 +522,7 @@ bool sr_glb_read_window(SrGlBackend *b, uint8_t *rgb, int x0, int y0, int w, int
   pReadPixels(x0, y0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
   for (int y = 0; y < h; y++)
     for (int x = 0; x < w; x++)
-      for (int k = 0; k < 3; k++)
-        rgb[((size_t)(h - 1 - y) * w + x) * 3 + k] = rgba[((size_t)y * w + x) * 4 + k];
+      for (int k = 0; k < 3; k++) rgb[((size_t)(h - 1 - y) * w + x) * 3 + k] = rgba[((size_t)y * w + x) * 4 + k];
   free(rgba);
   return true;
 }

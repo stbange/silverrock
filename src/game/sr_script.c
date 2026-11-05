@@ -31,10 +31,17 @@ static int max_heat(const SrGame *g) {
 bool sr_game_query(SrGame *g, const char *path, char *out, size_t cap) {
   const SrPlayer *p = &g->player;
   int64_t t = sr_game_time(g);
-#define Q(name, fmt, val) if (strcmp(path, name) == 0) { snprintf(out, cap, fmt, val); return true; }
+#define Q(name, fmt, val)                                                                                              \
+  if (strcmp(path, name) == 0) {                                                                                       \
+    snprintf(out, cap, fmt, val);                                                                                      \
+    return true;                                                                                                       \
+  }
   Q("player.cash", "%lld", (long long)p->cred)
   if (strcmp(path, "player.home") == 0) {
-    if (p->home < 0) snprintf(out, cap, "none"); else snprintf(out, cap, "%d", p->home);
+    if (p->home < 0)
+      snprintf(out, cap, "none");
+    else
+      snprintf(out, cap, "%d", p->home);
     return true;
   }
   Q("player.home.locked", "%s", p->evicted ? "true" : "false")
@@ -104,25 +111,37 @@ bool sr_game_query(SrGame *g, const char *path, char *out, size_t cap) {
 SrResult sr_game_set(SrGame *g, const char *path, const char *value) {
   double v = atof(value);
   SrPlayer *p = &g->player;
-  if (strcmp(path, "player.cash") == 0) p->cred = (int64_t)v;
-  else if (strcmp(path, "player.satiety") == 0) p->satiety = (float)v;
-  else if (strcmp(path, "player.fatigue") == 0) p->fatigue = (float)v;
-  else if (strcmp(path, "player.health") == 0) p->health = (float)v;
-  else if (strcmp(path, "player.cred") == 0) p->prog.street_cred = (int32_t)v;
-  else if (strcmp(path, "player.medevac") == 0) p->medevac = v != 0;
+  if (strcmp(path, "player.cash") == 0)
+    p->cred = (int64_t)v;
+  else if (strcmp(path, "player.satiety") == 0)
+    p->satiety = (float)v;
+  else if (strcmp(path, "player.fatigue") == 0)
+    p->fatigue = (float)v;
+  else if (strcmp(path, "player.health") == 0)
+    p->health = (float)v;
+  else if (strcmp(path, "player.cred") == 0)
+    p->prog.street_cred = (int32_t)v;
+  else if (strcmp(path, "player.medevac") == 0)
+    p->medevac = v != 0;
   else if (strcmp(path, "clock.time") == 0) {
     sr_clock_set_seconds(&g->clock, (int64_t)v);
     g->last_minute = (int64_t)v / 60;
-  } else if (strcmp(path, "hardcore") == 0) g->hardcore = v != 0;
-  else if (strcmp(path, "hostiles") == 0) g->hostiles_near = (int)v;
-  else if (strcmp(path, "combat") == 0) g->combat_count = (int)v;
-  else if (strcmp(path, "pall_removed") == 0) g->pall_removed = v != 0;
-  else if (strcmp(path, "crowd") == 0) g->crowd_enabled = v != 0;
+  } else if (strcmp(path, "hardcore") == 0)
+    g->hardcore = v != 0;
+  else if (strcmp(path, "hostiles") == 0)
+    g->hostiles_near = (int)v;
+  else if (strcmp(path, "combat") == 0)
+    g->combat_count = (int)v;
+  else if (strcmp(path, "pall_removed") == 0)
+    g->pall_removed = v != 0;
+  else if (strcmp(path, "crowd") == 0)
+    g->crowd_enabled = v != 0;
   else if (sr_str_starts_with(path, "player.skill.")) {
     int s = skill_by_name(path + 13);
     if (s < 0) return SR_ERR_NOT_FOUND;
     p->prog.skill_rank[s] = (int8_t)v;
-  } else return SR_ERR_NOT_FOUND;
+  } else
+    return SR_ERR_NOT_FOUND;
   return SR_OK;
 }
 
@@ -132,10 +151,10 @@ static int64_t parse_duration(const char *s) {
   char unit = s[strlen(s) - 1];
   double n = atof(s);
   switch (unit) {
-  case 'd': return (int64_t)(n * SR_DAY_S);
-  case 'h': return (int64_t)(n * 3600);
-  case 'm': return (int64_t)(n * 60);
-  default: return (int64_t)n;
+    case 'd': return (int64_t)(n * SR_DAY_S);
+    case 'h': return (int64_t)(n * 3600);
+    case 'm': return (int64_t)(n * 60);
+    default: return (int64_t)n;
   }
 }
 
@@ -156,8 +175,7 @@ static int poi_by_name(const char *n) {
 }
 
 static int bg_by_name(const char *n) {
-  static const char *const names[SR_BG_COUNT] = {"street_kid", "wageslave", "military", "netrunner",
-                                                 "medic"};
+  static const char *const names[SR_BG_COUNT] = {"street_kid", "wageslave", "military", "netrunner", "medic"};
   for (int i = 0; i < SR_BG_COUNT; i++)
     if (strcmp(n, names[i]) == 0) return i;
   return -1;
@@ -198,8 +216,10 @@ static SrResult command(ScriptState *st, char *line, char *out, size_t cap) {
   const char *cmd = tok[0];
   if (strcmp(cmd, "seed") == 0 && n >= 2) {
     int64_t v;
-    if (sr_parse_i64(tok[1], &v)) st->seed = (uint64_t)v;
-    else if (!sr_seed_from_code(tok[1], &st->seed)) return SR_ERR_INVALID;
+    if (sr_parse_i64(tok[1], &v))
+      st->seed = (uint64_t)v;
+    else if (!sr_seed_from_code(tok[1], &st->seed))
+      return SR_ERR_INVALID;
     return SR_OK;
   }
   if (strcmp(cmd, "newgame") == 0) {
@@ -231,8 +251,10 @@ static SrResult command(ScriptState *st, char *line, char *out, size_t cap) {
   if ((strcmp(cmd, "press") == 0 || strcmp(cmd, "release") == 0 || strcmp(cmd, "hold") == 0) && n >= 2) {
     int a = action_by_name(tok[1]);
     if (a < 0) return SR_ERR_INVALID;
-    if (cmd[0] == 'p') run_steps(st, 1, a);
-    else if (cmd[0] == 'r') st->held[a] = false;
+    if (cmd[0] == 'p')
+      run_steps(st, 1, a);
+    else if (cmd[0] == 'r')
+      st->held[a] = false;
     else {
       st->held[a] = true;
       run_steps(st, n >= 3 ? atoi(tok[2]) : 1, -1);
@@ -258,8 +280,10 @@ static SrResult command(ScriptState *st, char *line, char *out, size_t cap) {
     return sr_game_set(g, tok[1], val);
   }
   if (strcmp(cmd, "teleport") == 0 && n >= 2) {
-    if (strcmp(tok[1], "home") == 0) sr_game_teleport_building(g, g->player.home);
-    else if (strcmp(tok[1], "building") == 0 && n >= 3) sr_game_teleport_building(g, atoi(tok[2]));
+    if (strcmp(tok[1], "home") == 0)
+      sr_game_teleport_building(g, g->player.home);
+    else if (strcmp(tok[1], "building") == 0 && n >= 3)
+      sr_game_teleport_building(g, atoi(tok[2]));
     else {
       int poi = poi_by_name(tok[1]);
       if (poi < 0) return SR_ERR_INVALID;
@@ -287,8 +311,10 @@ static SrResult command(ScriptState *st, char *line, char *out, size_t cap) {
     return sr_game_sleep(g, atoi(tok[1]), place);
   }
   if (strcmp(cmd, "focus") == 0 && n >= 2) {
-    if (atoi(tok[1])) sr_game_confirm_resume(g);
-    else sr_game_focus(g, false);
+    if (atoi(tok[1]))
+      sr_game_confirm_resume(g);
+    else
+      sr_game_focus(g, false);
     return SR_OK;
   }
   if (strcmp(cmd, "save") == 0 && n >= 2) return sr_save_to(g, &st->store, tok[1], 0);
@@ -302,8 +328,8 @@ static SrResult command(ScriptState *st, char *line, char *out, size_t cap) {
       if (sr_str_starts_with(tok[i], "weeks=")) weeks = atoi(tok[i] + 6);
     }
     SrAutoplayStats stats = sr_autoplay(g, s, weeks * 7, s == SR_STRAT_GIG ? 0 : 3);
-    snprintf(out, cap, "days=%d jobs=%d failed=%d missed_rent=%d earned=%lld", stats.days,
-             stats.jobs_done, stats.jobs_failed, stats.missed_rent, (long long)stats.earned);
+    snprintf(out, cap, "days=%d jobs=%d failed=%d missed_rent=%d earned=%lld", stats.days, stats.jobs_done,
+             stats.jobs_failed, stats.missed_rent, (long long)stats.earned);
     return stats.soft_lock ? SR_ERR_INVALID : SR_OK;
   }
   if (strcmp(cmd, "job") == 0 && n >= 2) {
@@ -362,25 +388,27 @@ static int here(SrGame *g) {
 static void travel(SrGame *g, int to) {
   int32_t d = sr_city_walk_dist(g->city, here(g), to);
   SrTrip cab = sr_cab_trip(g->city, here(g), to);
-  if (d > 120000 && g->player.cred > cab.fare * 4 + g->player.rent) sr_game_cab(g, to);
-  else sr_game_walk_to(g, to);
+  if (d > 120000 && g->player.cred > cab.fare * 4 + g->player.rent)
+    sr_game_cab(g, to);
+  else
+    sr_game_walk_to(g, to);
 }
 
 static bool approach_for(SrStrategy s, const SrJob *j, SrApproach *out) {
   static const SrApproach pref[] = {SR_AP_FACE, SR_AP_GHOST, SR_AP_RUNNER, SR_AP_HAMMER};
   SrApproach want = SR_AP_FACE;
   switch (s) {
-  case SR_STRAT_GHOST: want = SR_AP_GHOST; break;
-  case SR_STRAT_FACE: want = SR_AP_FACE; break;
-  case SR_STRAT_HAMMER: want = SR_AP_HAMMER; break;
-  case SR_STRAT_NETRUNNER: want = SR_AP_RUNNER; break;
-  default:
-    for (int i = 0; i < 4; i++)
-      if (j->approaches & (1u << pref[i])) {
-        *out = pref[i];
-        return true;
-      }
-    return false;
+    case SR_STRAT_GHOST: want = SR_AP_GHOST; break;
+    case SR_STRAT_FACE: want = SR_AP_FACE; break;
+    case SR_STRAT_HAMMER: want = SR_AP_HAMMER; break;
+    case SR_STRAT_NETRUNNER: want = SR_AP_RUNNER; break;
+    default:
+      for (int i = 0; i < 4; i++)
+        if (j->approaches & (1u << pref[i])) {
+          *out = pref[i];
+          return true;
+        }
+      return false;
   }
   *out = want;
   if (j->approaches & (1u << want)) return true;
@@ -437,8 +465,10 @@ SrAutoplayStats sr_autoplay(SrGame *g, SrStrategy s, int days, int max_tier) {
       int food;
       if (find_open_food(g, &food)) {
         travel(g, food);
-        if (sr_game_eat_at(g, food) == SR_OK) st.meals++;
-        else sr_game_skip(g, 1800, false);
+        if (sr_game_eat_at(g, food) == SR_OK)
+          st.meals++;
+        else
+          sr_game_skip(g, 1800, false);
       } else {
         sr_game_skip(g, 1800, false);
       }
@@ -572,8 +602,8 @@ static int run_once(const char *text, const char *name, uint64_t seed, bool seed
         snprintf(err, cap, "%s:%d: cannot evaluate '%s'", name, lineno, n > 1 ? tok[1] : "");
         rc = 1;
       } else if (!compare(actual, tok[2], tok[3])) {
-        snprintf(err, cap, "%s:%d: expected %s %s %s, actual %s (seed %llu)", name, lineno, tok[1],
-                 tok[2], tok[3], actual, (unsigned long long)st.seed);
+        snprintf(err, cap, "%s:%d: expected %s %s %s, actual %s (seed %llu)", name, lineno, tok[1], tok[2], tok[3],
+                 actual, (unsigned long long)st.seed);
         rc = 1;
       }
       continue;

@@ -23,8 +23,10 @@ static int run_headless_script(const char *path) {
   char err[512] = "";
   int rc = sr_script_run(text, path, err, sizeof err);
   SDL_free(text);
-  if (rc) fprintf(stderr, "FAIL %s\n", err);
-  else printf("PASS %s\n", path);
+  if (rc)
+    fprintf(stderr, "FAIL %s\n", err);
+  else
+    printf("PASS %s\n", path);
   return rc;
 }
 

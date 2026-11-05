@@ -13,6 +13,8 @@ jobs:
         with: { node-version: 22 }
       - name: Layer dependency check
         run: python3 tools/layercheck.py
+      - name: clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format-18 && CLANG_FORMAT=clang-format-18 python3 tools/lint_c.py
       - name: OpenSpec strict validation
         run: npx --yes @fission-ai/openspec@1.16.0 validate --all --strict --no-interactive
         env: { OPENSPEC_TELEMETRY: "0" }
@@ -60,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { submodules: recursive }
-      - run: sudo apt-get update && sudo apt-get install -y ninja-build clang
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build clang clang-tidy-18
       - name: Build with ASan + UBSan (engine)
         run: cmake --preset linux-clang-asan -DSR_BUILD_APP=OFF && cmake --build --preset linux-clang-asan
       - name: Unit and game tests under sanitizers
@@ -68,6 +70,8 @@ jobs:
           ./build/linux-clang-asan/sr_tests
           ctest --test-dir build/linux-clang-asan -R game_ --output-on-failure
         env: { ASAN_OPTIONS: "detect_leaks=1", UBSAN_OPTIONS: "halt_on_error=1" }
+      - name: clang-tidy
+        run: CLANG_TIDY=clang-tidy-18 python3 tools/lint_c.py --tidy build/linux-clang-asan
 
   windows-msvc:
     runs-on: windows-2022

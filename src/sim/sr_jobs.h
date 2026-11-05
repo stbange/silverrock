@@ -10,8 +10,17 @@
 #define SR_MAX_JOBS 64
 
 typedef enum SrJobType {
-  SR_JT_DELIVER, SR_JT_COLLECT, SR_JT_FIND, SR_JT_PLANT, SR_JT_SURVEIL, SR_JT_THEFT,
-  SR_JT_STEAL_DATA, SR_JT_SABOTAGE, SR_JT_RAID, SR_JT_EXTRACT, SR_JT_COUNT
+  SR_JT_DELIVER,
+  SR_JT_COLLECT,
+  SR_JT_FIND,
+  SR_JT_PLANT,
+  SR_JT_SURVEIL,
+  SR_JT_THEFT,
+  SR_JT_STEAL_DATA,
+  SR_JT_SABOTAGE,
+  SR_JT_RAID,
+  SR_JT_EXTRACT,
+  SR_JT_COUNT
 } SrJobType;
 
 typedef enum SrApproach { SR_AP_GHOST, SR_AP_FACE, SR_AP_RUNNER, SR_AP_HAMMER, SR_AP_COUNT } SrApproach;
@@ -24,21 +33,21 @@ enum SrJobIntel { SR_INTEL_GUARDS = 1, SR_INTEL_CAMERAS = 2, SR_INTEL_ENTRANCE =
 typedef struct SrJob {
   int32_t id;
   uint8_t type, tier, state, source;
-  int8_t client_faction;   /* -1 private client */
+  int8_t client_faction; /* -1 private client */
   int8_t target_faction;
   int32_t client_building; /* where to report back (fixer haunt or client) */
   int32_t target_building;
-  int32_t dest_building;   /* deliveries */
+  int32_t dest_building; /* deliveries */
   uint8_t constraints;
-  bool constraint_fails;   /* violating a constraint fails the job (else halves pay) */
-  uint8_t approaches;      /* bitmask of validated approaches */
-  uint8_t intel;           /* revealed facts */
+  bool constraint_fails; /* violating a constraint fails the job (else halves pay) */
+  uint8_t approaches;    /* bitmask of validated approaches */
+  uint8_t intel;         /* revealed facts */
   bool negotiated;
-  bool executed;           /* objective done, report back pending */
+  bool executed; /* objective done, report back pending */
   bool has_bonus, bonus_done;
   int64_t offered, deadline;
   int32_t pay, upfront, bonus;
-  int32_t paid;            /* total paid so far */
+  int32_t paid; /* total paid so far */
   int kills, alarms;
   char title[64];
 } SrJob;
@@ -71,8 +80,8 @@ bool sr_job_generate(const SrCity *c, SrJobType type, uint64_t key, int64_t t, S
 /* Approach bitmask the job's site allows (validated against the interior). */
 uint8_t sr_job_validate_approaches(const SrCity *c, const SrJob *j);
 /* Fixer offers for a day (1..4 jobs within unlocked tiers); adds them to the board. */
-int sr_jobs_fixer_offers(SrJobBoard *b, const SrCity *c, int fixer_building, int64_t t,
-                         int32_t street_cred, int out_ids[4]);
+int sr_jobs_fixer_offers(SrJobBoard *b, const SrCity *c, int fixer_building, int64_t t, int32_t street_cred,
+                         int out_ids[4]);
 /* Public job board refresh (board jobs of unlocked tiers). */
 int sr_jobs_board_refresh(SrJobBoard *b, const SrCity *c, int64_t t, int32_t street_cred);
 SrJob *sr_jobs_get(SrJobBoard *b, int32_t id);

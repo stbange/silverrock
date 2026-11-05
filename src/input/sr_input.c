@@ -7,31 +7,32 @@
 #include <string.h>
 
 #define WHEEL_HOLD_SECONDS 0.4
-#define SPRINT_EDGE 0.9f
+#define SPRINT_EDGE        0.9f
 
 const char *sr_action_name(SrAction a) {
-  static const char *const n[SR_ACT_COUNT] = {
-      "fire", "aim", "jump", "crouch", "sprint", "interact", "reload", "gadget", "quick1",
-      "quick2", "quick3", "quick4", "inventory", "map", "jackin", "netsight", "pause",
-      "terminal"};
+  static const char *const n[SR_ACT_COUNT] = {"fire",      "aim",    "jump",   "crouch",   "sprint", "interact",
+                                              "reload",    "gadget", "quick1", "quick2",   "quick3", "quick4",
+                                              "inventory", "map",    "jackin", "netsight", "pause",  "terminal"};
   return (unsigned)a < SR_ACT_COUNT ? n[a] : "?";
 }
 
 const char *sr_key_name(SrKey k) {
   static const char *const n[SR_KEY_COUNT] = {
-      "none", "W", "A", "S", "D", "Space", "C", "E", "R", "Q", "F", "1", "2", "3", "4", "Tab",
-      "M", "J", "V", "Escape", "LShift", "T", "MouseLeft", "MouseRight", "Up", "Down", "Left",
-      "Right", "Return", "X", "Z", "N", "Y"};
+      "none",      "W",          "A",  "S",    "D",    "Space", "C",      "E", "R",      "Q",      "F",
+      "1",         "2",          "3",  "4",    "Tab",  "M",     "J",      "V", "Escape", "LShift", "T",
+      "MouseLeft", "MouseRight", "Up", "Down", "Left", "Right", "Return", "X", "Z",      "N",      "Y"};
   return (unsigned)k < SR_KEY_COUNT ? n[k] : "?";
 }
 
 void sr_touch_layout_build(SrTouchLayout *l) {
   /* Buttons anchored to the bottom-right inside the safe area; sizes >= 48 CSS px. */
-  static const struct { SrAction a; float dx, dy, size; } k[SR_TOUCH_BUTTONS] = {
-      {SR_ACT_FIRE, 70, 80, 72},    {SR_ACT_AIM, 70, 170, 56},    {SR_ACT_JUMP, 160, 60, 56},
-      {SR_ACT_CROUCH, 160, 130, 52},{SR_ACT_INTERACT, 250, 60, 56},{SR_ACT_RELOAD, 70, 250, 52},
-      {SR_ACT_GADGET, 160, 210, 52},{SR_ACT_JACKIN, 70, 320, 52}, {SR_ACT_MAP, 60, -40, 48},
-      {SR_ACT_PAUSE, -40, -40, 48}, {SR_ACT_TERMINAL, 130, -40, 48}};
+  static const struct {
+    SrAction a;
+    float dx, dy, size;
+  } k[SR_TOUCH_BUTTONS] = {{SR_ACT_FIRE, 70, 80, 72},     {SR_ACT_AIM, 70, 170, 56},      {SR_ACT_JUMP, 160, 60, 56},
+                           {SR_ACT_CROUCH, 160, 130, 52}, {SR_ACT_INTERACT, 250, 60, 56}, {SR_ACT_RELOAD, 70, 250, 52},
+                           {SR_ACT_GADGET, 160, 210, 52}, {SR_ACT_JACKIN, 70, 320, 52},   {SR_ACT_MAP, 60, -40, 48},
+                           {SR_ACT_PAUSE, -40, -40, 48},  {SR_ACT_TERMINAL, 130, -40, 48}};
   for (int i = 0; i < SR_TOUCH_BUTTONS; i++) {
     SrTouchButton *b = &l->buttons[i];
     b->action = k[i].a;
@@ -76,14 +77,14 @@ bool sr_touch_button_in_safe_area(const SrTouchLayout *l, int i) {
 
 void sr_input_init(SrInput *in, bool coarse) {
   memset(in, 0, sizeof *in);
-  static const SrKey keys[SR_ACT_COUNT] = {
-      SR_KEY_MOUSE_LEFT, SR_KEY_MOUSE_RIGHT, SR_KEY_SPACE, SR_KEY_C, SR_KEY_LSHIFT, SR_KEY_E,
-      SR_KEY_R, SR_KEY_Q, SR_KEY_1, SR_KEY_2, SR_KEY_3, SR_KEY_4, SR_KEY_TAB, SR_KEY_M,
-      SR_KEY_J, SR_KEY_V, SR_KEY_ESCAPE, SR_KEY_T};
-  static const SrPad pads[SR_ACT_COUNT] = {
-      SR_PAD_RT, SR_PAD_LT, SR_PAD_SOUTH, SR_PAD_EAST, SR_PAD_LSTICK, SR_PAD_WEST, SR_PAD_RB,
-      SR_PAD_LB, SR_PAD_DUP, SR_PAD_DRIGHT, SR_PAD_DDOWN, SR_PAD_DLEFT, SR_PAD_NORTH,
-      SR_PAD_BACK, SR_PAD_RSTICK, SR_PAD_NONE, SR_PAD_START, SR_PAD_NONE};
+  static const SrKey keys[SR_ACT_COUNT] = {SR_KEY_MOUSE_LEFT, SR_KEY_MOUSE_RIGHT, SR_KEY_SPACE, SR_KEY_C, SR_KEY_LSHIFT,
+                                           SR_KEY_E,          SR_KEY_R,           SR_KEY_Q,     SR_KEY_1, SR_KEY_2,
+                                           SR_KEY_3,          SR_KEY_4,           SR_KEY_TAB,   SR_KEY_M, SR_KEY_J,
+                                           SR_KEY_V,          SR_KEY_ESCAPE,      SR_KEY_T};
+  static const SrPad pads[SR_ACT_COUNT] = {SR_PAD_RT,    SR_PAD_LT,    SR_PAD_SOUTH, SR_PAD_EAST, SR_PAD_LSTICK,
+                                           SR_PAD_WEST,  SR_PAD_RB,    SR_PAD_LB,    SR_PAD_DUP,  SR_PAD_DRIGHT,
+                                           SR_PAD_DDOWN, SR_PAD_DLEFT, SR_PAD_NORTH, SR_PAD_BACK, SR_PAD_RSTICK,
+                                           SR_PAD_NONE,  SR_PAD_START, SR_PAD_NONE};
   memcpy(in->key_bind, keys, sizeof keys);
   memcpy(in->pad_bind, pads, sizeof pads);
   in->mouse_sensitivity = 0.0025f;
@@ -199,7 +200,6 @@ static float stick_deflection(const SrInput *in, const SrFinger *f, float *ox, f
   if (mag > 1.0f) {
     dx /= mag;
     dy /= mag;
-    mag = 1.0f;
   }
   *ox = dx / r;
   *oy = -dy / r; /* screen up = forward */
@@ -223,8 +223,8 @@ void sr_input_bindings_save(const SrInput *in, char *out, size_t cap) {
   size_t o = 0;
   out[0] = '\0';
   for (int a = 0; a < SR_ACT_COUNT && o < cap; a++) {
-    int n = snprintf(out + o, cap - o, "%s%s=%s", a ? ";" : "", sr_action_name((SrAction)a),
-                     sr_key_name(in->key_bind[a]));
+    int n =
+        snprintf(out + o, cap - o, "%s%s=%s", a ? ";" : "", sr_action_name((SrAction)a), sr_key_name(in->key_bind[a]));
     if (n < 0) break; /* GCOVR_EXCL_LINE reason: snprintf never fails here */
     o += (size_t)n;
   }
@@ -246,8 +246,10 @@ bool sr_input_bindings_load(SrInput *in, const char *text) {
         if (strcmp(save, sr_action_name((SrAction)a)) == 0) act = a;
       for (int k = 0; k < SR_KEY_COUNT; k++)
         if (strcmp(eq + 1, sr_key_name((SrKey)k)) == 0) key = k;
-      if (act >= 0 && key >= 0) in->key_bind[act] = (SrKey)key;
-      else ok = false;
+      if (act >= 0 && key >= 0)
+        in->key_bind[act] = (SrKey)key;
+      else
+        ok = false;
     } else {
       ok = false;
     }
@@ -287,42 +289,42 @@ SrActionState sr_input_tick(SrInput *in, double dt) {
     }
   }
   switch (in->scheme) {
-  case SR_SCHEME_KBM:
-    s.move_y = (in->key_down[SR_KEY_W] ? 1.0f : 0.0f) - (in->key_down[SR_KEY_S] ? 1.0f : 0.0f);
-    s.move_x = (in->key_down[SR_KEY_D] ? 1.0f : 0.0f) - (in->key_down[SR_KEY_A] ? 1.0f : 0.0f);
-    s.look_x = in->mouse_dx * in->mouse_sensitivity;
-    s.look_y = in->mouse_dy * in->mouse_sensitivity;
-    s.vertical = (in->key_down[SR_KEY_SPACE] ? 1.0f : 0.0f) - (in->key_down[SR_KEY_C] ? 1.0f : 0.0f);
-    break;
-  case SR_SCHEME_GAMEPAD: {
-    float dz = 0.15f;
-    s.move_x = fabsf(in->pad_lx) > dz ? in->pad_lx : 0.0f;
-    s.move_y = fabsf(in->pad_ly) > dz ? -in->pad_ly : 0.0f;
-    s.look_x = (fabsf(in->pad_rx) > dz ? in->pad_rx : 0.0f) * in->pad_sensitivity * (float)dt;
-    s.look_y = (fabsf(in->pad_ry) > dz ? in->pad_ry : 0.0f) * in->pad_sensitivity * (float)dt;
-    s.vertical = (in->pad_down[SR_PAD_SOUTH] ? 1.0f : 0.0f) - (in->pad_down[SR_PAD_EAST] ? 1.0f : 0.0f);
-    break;
-  }
-  case SR_SCHEME_TOUCH:
-    in->stick_x = in->stick_y = 0;
-    for (int i = 0; i < SR_MAX_FINGERS; i++) {
-      SrFinger *f = &in->fingers[i];
-      if (!f->active) continue;
-      if (f->role == 1) {
-        float len = stick_deflection(in, f, &in->stick_x, &in->stick_y);
-        s.sprint_from_stick = len > SPRINT_EDGE;
-      }
-      if (f->role == 3 && f->button == SR_ACT_GADGET && !in->wheel_open &&
-          in->now - f->down_time >= WHEEL_HOLD_SECONDS)
-        in->wheel_open = true;
+    case SR_SCHEME_KBM:
+      s.move_y = (in->key_down[SR_KEY_W] ? 1.0f : 0.0f) - (in->key_down[SR_KEY_S] ? 1.0f : 0.0f);
+      s.move_x = (in->key_down[SR_KEY_D] ? 1.0f : 0.0f) - (in->key_down[SR_KEY_A] ? 1.0f : 0.0f);
+      s.look_x = in->mouse_dx * in->mouse_sensitivity;
+      s.look_y = in->mouse_dy * in->mouse_sensitivity;
+      s.vertical = (in->key_down[SR_KEY_SPACE] ? 1.0f : 0.0f) - (in->key_down[SR_KEY_C] ? 1.0f : 0.0f);
+      break;
+    case SR_SCHEME_GAMEPAD: {
+      float dz = 0.15f;
+      s.move_x = fabsf(in->pad_lx) > dz ? in->pad_lx : 0.0f;
+      s.move_y = fabsf(in->pad_ly) > dz ? -in->pad_ly : 0.0f;
+      s.look_x = (fabsf(in->pad_rx) > dz ? in->pad_rx : 0.0f) * in->pad_sensitivity * (float)dt;
+      s.look_y = (fabsf(in->pad_ry) > dz ? in->pad_ry : 0.0f) * in->pad_sensitivity * (float)dt;
+      s.vertical = (in->pad_down[SR_PAD_SOUTH] ? 1.0f : 0.0f) - (in->pad_down[SR_PAD_EAST] ? 1.0f : 0.0f);
+      break;
     }
-    s.move_x = in->stick_x;
-    s.move_y = in->stick_y;
-    s.look_x = in->look_accum_x * in->touch_sensitivity;
-    s.look_y = in->look_accum_y * in->touch_sensitivity;
-    if (s.sprint_from_stick) s.down[SR_ACT_SPRINT] = true;
-    s.vertical = (in->touch_down[SR_ACT_JUMP] ? 1.0f : 0.0f) - (in->touch_down[SR_ACT_CROUCH] ? 1.0f : 0.0f);
-    break;
+    case SR_SCHEME_TOUCH:
+      in->stick_x = in->stick_y = 0;
+      for (int i = 0; i < SR_MAX_FINGERS; i++) {
+        SrFinger *f = &in->fingers[i];
+        if (!f->active) continue;
+        if (f->role == 1) {
+          float len = stick_deflection(in, f, &in->stick_x, &in->stick_y);
+          s.sprint_from_stick = len > SPRINT_EDGE;
+        }
+        if (f->role == 3 && f->button == SR_ACT_GADGET && !in->wheel_open &&
+            in->now - f->down_time >= WHEEL_HOLD_SECONDS)
+          in->wheel_open = true;
+      }
+      s.move_x = in->stick_x;
+      s.move_y = in->stick_y;
+      s.look_x = in->look_accum_x * in->touch_sensitivity;
+      s.look_y = in->look_accum_y * in->touch_sensitivity;
+      if (s.sprint_from_stick) s.down[SR_ACT_SPRINT] = true;
+      s.vertical = (in->touch_down[SR_ACT_JUMP] ? 1.0f : 0.0f) - (in->touch_down[SR_ACT_CROUCH] ? 1.0f : 0.0f);
+      break;
   }
   if (!in->touch_down[SR_ACT_GADGET] && in->scheme == SR_SCHEME_TOUCH) in->wheel_open = false;
   in->mouse_dx = in->mouse_dy = 0;

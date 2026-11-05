@@ -6,11 +6,19 @@
 
 #define SR_PI 3.14159265358979323846f
 
-typedef struct SrVec2 { float x, y; } SrVec2;
-typedef struct SrVec3 { float x, y, z; } SrVec3;
-typedef struct SrVec4 { float x, y, z, w; } SrVec4;
+typedef struct SrVec2 {
+  float x, y;
+} SrVec2;
+typedef struct SrVec3 {
+  float x, y, z;
+} SrVec3;
+typedef struct SrVec4 {
+  float x, y, z, w;
+} SrVec4;
 /* Column-major 4x4 matrix, as OpenGL expects. */
-typedef struct SrMat4 { float m[16]; } SrMat4;
+typedef struct SrMat4 {
+  float m[16];
+} SrMat4;
 
 SrVec3 sr_v3(float x, float y, float z);
 SrVec3 sr_v3_add(SrVec3 a, SrVec3 b);

@@ -7,13 +7,11 @@
 #include "core/sr_math.h"
 #include "sim/sr_population.h"
 
-#define SR_MAX_AGENTS 400
-#define SR_CROWD_RADIUS 160.0f
+#define SR_MAX_AGENTS    400
+#define SR_CROWD_RADIUS  160.0f
 #define SR_NO_POP_RADIUS 30.0f
 
-typedef enum SrAgentState {
-  SR_AG_WALK, SR_AG_FLEE, SR_AG_COVER, SR_AG_GAWK, SR_AG_SHELTER, SR_AG_IDLE
-} SrAgentState;
+typedef enum SrAgentState { SR_AG_WALK, SR_AG_FLEE, SR_AG_COVER, SR_AG_GAWK, SR_AG_SHELTER, SR_AG_IDLE } SrAgentState;
 
 typedef struct SrAgent {
   uint64_t key;
@@ -41,8 +39,8 @@ typedef struct SrCamera {
 typedef struct SrVehicle {
   uint64_t key;
   SrVec3 pos;
-  SrVec3 dir;   /* unit vector along the lane */
-  float speed;  /* cruise speed m/s */
+  SrVec3 dir;  /* unit vector along the lane */
+  float speed; /* cruise speed m/s */
   bool stopped;
   uint8_t color;
 } SrVehicle;
@@ -54,7 +52,7 @@ typedef struct SrCrowd {
   SrVehicle vehicles[SR_MAX_VEHICLES];
   uint64_t vehicle_serial;
   int64_t last_slot;
-  bool fresh; /* nothing has been shown yet: spawning in view is invisible */
+  bool fresh;               /* nothing has been shown yet: spawning in view is invisible */
   int spawned_in_view_near; /* diagnostics: must stay 0 */
   int despawned_in_view_near;
   int reports;
@@ -63,12 +61,11 @@ typedef struct SrCrowd {
 void sr_crowd_init(SrCrowd *cr);
 bool sr_camera_sees(const SrCamera *cam, SrVec3 p);
 /* Rebuilds the desired crowd around the camera and spawns or despawns agents. */
-void sr_crowd_refresh(SrCrowd *cr, const SrCity *c, const SrPopulation *pop, const SrCamera *cam,
-                      int64_t t, int max_agents);
+void sr_crowd_refresh(SrCrowd *cr, const SrCity *c, const SrPopulation *pop, const SrCamera *cam, int64_t t,
+                      int max_agents);
 void sr_crowd_update(SrCrowd *cr, const SrCity *c, float dt, float rain);
 /* Gunfire at pos: agents within radius react within this tick; witnesses may report. */
-int sr_crowd_gunfire(SrCrowd *cr, const SrCity *c, SrVec3 pos, float radius, SrEventLog *log,
-                     int64_t t);
+int sr_crowd_gunfire(SrCrowd *cr, const SrCity *c, SrVec3 pos, float radius, SrEventLog *log, int64_t t);
 int sr_crowd_find(const SrCrowd *cr, uint64_t key);
 float sr_crowd_exposed_share(const SrCrowd *cr); /* outdoor, no cover, no umbrella */
 int sr_crowd_visible(const SrCrowd *cr, const SrCamera *cam, float max_dist);

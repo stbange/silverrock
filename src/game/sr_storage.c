@@ -54,9 +54,7 @@ static SrResult mem_remove(void *user, const char *name) {
   return SR_OK;
 }
 
-static bool mem_exists(void *user, const char *name) {
-  return sr_memstore_get((SrMemStore *)user, name) != NULL;
-}
+static bool mem_exists(void *user, const char *name) { return sr_memstore_get((SrMemStore *)user, name) != NULL; }
 
 void sr_memstore_init(SrMemStore *m, SrStorage *out) {
   memset(m, 0, sizeof *m);

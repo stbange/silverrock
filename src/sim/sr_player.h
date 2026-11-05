@@ -10,16 +10,26 @@
 #include "sim/sr_progress.h"
 
 #define SR_MAX_MESSAGES 32
-#define SR_MAX_TX 64
-#define SR_LATE_FEE 50
-#define SR_MAX_CYBER 8
+#define SR_MAX_TX       64
+#define SR_LATE_FEE     50
+#define SR_MAX_CYBER    8
 
 typedef enum SrBackground {
-  SR_BG_STREET_KID, SR_BG_WAGESLAVE, SR_BG_MILITARY, SR_BG_NETRUNNER, SR_BG_MEDIC, SR_BG_COUNT
+  SR_BG_STREET_KID,
+  SR_BG_WAGESLAVE,
+  SR_BG_MILITARY,
+  SR_BG_NETRUNNER,
+  SR_BG_MEDIC,
+  SR_BG_COUNT
 } SrBackground;
 
 typedef enum SrHousing {
-  SR_HOUSE_COFFIN, SR_HOUSE_STUDIO, SR_HOUSE_MID, SR_HOUSE_LOFT, SR_HOUSE_PENTHOUSE, SR_HOUSE_COUNT
+  SR_HOUSE_COFFIN,
+  SR_HOUSE_STUDIO,
+  SR_HOUSE_MID,
+  SR_HOUSE_LOFT,
+  SR_HOUSE_PENTHOUSE,
+  SR_HOUSE_COUNT
 } SrHousing;
 
 typedef enum SrSleepPlace { SR_SLEEP_HOME, SR_SLEEP_CAPSULE, SR_SLEEP_STREET } SrSleepPlace;
@@ -80,7 +90,7 @@ typedef struct SrPlayer {
   SrItem cyber[SR_MAX_CYBER];
   int cyber_count;
   uint32_t blueprints;
-  int8_t equipped; /* inventory index of the active weapon, -1 none */
+  int8_t equipped;  /* inventory index of the active weapon, -1 none */
   uint8_t quick[4]; /* gadget types bound to quick slots, 255 empty */
   uint8_t outfit;
   SrDisguise disguise;
@@ -99,8 +109,7 @@ typedef struct SrPlayer {
 const SrBackgroundDef *sr_background_def(int bg);
 const SrHousingDef *sr_housing_def(int tier);
 
-void sr_player_create(SrPlayer *p, const SrCity *c, const char *name, SrBackground bg,
-                      uint64_t look_seed);
+void sr_player_create(SrPlayer *p, const SrCity *c, const char *name, SrBackground bg, uint64_t look_seed);
 /* Due time of the rent for the week containing t (Sunday 23:59). */
 int64_t sr_rent_due_for(int64_t t);
 
@@ -124,8 +133,7 @@ bool sr_player_can_use_home(const SrPlayer *p);
 
 /* Sleep: returns SR_ERR_DENIED if hostiles are near. Robbery decided from seed and day. */
 SrResult sr_player_sleep_allowed(const SrPlayer *p, int alerted_hostiles_within_50m);
-void sr_player_wake(SrPlayer *p, SrSleepPlace place, uint64_t seed, int64_t t,
-                    SrDistrictType district);
+void sr_player_wake(SrPlayer *p, SrSleepPlace place, uint64_t seed, int64_t t, SrDistrictType district);
 int32_t sr_capsule_price(const SrCity *c, int building);
 
 /* Travel */

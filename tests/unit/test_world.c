@@ -44,8 +44,9 @@ static void test_seed_codes(void) {
   SR_CHECK(!sr_seed_from_code("ZZZZZ-ZZZZZ-ZZZZZ", &s)); /* top bit set */
   SR_CHECK(!sr_seed_from_code("00000-00000-000000", &s));
   sr_seed_to_code(42, code);
-  for (char *p = code; *p; p++) if (*p >= 'A' && *p <= 'Z') *p = (char)(*p - 'A' + 'a');
-  SR_CHECK(sr_seed_from_code(code, &s) && s == 42); /* case-insensitive */
+  for (char *p = code; *p; p++)
+    if (*p >= 'A' && *p <= 'Z') *p = (char)(*p - 'A' + 'a');
+  SR_CHECK(sr_seed_from_code(code, &s) && s == 42);             /* case-insensitive */
   SR_CHECK(sr_seed_from_code("00000 00000 0000O", &s) || true); /* O reads as 0 */
 }
 
@@ -231,18 +232,22 @@ static void test_validate_detects(void) {
     memcpy(c, city(), sizeof *c);
     SrFactions *fs = &c->factions;
     switch (variant) {
-    case 0: fs->corp_count = 4; break;
-    case 1: fs->f[0].hq_building = -1; break;
-    case 2: fs->f[0].facility_count = 1; break;
-    case 3: strcpy(fs->f[1].name, fs->f[0].name); break;
-    case 4: for (int j = 0; j < fs->corp_count; j++) fs->rel[0][j] = 0; break;
-    case 5: for (int j = 0; j < fs->corp_count; j++) fs->f[j].sector1 = fs->f[j].sector2 = SR_SEC_BIO; break;
-    case 6: fs->gang_count = 1; break;
-    case 7: fs->f[fs->gang_first].turf = 0; break;
-    case 8: fs->fixer_building[0] = -1; break;
-    case 9: fs->media_count = 1; break;
-    case 10: fs->f[1].icon = fs->f[0].icon; break;
-    default: fs->precinct_of_district[0] = -1; break;
+      case 0: fs->corp_count = 4; break;
+      case 1: fs->f[0].hq_building = -1; break;
+      case 2: fs->f[0].facility_count = 1; break;
+      case 3: strcpy(fs->f[1].name, fs->f[0].name); break;
+      case 4:
+        for (int j = 0; j < fs->corp_count; j++) fs->rel[0][j] = 0;
+        break;
+      case 5:
+        for (int j = 0; j < fs->corp_count; j++) fs->f[j].sector1 = fs->f[j].sector2 = SR_SEC_BIO;
+        break;
+      case 6: fs->gang_count = 1; break;
+      case 7: fs->f[fs->gang_first].turf = 0; break;
+      case 8: fs->fixer_building[0] = -1; break;
+      case 9: fs->media_count = 1; break;
+      case 10: fs->f[1].icon = fs->f[0].icon; break;
+      default: fs->precinct_of_district[0] = -1; break;
     }
     codes += sr_factions_validate(c) != 0;
   }
@@ -264,7 +269,11 @@ static void test_queries(void) {
   SR_CHECK_EQ(sr_city_metro_hops(c, 0, 0), 0);
   SR_CHECK_EQ(sr_city_metro_hops(c, -1, 0), -1);
   int water = -1;
-  for (int i = 0; i < c->grid * c->grid; i++) if (c->blocks[i].water) { water = i; break; }
+  for (int i = 0; i < c->grid * c->grid; i++)
+    if (c->blocks[i].water) {
+      water = i;
+      break;
+    }
   if (water >= 0) SR_CHECK_EQ(sr_city_block_steps(c, water, 0), -1);
   int32_t d;
   int clinic = sr_city_find_poi_near(c, SR_POI_CLINIC, home, &d);

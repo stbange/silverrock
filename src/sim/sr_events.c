@@ -9,9 +9,7 @@ void sr_events_add(SrEventLog *log, const SrWorldEvent *ev) {
   log->count++;
 }
 
-int sr_events_size(const SrEventLog *log) {
-  return log->count < SR_MAX_EVENTS ? log->count : SR_MAX_EVENTS;
-}
+int sr_events_size(const SrEventLog *log) { return log->count < SR_MAX_EVENTS ? log->count : SR_MAX_EVENTS; }
 
 const SrWorldEvent *sr_events_recent(const SrEventLog *log, int i) {
   if (i < 0 || i >= sr_events_size(log)) return NULL;

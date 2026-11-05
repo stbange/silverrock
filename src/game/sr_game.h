@@ -11,9 +11,9 @@
 #include "sim/sr_jobs.h"
 #include "world/sr_environ.h"
 
-#define SR_STEP_DT (1.0 / 60.0)
+#define SR_STEP_DT             (1.0 / 60.0)
 #define SR_MAX_STEPS_PER_FRAME 5
-#define SR_MAX_DELTAS 256
+#define SR_MAX_DELTAS          256
 
 typedef struct SrLoop {
   double acc;
@@ -33,8 +33,17 @@ void sr_deltas_set(SrDeltas *d, uint32_t id, uint8_t value);
 int sr_deltas_get(const SrDeltas *d, uint32_t id); /* -1 if unset */
 
 typedef enum SrContextKind {
-  SR_CTX_NONE, SR_CTX_FOOD, SR_CTX_SHOP, SR_CTX_FIXER, SR_CTX_HOME, SR_CTX_METRO,
-  SR_CTX_CAPSULE, SR_CTX_JOB_TARGET, SR_CTX_JOB_REPORT, SR_CTX_CLINIC, SR_CTX_LANDLORD,
+  SR_CTX_NONE,
+  SR_CTX_FOOD,
+  SR_CTX_SHOP,
+  SR_CTX_FIXER,
+  SR_CTX_HOME,
+  SR_CTX_METRO,
+  SR_CTX_CAPSULE,
+  SR_CTX_JOB_TARGET,
+  SR_CTX_JOB_REPORT,
+  SR_CTX_CLINIC,
+  SR_CTX_LANDLORD,
   SR_CTX_CLOSED
 } SrContextKind;
 
@@ -47,7 +56,11 @@ typedef struct SrContext {
 } SrContext;
 
 typedef enum SrScreen {
-  SR_SCREEN_TITLE, SR_SCREEN_PLAY, SR_SCREEN_PAUSE, SR_SCREEN_TERMINAL, SR_SCREEN_DEAD,
+  SR_SCREEN_TITLE,
+  SR_SCREEN_PLAY,
+  SR_SCREEN_PAUSE,
+  SR_SCREEN_TERMINAL,
+  SR_SCREEN_DEAD,
   SR_SCREEN_CREATE
 } SrScreen;
 
@@ -72,8 +85,8 @@ typedef struct SrGame {
   bool resume_needs_confirm;
   int64_t last_minute;
   uint64_t steps;
-  int combat_count;     /* enemies currently in combat with the player */
-  int hostiles_near;    /* alerted hostiles within 50 m */
+  int combat_count;  /* enemies currently in combat with the player */
+  int hostiles_near; /* alerted hostiles within 50 m */
   bool crowd_enabled;
   SrCamera cam;
   float vel_y;
@@ -93,8 +106,7 @@ typedef struct SrGame {
 
 SrGame *sr_game_create(void);
 void sr_game_destroy(SrGame *g);
-SrResult sr_game_new(SrGame *g, uint64_t seed, const SrCityOptions *opt, SrBackground bg,
-                     const char *name);
+SrResult sr_game_new(SrGame *g, uint64_t seed, const SrCityOptions *opt, SrBackground bg, const char *name);
 /* Regenerates city and population for a seed (used by new game and load). */
 SrResult sr_game_build_world(SrGame *g, uint64_t seed, const SrCityOptions *opt);
 void sr_game_step(SrGame *g, const SrActionState *a);

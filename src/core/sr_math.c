@@ -16,9 +16,7 @@ SrVec3 sr_v3_norm(SrVec3 a) {
   float l = sr_v3_len(a);
   return l > 1e-8f ? sr_v3_scale(a, 1.0f / l) : (SrVec3){0, 0, 0};
 }
-SrVec3 sr_v3_lerp(SrVec3 a, SrVec3 b, float t) {
-  return sr_v3_add(a, sr_v3_scale(sr_v3_sub(b, a), t));
-}
+SrVec3 sr_v3_lerp(SrVec3 a, SrVec3 b, float t) { return sr_v3_add(a, sr_v3_scale(sr_v3_sub(b, a), t)); }
 float sr_v2_len(SrVec2 a) { return sqrtf(a.x * a.x + a.y * a.y); }
 
 float sr_clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }

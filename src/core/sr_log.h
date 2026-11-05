@@ -18,7 +18,6 @@ void sr_log(SrLogLevel level, const char *subsystem, const char *fmt, ...)
 #endif
     ;
 /* Formats one log line: timestamp, level, subsystem, message. */
-int sr_log_format(char *out, size_t cap, double timestamp, SrLogLevel level, const char *subsystem,
-                  const char *msg);
+int sr_log_format(char *out, size_t cap, double timestamp, SrLogLevel level, const char *subsystem, const char *msg);
 
 #endif

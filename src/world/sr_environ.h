@@ -4,10 +4,10 @@
 
 #include "core/sr_types.h"
 
-#define SR_STEPS_PER_SECOND 60
+#define SR_STEPS_PER_SECOND  60
 #define SR_DEFAULT_TIME_RATE 20 /* in-game seconds per real second */
-#define SR_DAY_S 86400
-#define SR_WEEK_S (7 * SR_DAY_S)
+#define SR_DAY_S             86400
+#define SR_WEEK_S            (7 * SR_DAY_S)
 /* New games start on Monday of week 1 at 21:40. */
 #define SR_START_TIME_S (21 * 3600 + 40 * 60)
 
@@ -18,7 +18,13 @@ typedef struct SrClock {
 } SrClock;
 
 typedef enum SrWeather {
-  SR_WX_CLEAR, SR_WX_DRIZZLE, SR_WX_DOWNPOUR, SR_WX_FOG, SR_WX_SMOG, SR_WX_ACID, SR_WX_COUNT
+  SR_WX_CLEAR,
+  SR_WX_DRIZZLE,
+  SR_WX_DOWNPOUR,
+  SR_WX_FOG,
+  SR_WX_SMOG,
+  SR_WX_ACID,
+  SR_WX_COUNT
 } SrWeather;
 
 typedef struct SrWeatherState {
@@ -30,8 +36,8 @@ typedef struct SrWeatherState {
 } SrWeatherState;
 
 typedef struct SrSky {
-  float r, g, b;   /* sky colour */
-  float ambient;   /* ambient light level 0..1 */
+  float r, g, b; /* sky colour */
+  float ambient; /* ambient light level 0..1 */
   bool daylight;
 } SrSky;
 
@@ -40,11 +46,11 @@ void sr_clock_step(SrClock *c); /* one 1/60 s simulation step */
 int64_t sr_clock_seconds(const SrClock *c);
 void sr_clock_skip(SrClock *c, int64_t game_seconds);
 void sr_clock_set_seconds(SrClock *c, int64_t game_seconds);
-int sr_time_weekday(int64_t t);   /* 0 Monday .. 6 Sunday */
-int sr_time_week(int64_t t);      /* 1-based week counter */
+int sr_time_weekday(int64_t t); /* 0 Monday .. 6 Sunday */
+int sr_time_week(int64_t t);    /* 1-based week counter */
 int sr_time_hour(int64_t t);
 int sr_time_minute(int64_t t);
-int64_t sr_time_of_day(int64_t t);/* seconds since midnight */
+int64_t sr_time_of_day(int64_t t); /* seconds since midnight */
 const char *sr_weekday_name(int d);
 /* "Mon 21:40 (week 1)" */
 void sr_time_format(int64_t t, char *out, size_t cap);

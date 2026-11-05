@@ -34,8 +34,8 @@ void sr_ui_begin(SrUi *ui, int w, int h, int scale) {
 }
 
 void sr_ui_rect(SrUi *ui, float x, float y, float w, float h, SrColor c) {
-  sr_mesh_quad(&ui->mesh, sr_v3(x, y + h, 0), sr_v3(x + w, y + h, 0), sr_v3(x + w, y, 0),
-               sr_v3(x, y, 0), 0, 0, 1, 1, c, SR_LAYER_WHITE, 255, 0);
+  sr_mesh_quad(&ui->mesh, sr_v3(x, y + h, 0), sr_v3(x + w, y + h, 0), sr_v3(x + w, y, 0), sr_v3(x, y, 0), 0, 0, 1, 1, c,
+               SR_LAYER_WHITE, 255, 0);
 }
 
 int sr_ui_text_width(const char *s, int scale) { return (int)strlen(s) * 6 * scale; }
@@ -49,30 +49,30 @@ void sr_ui_text(SrUi *ui, float x, float y, const char *s, SrColor c, int scale)
     sr_font_cell(*s, &cx, &cy);
     float u0 = (float)cx * inv, v0 = (float)cy * inv, u1 = (float)(cx + 5) * inv, v1 = (float)(cy + 7) * inv;
     float w = 5.0f * (float)scale, h = 7.0f * (float)scale;
-    sr_mesh_quad(&ui->mesh, sr_v3(x, y + h, 0), sr_v3(x + w, y + h, 0), sr_v3(x + w, y, 0),
-                 sr_v3(x, y, 0), u0, v1, u1, v0, c, SR_LAYER_FONT, 255, 0);
+    sr_mesh_quad(&ui->mesh, sr_v3(x, y + h, 0), sr_v3(x + w, y + h, 0), sr_v3(x + w, y, 0), sr_v3(x, y, 0), u0, v1, u1,
+                 v0, c, SR_LAYER_FONT, 255, 0);
   }
 }
 
 void sr_ui_icon(SrUi *ui, float x, float y, float size, int poi, SrColor c) {
-  sr_mesh_quad(&ui->mesh, sr_v3(x, y + size, 0), sr_v3(x + size, y + size, 0), sr_v3(x + size, y, 0),
-               sr_v3(x, y, 0), 0, 1, 1, 0, c, SR_LAYER_ICON_FIRST + poi, 255, 0);
+  sr_mesh_quad(&ui->mesh, sr_v3(x, y + size, 0), sr_v3(x + size, y + size, 0), sr_v3(x + size, y, 0), sr_v3(x, y, 0), 0,
+               1, 1, 0, c, SR_LAYER_ICON_FIRST + poi, 255, 0);
 }
 
 const char *sr_ui_context_label(SrContextKind k) {
   switch (k) {
-  case SR_CTX_FOOD: return "EAT";
-  case SR_CTX_SHOP: return "SHOP";
-  case SR_CTX_FIXER: return "TALK TO FIXER";
-  case SR_CTX_HOME: return "SLEEP";
-  case SR_CTX_METRO: return "RIDE METRO";
-  case SR_CTX_CAPSULE: return "RENT CAPSULE";
-  case SR_CTX_JOB_TARGET: return "DO THE JOB";
-  case SR_CTX_JOB_REPORT: return "REPORT BACK";
-  case SR_CTX_CLINIC: return "CLINIC";
-  case SR_CTX_LANDLORD: return "PAY LANDLORD";
-  case SR_CTX_CLOSED: return "CLOSED";
-  default: return "";
+    case SR_CTX_FOOD: return "EAT";
+    case SR_CTX_SHOP: return "SHOP";
+    case SR_CTX_FIXER: return "TALK TO FIXER";
+    case SR_CTX_HOME: return "SLEEP";
+    case SR_CTX_METRO: return "RIDE METRO";
+    case SR_CTX_CAPSULE: return "RENT CAPSULE";
+    case SR_CTX_JOB_TARGET: return "DO THE JOB";
+    case SR_CTX_JOB_REPORT: return "REPORT BACK";
+    case SR_CTX_CLINIC: return "CLINIC";
+    case SR_CTX_LANDLORD: return "PAY LANDLORD";
+    case SR_CTX_CLOSED: return "CLOSED";
+    default: return "";
   }
 }
 
@@ -214,12 +214,13 @@ static void touch_overlay(SrUi *ui, const SrInput *in) {
     if (!f->active || f->role != 1) continue;
     float cx = f->start_x * l->width * k, cy = f->start_y * l->height * k, r = l->stick_radius * k;
     sr_ui_rect(ui, cx - r, cy - r, 2 * r, 2 * r, (SrColor){30, 40, 70, 110});
-    sr_ui_rect(ui, cx + in->stick_x * r - r / 3, cy - in->stick_y * r - r / 3, r / 1.5f, r / 1.5f, (SrColor){80, 230, 255, 200});
+    sr_ui_rect(ui, cx + in->stick_x * r - r / 3, cy - in->stick_y * r - r / 3, r / 1.5f, r / 1.5f,
+               (SrColor){80, 230, 255, 200});
   }
   if (in->wheel_open) {
     float cx = (float)ui->w * 0.7f, cy = (float)ui->h * 0.5f;
     for (int i = 0; i < 4; i++)
-      sr_ui_rect(ui, cx + (float)(i % 2) * 60 * k, cy + (float)(i / 2) * 60 * k, 56 * k, 56 * k,
+      sr_ui_rect(ui, cx + (float)(i % 2) * 60 * k, cy + (float)(i >> 1) * 60 * k, 56 * k, 56 * k,
                  i == in->wheel_choice ? k_cyan : k_panel);
   }
 }
@@ -244,25 +245,28 @@ static void create_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
     bar(ui, x + 50.0f * (float)s, y, 60.0f * (float)s, 6.0f * (float)s, d->attr[a] / 10.0f, k_cyan);
     y += line * 0.8f;
   }
-  snprintf(buf, sizeof buf, "TRAINED: %s, %s", sr_skill_name((SrSkill)d->trained[0]), sr_skill_name((SrSkill)d->trained[1]));
+  snprintf(buf, sizeof buf, "TRAINED: %s, %s", sr_skill_name((SrSkill)d->trained[0]),
+           sr_skill_name((SrSkill)d->trained[1]));
   sr_ui_text(ui, x, y + line * 0.3f, buf, k_cyan, s);
   /* appearance preview: a portrait built from the generated parts */
   SrAppearance a = sr_game_create_preview(g);
-  static const SrColor skin[8] = {{250, 210, 180, 255}, {230, 180, 140, 255}, {200, 150, 110, 255},
-                                  {170, 120, 80, 255}, {140, 95, 60, 255}, {110, 70, 45, 255},
-                                  {80, 52, 35, 255}, {60, 40, 28, 255}};
+  static const SrColor skin[8] = {{250, 210, 180, 255}, {230, 180, 140, 255}, {200, 150, 110, 255}, {170, 120, 80, 255},
+                                  {140, 95, 60, 255},   {110, 70, 45, 255},   {80, 52, 35, 255},    {60, 40, 28, 255}};
   float px = (float)ui->w * 0.7f, py = (float)ui->h * 0.25f, u = 6.0f * (float)s;
   SrColor hair = sr_corp_color(a.hair_color * 2);
   SrColor coat = sr_corp_color(a.outfit_color + 8);
   sr_ui_rect(ui, px - 3 * u, py + 9 * u, 6 * u + (float)a.body * u, 9 * u, coat);
   sr_ui_rect(ui, px - 2 * u, py + 2 * u, 4 * u, 6 * u, skin[a.skin & 7]);
-  if (a.hair % 12 < 4) sr_ui_rect(ui, px - u / 2, py - (float)(a.hair % 4) * u, u, 2 * u + (float)(a.hair % 4) * u, hair);
-  else if (a.hair % 12 < 9) sr_ui_rect(ui, px - 2 * u, py + u, 4 * u, 1.5f * u, hair);
+  if (a.hair % 12 < 4)
+    sr_ui_rect(ui, px - u / 2, py - (float)(a.hair % 4) * u, u, 2 * u + (float)(a.hair % 4) * u, hair);
+  else if (a.hair % 12 < 9)
+    sr_ui_rect(ui, px - 2 * u, py + u, 4 * u, 1.5f * u, hair);
   if (a.cyber) sr_ui_rect(ui, px - 1.5f * u, py + 4 * u, 3 * u, 0.6f * u, k_red);
   bool touch = in && in->scheme == SR_SCHEME_TOUCH;
   sr_ui_text(ui, x, (float)ui->h - line * 1.5f,
              touch ? "TAP LEFT: BACKGROUND  RIGHT: LOOK  BOTTOM RIGHT: START"
-                   : "1-5 BACKGROUND   R RANDOMISE LOOK   ENTER START", k_amber, s);
+                   : "1-5 BACKGROUND   R RANDOMISE LOOK   ENTER START",
+             k_amber, s);
 }
 
 void sr_ui_build(SrUi *ui, const SrGame *g, const SrInput *in, bool portrait) {
@@ -274,28 +278,29 @@ void sr_ui_build(SrUi *ui, const SrGame *g, const SrInput *in, bool portrait) {
     return;
   }
   switch (g->screen) {
-  case SR_SCREEN_TITLE:
-    sr_ui_rect(ui, 0, 0, (float)ui->w, (float)ui->h, (SrColor){5, 3, 12, 255});
-    centered(ui, (float)ui->h * 0.3f, "SILVERROCK", k_cyan, s * 2);
-    centered(ui, (float)ui->h * 0.3f + 20.0f * (float)s, "The sun hasn't risen in forty years.", k_white, s);
-    centered(ui, (float)ui->h * 0.3f + 30.0f * (float)s, "Rent is due on Friday.", k_white, s);
-    centered(ui, (float)ui->h * 0.7f, in && in->scheme == SR_SCHEME_TOUCH ? "TAP TO START" : "PRESS ENTER TO START", k_amber, s);
-    break;
-  case SR_SCREEN_PLAY: hud(ui, g); break;
-  case SR_SCREEN_PAUSE:
-    hud(ui, g);
-    sr_ui_rect(ui, 0, 0, (float)ui->w, (float)ui->h, (SrColor){0, 0, 0, 160});
-    centered(ui, (float)ui->h * 0.4f, "PAUSED", k_cyan, s * 2);
-    centered(ui, (float)ui->h * 0.4f + 22.0f * (float)s,
-             in && in->scheme == SR_SCHEME_TOUCH ? "TAP TO RESUME" : "PRESS ESC TO RESUME", k_white, s);
-    break;
-  case SR_SCREEN_TERMINAL: terminal(ui, g); break;
-  case SR_SCREEN_CREATE: create_screen(ui, g, in); break;
-  case SR_SCREEN_DEAD:
-    sr_ui_rect(ui, 0, 0, (float)ui->w, (float)ui->h, (SrColor){30, 0, 0, 240});
-    centered(ui, (float)ui->h * 0.4f, "FLATLINED", k_red, s * 2);
-    centered(ui, (float)ui->h * 0.4f + 22.0f * (float)s, "Hardcore: your save is gone.", k_white, s);
-    break;
+    case SR_SCREEN_TITLE:
+      sr_ui_rect(ui, 0, 0, (float)ui->w, (float)ui->h, (SrColor){5, 3, 12, 255});
+      centered(ui, (float)ui->h * 0.3f, "SILVERROCK", k_cyan, s * 2);
+      centered(ui, (float)ui->h * 0.3f + 20.0f * (float)s, "The sun hasn't risen in forty years.", k_white, s);
+      centered(ui, (float)ui->h * 0.3f + 30.0f * (float)s, "Rent is due on Friday.", k_white, s);
+      centered(ui, (float)ui->h * 0.7f, in && in->scheme == SR_SCHEME_TOUCH ? "TAP TO START" : "PRESS ENTER TO START",
+               k_amber, s);
+      break;
+    case SR_SCREEN_PLAY: hud(ui, g); break;
+    case SR_SCREEN_PAUSE:
+      hud(ui, g);
+      sr_ui_rect(ui, 0, 0, (float)ui->w, (float)ui->h, (SrColor){0, 0, 0, 160});
+      centered(ui, (float)ui->h * 0.4f, "PAUSED", k_cyan, s * 2);
+      centered(ui, (float)ui->h * 0.4f + 22.0f * (float)s,
+               in && in->scheme == SR_SCHEME_TOUCH ? "TAP TO RESUME" : "PRESS ESC TO RESUME", k_white, s);
+      break;
+    case SR_SCREEN_TERMINAL: terminal(ui, g); break;
+    case SR_SCREEN_CREATE: create_screen(ui, g, in); break;
+    case SR_SCREEN_DEAD:
+      sr_ui_rect(ui, 0, 0, (float)ui->w, (float)ui->h, (SrColor){30, 0, 0, 240});
+      centered(ui, (float)ui->h * 0.4f, "FLATLINED", k_red, s * 2);
+      centered(ui, (float)ui->h * 0.4f + 22.0f * (float)s, "Hardcore: your save is gone.", k_white, s);
+      break;
   }
   if (in && in->scheme == SR_SCHEME_TOUCH && g->screen == SR_SCREEN_PLAY) touch_overlay(ui, in);
 }

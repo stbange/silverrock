@@ -5,19 +5,19 @@
 #include "core/sr_types.h"
 
 typedef struct SrSettings {
-  int internal_res;      /* 0: 320x180, 1: 480x270 (default), 2: 640x360, 3: native */
+  int internal_res; /* 0: 320x180, 1: 480x270 (default), 2: 640x360, 3: native */
   bool integer_scale;
   bool fullscreen;
   bool dither, quantize, vertex_snap, affine, crt;
   bool dynamic_res;
   float mouse_sensitivity;
   float touch_sensitivity;
-  float aim_assist;      /* 0..1 */
+  float aim_assist; /* 0..1 */
   bool toggle_aim, toggle_crouch, toggle_sprint;
-  int ui_scale;          /* 1..4, 0 = automatic */
-  int volume;            /* 0..100 */
-  int difficulty;        /* SrDifficulty */
-  int time_rate;         /* in-game seconds per real second */
+  int ui_scale;   /* 1..4, 0 = automatic */
+  int volume;     /* 0..100 */
+  int difficulty; /* SrDifficulty */
+  int time_rate;  /* in-game seconds per real second */
   char bindings[512];
 } SrSettings;
 

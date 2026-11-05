@@ -6,24 +6,28 @@
 #include "sim/sr_events.h"
 #include "world/sr_world.h"
 
-#define SR_MAX_NPCS 3000
+#define SR_MAX_NPCS              3000
 #define SR_MAX_AMBIENT_PER_BLOCK 96
 
 typedef struct SrAppearance {
-  uint8_t body, head, skin, face, hair, hair_color, outfit, outfit_color, marker, cyber,
-      accessory;
+  uint8_t body, head, skin, face, hair, hair_color, outfit, outfit_color, marker, cyber, accessory;
 } SrAppearance;
 
 typedef enum SrRole {
-  SR_ROLE_WORKER, SR_ROLE_VENDOR, SR_ROLE_GANG, SR_ROLE_GUARD, SR_ROLE_EXEC, SR_ROLE_COP,
-  SR_ROLE_FIXER, SR_ROLE_DRIFTER, SR_ROLE_COUNT
+  SR_ROLE_WORKER,
+  SR_ROLE_VENDOR,
+  SR_ROLE_GANG,
+  SR_ROLE_GUARD,
+  SR_ROLE_EXEC,
+  SR_ROLE_COP,
+  SR_ROLE_FIXER,
+  SR_ROLE_DRIFTER,
+  SR_ROLE_COUNT
 } SrRole;
 
 typedef enum SrNpcStatus { SR_NPC_ALIVE, SR_NPC_DEAD, SR_NPC_ARRESTED } SrNpcStatus;
 
-typedef enum SrActivity {
-  SR_ACT_SLEEP, SR_ACT_WORK, SR_ACT_EAT, SR_ACT_LEISURE, SR_ACT_COMMUTE
-} SrActivity;
+typedef enum SrActivity { SR_ACT_SLEEP, SR_ACT_WORK, SR_ACT_EAT, SR_ACT_LEISURE, SR_ACT_COMMUTE } SrActivity;
 
 typedef struct SrNpc {
   uint32_t id;
@@ -33,11 +37,11 @@ typedef struct SrNpc {
   int8_t faction;
   uint8_t bravery; /* 0 timid .. 3 brave */
   uint8_t status;
-  uint8_t shift_start; /* hour */
-  uint8_t shift_len;   /* hours */
+  uint8_t shift_start;              /* hour */
+  uint8_t shift_len;                /* hours */
   int32_t home, work, eat, leisure; /* building indices */
-  int8_t attitude; /* memory of the player: -100..100 */
-  bool promoted;   /* was an ambient citizen */
+  int8_t attitude;                  /* memory of the player: -100..100 */
+  bool promoted;                    /* was an ambient citizen */
   uint64_t ambient_key;
 } SrNpc;
 
@@ -48,10 +52,10 @@ typedef struct SrPopulation {
 
 typedef struct SrPlace {
   SrActivity activity;
-  int32_t building;     /* current building, or the origin while commuting */
-  int32_t to_building;  /* commuting destination, else == building */
-  float progress;       /* 0..1 along the commute */
-  int32_t x, y;         /* position in cm */
+  int32_t building;    /* current building, or the origin while commuting */
+  int32_t to_building; /* commuting destination, else == building */
+  float progress;      /* 0..1 along the commute */
+  int32_t x, y;        /* position in cm */
 } SrPlace;
 
 typedef struct SrAmbient {
@@ -96,7 +100,6 @@ SrResponse sr_react_gunfire(uint8_t bravery, SrDistrictType district, uint64_t k
 bool sr_witness_reports(SrDistrictType district, uint8_t bravery, uint64_t key);
 /* Rumours: writes a bark for a citizen in district at time t. Returns true if it references an
  * event. */
-bool sr_bark(const SrCity *c, const SrEventLog *log, int district, int64_t t, uint64_t key,
-             char *out, size_t cap);
+bool sr_bark(const SrCity *c, const SrEventLog *log, int district, int64_t t, uint64_t key, char *out, size_t cap);
 
 #endif

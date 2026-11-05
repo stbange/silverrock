@@ -29,7 +29,9 @@ int main(int argc, char **argv) {
     fclose(f);
     LLVMFuzzerTestOneInput(g_buf, g_len);
   }
-  static const char *const seeds[] = {"\x01volume=5\ncrt=1\n", "\x02" "00000-00000-0000Z",
+  static const char *const seeds[] = {"\x01volume=5\ncrt=1\n",
+                                      "\x02"
+                                      "00000-00000-0000Z",
                                       "\x03jump=C;fire=W", "\x04get player.cash\nteleport home", "\x00"};
   for (long it = 0; it < iters; it++) {
     s = s * 6364136223846793005ull + 1442695040888963407ull;

@@ -14,7 +14,14 @@
 
 #include "game/sr_game.h"
 
-typedef enum SrStrategy { SR_STRAT_GIG, SR_STRAT_GHOST, SR_STRAT_FACE, SR_STRAT_HAMMER, SR_STRAT_NETRUNNER, SR_STRAT_LIVE } SrStrategy;
+typedef enum SrStrategy {
+  SR_STRAT_GIG,
+  SR_STRAT_GHOST,
+  SR_STRAT_FACE,
+  SR_STRAT_HAMMER,
+  SR_STRAT_NETRUNNER,
+  SR_STRAT_LIVE
+} SrStrategy;
 
 typedef struct SrAutoplayStats {
   int days;

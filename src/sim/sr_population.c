@@ -6,9 +6,8 @@
 #include <string.h>
 
 const char *sr_role_name(SrRole r) {
-  static const char *const n[SR_ROLE_COUNT] = {"worker", "vendor", "gang member", "guard",
-                                               "executive", "police officer", "fixer",
-                                               "drifter"};
+  static const char *const n[SR_ROLE_COUNT] = {"worker",    "vendor",         "gang member", "guard",
+                                               "executive", "police officer", "fixer",       "drifter"};
   return (unsigned)r < SR_ROLE_COUNT ? n[r] : "?";
 }
 
@@ -53,15 +52,31 @@ void sr_poi_hours(const SrCity *c, int building, int *open_hour, int *hours) {
   SrRng r = sr_rng_stream(c->seed, "hours", (uint64_t)building, 0);
   int p = c->buildings[building].poi;
   switch (p) {
-  case SR_POI_FOOD: *open_hour = sr_rng_range(&r, 12, 16); *hours = 16; break;
-  case SR_POI_BAR: *open_hour = 18; *hours = 12; break;
-  case SR_POI_FIXER: *open_hour = 20; *hours = 8; break;
-  case SR_POI_GUNSHOP: case SR_POI_ELECTRONICS: case SR_POI_CLOTHING: case SR_POI_GROCERY:
-  case SR_POI_FENCE: case SR_POI_RIPPERDOC:
-    *open_hour = sr_rng_range(&r, 9, 14);
-    *hours = 12;
-    break;
-  default: *open_hour = 0; *hours = 24; break;
+    case SR_POI_FOOD:
+      *open_hour = sr_rng_range(&r, 12, 16);
+      *hours = 16;
+      break;
+    case SR_POI_BAR:
+      *open_hour = 18;
+      *hours = 12;
+      break;
+    case SR_POI_FIXER:
+      *open_hour = 20;
+      *hours = 8;
+      break;
+    case SR_POI_GUNSHOP:
+    case SR_POI_ELECTRONICS:
+    case SR_POI_CLOTHING:
+    case SR_POI_GROCERY:
+    case SR_POI_FENCE:
+    case SR_POI_RIPPERDOC:
+      *open_hour = sr_rng_range(&r, 9, 14);
+      *hours = 12;
+      break;
+    default:
+      *open_hour = 0;
+      *hours = 24;
+      break;
   }
 }
 
@@ -91,8 +106,8 @@ static int nearest_poi_or(const SrCity *c, SrPoi poi, int from, int fallback) {
   return b >= 0 ? b : fallback;
 }
 
-static SrNpc *add_npc(SrPopulation *p, const SrCity *c, SrRole role, int faction, int home,
-                      int work, int shift_start, int shift_len) {
+static SrNpc *add_npc(SrPopulation *p, const SrCity *c, SrRole role, int faction, int home, int work, int shift_start,
+                      int shift_len) {
   if (p->count >= SR_MAX_NPCS) return NULL;
   SrNpc *n = &p->npcs[p->count];
   memset(n, 0, sizeof *n);
@@ -103,9 +118,8 @@ static SrNpc *add_npc(SrPopulation *p, const SrCity *c, SrRole role, int faction
   n->role = (uint8_t)role;
   n->faction = (int8_t)faction;
   SrRng r = sr_rng_stream(c->seed, "npc", n->id, 0);
-  n->bravery = (uint8_t)(role == SR_ROLE_GUARD || role == SR_ROLE_COP || role == SR_ROLE_GANG
-                             ? sr_rng_range(&r, 2, 3)
-                             : sr_rng_range(&r, 0, 3));
+  n->bravery = (uint8_t)(role == SR_ROLE_GUARD || role == SR_ROLE_COP || role == SR_ROLE_GANG ? sr_rng_range(&r, 2, 3)
+                                                                                              : sr_rng_range(&r, 0, 3));
   n->status = SR_NPC_ALIVE;
   n->home = home;
   n->work = work;
@@ -121,22 +135,20 @@ void sr_population_generate(SrPopulation *p, const SrCity *c) {
   memset(p, 0, sizeof *p);
   SrRng r = sr_rng_stream(c->seed, "population", 0, 0);
   static const int homes[] = {SR_D_RESIDENTIAL, SR_D_OLDQUARTER, SR_D_UNDERCITY};
-  static const int works[] = {SR_D_COMMERCIAL, SR_D_INDUSTRIAL, SR_D_SPIRE, SR_D_DOCKS,
-                              SR_D_CIVIC, SR_D_ENTERTAINMENT, SR_D_CAMPUS};
+  static const int works[] = {SR_D_COMMERCIAL, SR_D_INDUSTRIAL,    SR_D_SPIRE, SR_D_DOCKS,
+                              SR_D_CIVIC,      SR_D_ENTERTAINMENT, SR_D_CAMPUS};
   /* staff for every service */
   for (int b = 0; b < c->building_count; b++) {
     int poi = c->buildings[b].poi;
     if (poi == SR_POI_NONE || poi >= SR_POI_FIRST_SPECIAL) continue;
     int open, hours;
     sr_poi_hours(c, b, &open, &hours);
-    SrRole role = poi == SR_POI_FIXER ? SR_ROLE_FIXER : poi == SR_POI_POLICE ? SR_ROLE_COP
-                                                                             : SR_ROLE_VENDOR;
+    SrRole role = poi == SR_POI_FIXER ? SR_ROLE_FIXER : poi == SR_POI_POLICE ? SR_ROLE_COP : SR_ROLE_VENDOR;
     int faction = poi == SR_POI_POLICE ? c->factions.police : -1;
     int home = random_building(c, &r, homes, 3, SR_POI_NONE);
     if (hours >= 24) {
       add_npc(p, c, role, faction, home, b, open, 12);
-      add_npc(p, c, role, faction, random_building(c, &r, homes, 3, SR_POI_NONE), b,
-              (open + 12) % 24, 12);
+      add_npc(p, c, role, faction, random_building(c, &r, homes, 3, SR_POI_NONE), b, (open + 12) % 24, 12);
     } else {
       add_npc(p, c, role, faction, home, b, open, hours);
     }
@@ -150,16 +162,14 @@ void sr_population_generate(SrPopulation *p, const SrCity *c) {
     for (int i = 0; i < fa->facility_count; i++) sites[ns++] = fa->facilities[i];
     for (int s = 0; s < ns; s++) {
       for (int g = 0; g < 2; g++)
-        add_npc(p, c, SR_ROLE_GUARD, f, random_building(c, &r, homes, 3, SR_POI_NONE), sites[s],
-                g * 12, 12);
+        add_npc(p, c, SR_ROLE_GUARD, f, random_building(c, &r, homes, 3, SR_POI_NONE), sites[s], g * 12, 12);
     }
     add_npc(p, c, SR_ROLE_EXEC, f, fa->hq_building, fa->hq_building, 9, 10);
   }
   /* gang members */
   for (int g = c->factions.gang_first; g < c->factions.gang_first + c->factions.gang_count; g++) {
     const SrFaction *fa = &c->factions.f[g];
-    for (int m = 0; m < 8; m++)
-      add_npc(p, c, SR_ROLE_GANG, g, fa->hq_building, fa->hq_building, 18 + m % 4, 10);
+    for (int m = 0; m < 8; m++) add_npc(p, c, SR_ROLE_GANG, g, fa->hq_building, fa->hq_building, 18 + m % 4, 10);
   }
   /* residents and workers */
   int residents = 0;
@@ -176,15 +186,12 @@ void sr_population_generate(SrPopulation *p, const SrCity *c) {
 int sr_population_staff_of(const SrPopulation *p, int building) {
   for (int i = 0; i < p->count; i++)
     if (p->npcs[i].work == building &&
-        (p->npcs[i].role == SR_ROLE_VENDOR || p->npcs[i].role == SR_ROLE_FIXER ||
-         p->npcs[i].role == SR_ROLE_COP))
+        (p->npcs[i].role == SR_ROLE_VENDOR || p->npcs[i].role == SR_ROLE_FIXER || p->npcs[i].role == SR_ROLE_COP))
       return i;
   return -1;
 }
 
-static void building_pos(const SrCity *c, int b, int32_t *x, int32_t *y) {
-  sr_building_center(&c->buildings[b], x, y);
-}
+static void building_pos(const SrCity *c, int b, int32_t *x, int32_t *y) { sr_building_center(&c->buildings[b], x, y); }
 
 SrPlace sr_npc_place(const SrCity *c, const SrNpc *n, int64_t t) {
   SrPlace pl;
@@ -209,19 +216,34 @@ SrPlace sr_npc_place(const SrCity *c, const SrNpc *n, int64_t t) {
   if (rel < L) {
     act = SR_ACT_WORK;
   } else if (rel < L + 1800) {
-    act = SR_ACT_COMMUTE; a = n->work; b = n->eat; prog = (float)(rel - L) / 1800.0f;
+    act = SR_ACT_COMMUTE;
+    a = n->work;
+    b = n->eat;
+    prog = (float)(rel - L) / 1800.0f;
   } else if (rel < L + 5400) {
-    act = SR_ACT_EAT; a = b = n->eat;
+    act = SR_ACT_EAT;
+    a = b = n->eat;
   } else if (rel < L + 7200) {
-    act = SR_ACT_COMMUTE; a = n->eat; b = n->leisure; prog = (float)(rel - L - 5400) / 1800.0f;
+    act = SR_ACT_COMMUTE;
+    a = n->eat;
+    b = n->leisure;
+    prog = (float)(rel - L - 5400) / 1800.0f;
   } else if (rel < L + 14400) {
-    act = SR_ACT_LEISURE; a = b = n->leisure;
+    act = SR_ACT_LEISURE;
+    a = b = n->leisure;
   } else if (rel < L + 16200) {
-    act = SR_ACT_COMMUTE; a = n->leisure; b = n->home; prog = (float)(rel - L - 14400) / 1800.0f;
+    act = SR_ACT_COMMUTE;
+    a = n->leisure;
+    b = n->home;
+    prog = (float)(rel - L - 14400) / 1800.0f;
   } else if (rel < 86400 - 1800) {
-    act = SR_ACT_SLEEP; a = b = n->home;
+    act = SR_ACT_SLEEP;
+    a = b = n->home;
   } else {
-    act = SR_ACT_COMMUTE; a = n->home; b = n->work; prog = (float)(rel - (86400 - 1800)) / 1800.0f;
+    act = SR_ACT_COMMUTE;
+    a = n->home;
+    b = n->work;
+    prog = (float)(rel - (86400 - 1800)) / 1800.0f;
   }
   pl.activity = act;
   pl.building = a;
@@ -247,12 +269,11 @@ int sr_population_promote(SrPopulation *p, const SrCity *c, const SrAmbient *a, 
   SrRng r = sr_rng_stream(c->seed, "promote", a->key, 0);
   static const int homes[] = {SR_D_RESIDENTIAL, SR_D_OLDQUARTER, SR_D_UNDERCITY};
   int block = sr_city_block_at(c, a->x, a->y);
-  int work = block >= 0 && c->blocks[block].building_count > 0 ? c->blocks[block].first_building
-                                                                : c->home_building;
+  int work = block >= 0 && c->blocks[block].building_count > 0 ? c->blocks[block].first_building : c->home_building;
   /* the citizen is where we met them, so their shift covers the current hour */
   int hour = (int)((t % 86400) / 3600);
-  SrNpc *n = add_npc(p, c, (SrRole)a->role, a->faction, random_building(c, &r, homes, 3, SR_POI_NONE),
-                     work, (hour + 23) % 24, 8);
+  SrNpc *n = add_npc(p, c, (SrRole)a->role, a->faction, random_building(c, &r, homes, 3, SR_POI_NONE), work,
+                     (hour + 23) % 24, 8);
   if (!n) return -1;
   n->look = a->look;
   n->bravery = a->bravery;
@@ -267,10 +288,14 @@ int sr_crowd_density(SrDistrictType t, int hour) {
   static const int base[SR_D_COUNT] = {45, 30, 65, 80, 40, 45, 20, 15, 15, 35, 8};
   int pct;
   if (t == SR_D_ENTERTAINMENT) {
-    if (hour >= 20 || hour <= 4) pct = 100;
-    else if (hour <= 8) pct = 30;
-    else if (hour <= 16) pct = 15;
-    else pct = 50;
+    if (hour >= 20 || hour <= 4)
+      pct = 100;
+    else if (hour <= 8)
+      pct = 30;
+    else if (hour <= 16)
+      pct = 15;
+    else
+      pct = 50;
   } else if (t == SR_D_COMMERCIAL) {
     pct = (hour >= 17 && hour <= 23) ? 100 : 55;
   } else {
@@ -297,8 +322,7 @@ int sr_ambient_generate(const SrCity *c, int block, int64_t t, SrAmbient *out, i
     if (c->factions.f[g].turf & (1u << c->blocks[block].district)) gang = g;
   for (int i = 0; i < n; i++) {
     SrAmbient *a = &out[i];
-    a->key = sr_hash_combine(sr_hash_combine(c->seed, (uint64_t)block * 100000u + (uint64_t)i),
-                             (uint64_t)slot);
+    a->key = sr_hash_combine(sr_hash_combine(c->seed, (uint64_t)block * 100000u + (uint64_t)i), (uint64_t)slot);
     SrRng r = sr_rng_stream(a->key, "ambient", 0, 0);
     int roll = sr_rng_range(&r, 0, 99);
     SrRole role = SR_ROLE_WORKER;
@@ -330,10 +354,22 @@ int sr_ambient_generate(const SrCity *c, int block, int64_t t, SrAmbient *out, i
     int32_t along = sr_rng_range(&r, SR_STREET_CM, SR_BLOCK_CM - 100);
     int32_t walk = sr_rng_range(&r, SR_STREET_CM - 400, SR_STREET_CM - 100);
     switch (side) {
-    case 0: a->x = ox + along; a->y = oy + walk; break;
-    case 1: a->x = ox + along; a->y = oy + SR_BLOCK_CM - 100; break;
-    case 2: a->x = ox + walk; a->y = oy + along; break;
-    default: a->x = ox + SR_BLOCK_CM - 100; a->y = oy + along; break;
+      case 0:
+        a->x = ox + along;
+        a->y = oy + walk;
+        break;
+      case 1:
+        a->x = ox + along;
+        a->y = oy + SR_BLOCK_CM - 100;
+        break;
+      case 2:
+        a->x = ox + walk;
+        a->y = oy + along;
+        break;
+      default:
+        a->x = ox + SR_BLOCK_CM - 100;
+        a->y = oy + along;
+        break;
     }
   }
   return n;
@@ -343,8 +379,8 @@ int sr_ambient_generate(const SrCity *c, int block, int64_t t, SrAmbient *out, i
 
 int64_t sr_metro_next_train(const SrCity *c, int station, int direction, int64_t t) {
   const int64_t interval = 240;
-  int64_t offset = (int64_t)(sr_hash_combine(c->seed, (uint64_t)station * 2u + (uint64_t)direction) %
-                             (uint64_t)interval);
+  int64_t offset =
+      (int64_t)(sr_hash_combine(c->seed, (uint64_t)station * 2u + (uint64_t)direction) % (uint64_t)interval);
   int64_t k = (t - offset + interval - 1) / interval;
   if (t - offset < 0) k = 0;
   int64_t next = offset + k * interval;
@@ -368,8 +404,7 @@ bool sr_witness_reports(SrDistrictType district, uint8_t bravery, uint64_t key) 
   return bravery >= 1 && (sr_mix64(key) % 100) < 70;
 }
 
-bool sr_bark(const SrCity *c, const SrEventLog *log, int district, int64_t t, uint64_t key,
-             char *out, size_t cap) {
+bool sr_bark(const SrCity *c, const SrEventLog *log, int district, int64_t t, uint64_t key, char *out, size_t cap) {
   for (int i = 0; i < sr_events_size(log); i++) {
     const SrWorldEvent *ev = sr_events_recent(log, i);
     if (t - ev->time > 86400) break;
@@ -377,9 +412,9 @@ bool sr_bark(const SrCity *c, const SrEventLog *log, int district, int64_t t, ui
     snprintf(out, cap, "Heard about %s? Crazy night.", ev->text);
     return true;
   }
-  static const char *const generic[] = {
-      "Rain again. Always rain.", "My shift starts in an hour.", "Rent went up again.",
-      "Don't go into the Sump after midnight.", "You look like you need a job, choom."};
+  static const char *const generic[] = {"Rain again. Always rain.", "My shift starts in an hour.",
+                                        "Rent went up again.", "Don't go into the Sump after midnight.",
+                                        "You look like you need a job, choom."};
   snprintf(out, cap, "%s", generic[sr_mix64(key) % SR_ARRAY_LEN(generic)]);
   (void)c;
   return false;

@@ -7,18 +7,28 @@
 #include "core/sr_math.h"
 #include "game/sr_game.h"
 
-#define SR_TEX_SIZE 128
-#define SR_TEX_LAYERS 32
+#define SR_TEX_SIZE            128
+#define SR_TEX_LAYERS          32
 #define SR_MAX_LIGHTS_PER_DRAW 8
-#define SR_MAX_FRAME_LIGHTS 96
-#define SR_MAX_DRAWS 256
-#define SR_CHUNK_BLOCKS 4
+#define SR_MAX_FRAME_LIGHTS    96
+#define SR_MAX_DRAWS           256
+#define SR_CHUNK_BLOCKS        4
 
 /* texture array layers */
 enum {
-  SR_LAYER_WHITE = 0, SR_LAYER_CONCRETE, SR_LAYER_WIN_A, SR_LAYER_WIN_B, SR_LAYER_WIN_GLASS,
-  SR_LAYER_BRICK, SR_LAYER_METAL, SR_LAYER_ASPHALT, SR_LAYER_SIDEWALK, SR_LAYER_SIGN,
-  SR_LAYER_FONT, SR_LAYER_WATER, SR_LAYER_ICON_FIRST /* one icon per SrPoi */
+  SR_LAYER_WHITE = 0,
+  SR_LAYER_CONCRETE,
+  SR_LAYER_WIN_A,
+  SR_LAYER_WIN_B,
+  SR_LAYER_WIN_GLASS,
+  SR_LAYER_BRICK,
+  SR_LAYER_METAL,
+  SR_LAYER_ASPHALT,
+  SR_LAYER_SIDEWALK,
+  SR_LAYER_SIGN,
+  SR_LAYER_FONT,
+  SR_LAYER_WATER,
+  SR_LAYER_ICON_FIRST /* one icon per SrPoi */
 };
 
 typedef struct SrVertex {
@@ -36,21 +46,22 @@ typedef struct SrMesh {
   uint32_t *idx;
   int nv, ni;
   int cap_v, cap_i;
-  uint32_t gpu;    /* backend handle, 0 = not uploaded */
+  uint32_t gpu; /* backend handle, 0 = not uploaded */
   bool dirty;
 } SrMesh;
 
-typedef struct SrColor { uint8_t r, g, b, a; } SrColor;
+typedef struct SrColor {
+  uint8_t r, g, b, a;
+} SrColor;
 
 void sr_mesh_init(SrMesh *m);
 void sr_mesh_free(SrMesh *m);
 void sr_mesh_clear(SrMesh *m);
 /* Adds a quad (4 vertices, 2 triangles). Corners in order a,b,c,d (counter-clockwise). */
-void sr_mesh_quad(SrMesh *m, SrVec3 a, SrVec3 b, SrVec3 c, SrVec3 d, float u0, float v0,
-                  float u1, float v1, SrColor col, int layer, int emissive, int ground);
+void sr_mesh_quad(SrMesh *m, SrVec3 a, SrVec3 b, SrVec3 c, SrVec3 d, float u0, float v0, float u1, float v1,
+                  SrColor col, int layer, int emissive, int ground);
 /* Axis-aligned box with optional per-face UV tiling (u per metre). */
-void sr_mesh_box(SrMesh *m, SrVec3 lo, SrVec3 hi, SrColor col, int layer, float tile,
-                 int emissive);
+void sr_mesh_box(SrMesh *m, SrVec3 lo, SrVec3 hi, SrColor col, int layer, float tile, int emissive);
 uint64_t sr_mesh_digest(const SrMesh *m);
 
 /* Procedural textures: fills SR_TEX_SIZE^2 RGBA pixels for a layer, deterministic. */
@@ -94,7 +105,7 @@ typedef struct SrChunk {
 
 typedef struct SrChunkCache {
   SrChunk chunks[SR_CHUNK_CACHE];
-  int capacity;      /* LRU capacity (desktop 128, mobile 48) */
+  int capacity; /* LRU capacity (desktop 128, mobile 48) */
   uint64_t tick;
   int built_this_frame;
   int evictions;
@@ -105,8 +116,7 @@ void sr_chunk_cache_free(SrChunkCache *cc);
 /* Builds the mesh of one chunk (deterministic for the city). */
 void sr_chunk_build(const SrCity *c, const SrDeltas *d, int cx, int cy, SrMesh *out);
 /* Returns a ready chunk or NULL; builds at most `budget` chunks per frame. */
-SrChunk *sr_chunk_get(SrChunkCache *cc, const SrCity *c, const SrDeltas *d, int cx, int cy,
-                      int budget);
+SrChunk *sr_chunk_get(SrChunkCache *cc, const SrCity *c, const SrDeltas *d, int cx, int cy, int budget);
 int sr_chunk_count(const SrCity *c); /* chunks per side */
 
 /* Characters, rain, skyline, landmarks */
@@ -163,7 +173,9 @@ int sr_collect_lights(const SrCity *c, SrVec3 cam, float radius, SrLight *out, i
 float sr_fog_factor(float view_z, float fog_start, float fog_end, float emissive);
 
 /* View math */
-typedef struct SrViewport { int x, y, w, h; } SrViewport;
+typedef struct SrViewport {
+  int x, y, w, h;
+} SrViewport;
 SrViewport sr_letterbox(int win_w, int win_h, int src_w, int src_h, bool integer_scale);
 /* Projected size in pixels of an object of `size_m` at `dist_m` (vertical fov). */
 float sr_projected_pixels(float size_m, float dist_m, float fovy, int screen_h);

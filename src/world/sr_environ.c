@@ -4,7 +4,7 @@
 
 #include <stdio.h>
 
-#define WEATHER_SLOT_S (2 * 3600)
+#define WEATHER_SLOT_S       (2 * 3600)
 #define WEATHER_TRANSITION_S (10 * 60)
 
 void sr_clock_init(SrClock *c) {
@@ -35,13 +35,12 @@ const char *sr_weekday_name(int d) {
 }
 
 void sr_time_format(int64_t t, char *out, size_t cap) {
-  snprintf(out, cap, "%s %02d:%02d (week %d)", sr_weekday_name(sr_time_weekday(t)),
-           sr_time_hour(t), sr_time_minute(t), sr_time_week(t));
+  snprintf(out, cap, "%s %02d:%02d (week %d)", sr_weekday_name(sr_time_weekday(t)), sr_time_hour(t), sr_time_minute(t),
+           sr_time_week(t));
 }
 
 const char *sr_weather_name(SrWeather w) {
-  static const char *const n[SR_WX_COUNT] = {"clear", "drizzle", "downpour", "fog",
-                                             "smog alert", "acid-rain advisory"};
+  static const char *const n[SR_WX_COUNT] = {"clear", "drizzle", "downpour", "fog", "smog alert", "acid-rain advisory"};
   return (unsigned)w < SR_WX_COUNT ? n[w] : "?";
 }
 
@@ -52,10 +51,10 @@ float sr_weather_visibility(SrWeather w) {
 
 static float weather_rain(SrWeather w) {
   switch (w) {
-  case SR_WX_DRIZZLE: return 0.35f;
-  case SR_WX_DOWNPOUR: return 1.0f;
-  case SR_WX_ACID: return 0.6f;
-  default: return 0.0f;
+    case SR_WX_DRIZZLE: return 0.35f;
+    case SR_WX_DOWNPOUR: return 1.0f;
+    case SR_WX_ACID: return 0.6f;
+    default: return 0.0f;
   }
 }
 
@@ -72,8 +71,8 @@ SrWeatherState sr_weather_at(uint64_t seed, int64_t t) {
   s.to = sr_weather_slot(seed, slot);
   s.from = slot > 0 ? sr_weather_slot(seed, slot - 1) : s.to;
   s.blend = into >= WEATHER_TRANSITION_S ? 1.0f : (float)into / (float)WEATHER_TRANSITION_S;
-  s.visibility = sr_weather_visibility(s.from) +
-                 (sr_weather_visibility(s.to) - sr_weather_visibility(s.from)) * s.blend;
+  s.visibility =
+      sr_weather_visibility(s.from) + (sr_weather_visibility(s.to) - sr_weather_visibility(s.from)) * s.blend;
   s.rain = weather_rain(s.from) + (weather_rain(s.to) - weather_rain(s.from)) * s.blend;
   s.wetness = s.rain > 0.0f ? 0.3f + 0.7f * s.rain : 0.25f; /* streets never fully dry */
   return s;

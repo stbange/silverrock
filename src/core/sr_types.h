@@ -17,9 +17,9 @@ typedef enum SrResult {
   SR_ERR_NOT_FOUND = 7
 } SrResult;
 
-#define SR_ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
-#define SR_MIN(a, b) ((a) < (b) ? (a) : (b))
-#define SR_MAX(a, b) ((a) > (b) ? (a) : (b))
+#define SR_ARRAY_LEN(a)     (sizeof(a) / sizeof((a)[0]))
+#define SR_MIN(a, b)        ((a) < (b) ? (a) : (b))
+#define SR_MAX(a, b)        ((a) > (b) ? (a) : (b))
 #define SR_CLAMP(v, lo, hi) ((v) < (lo) ? (lo) : ((v) > (hi) ? (hi) : (v)))
 
 void sr_assert_failed(const char *expr, const char *file, int line);

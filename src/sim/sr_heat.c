@@ -3,7 +3,7 @@
 #include <string.h>
 
 #define DECAY_DELAY (3600)
-#define DECAY_STEP (8 * 3600)
+#define DECAY_STEP  (8 * 3600)
 
 void sr_heat_init(SrHeat *h) { memset(h, 0, sizeof *h); }
 
@@ -72,9 +72,7 @@ bool sr_heat_recognises(const SrHeat *h, int j, uint64_t look) {
   return j >= 0 && j < SR_MAX_FACTIONS && h->level[j] > 0 && h->known_look[j] == look;
 }
 
-int32_t sr_heat_bribe_cost(const SrHeat *h, int j) {
-  return j >= 0 && j < SR_MAX_FACTIONS ? 400 * h->level[j] : 0;
-}
+int32_t sr_heat_bribe_cost(const SrHeat *h, int j) { return j >= 0 && j < SR_MAX_FACTIONS ? 400 * h->level[j] : 0; }
 
 bool sr_heat_bribe(SrHeat *h, int j, int police, int64_t *cash) {
   if (j != police || h->level[j] == 0) return false;
@@ -117,7 +115,8 @@ int sr_heat_attribution(const SrEvidence *ev, int n) {
   int player = 0, best_faction = -1, best_count = 0;
   int counts[SR_MAX_FACTIONS] = {0};
   for (int i = 0; i < n; i++) {
-    if (ev[i].points_to == -2) player++;
+    if (ev[i].points_to == -2)
+      player++;
     else if (ev[i].points_to >= 0 && ev[i].points_to < SR_MAX_FACTIONS) {
       int c = ++counts[ev[i].points_to];
       if (c > best_count) {

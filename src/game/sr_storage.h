@@ -16,7 +16,7 @@ typedef struct SrStorage {
 } SrStorage;
 
 #define SR_MEM_FILES 16
-#define SR_MEM_NAME 32
+#define SR_MEM_NAME  32
 
 typedef struct SrMemFile {
   char name[SR_MEM_NAME];
@@ -27,7 +27,7 @@ typedef struct SrMemFile {
 
 typedef struct SrMemStore {
   SrMemFile files[SR_MEM_FILES];
-  int fail_writes;          /* test hook: next N writes are interrupted */
+  int fail_writes; /* test hook: next N writes are interrupted */
   int writes;
 } SrMemStore;
 

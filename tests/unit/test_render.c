@@ -117,7 +117,7 @@ static void test_chunks_and_streaming(void) {
   SR_CHECK(cc->evictions > 0);
   cc->built_this_frame = 0;
   SrChunk *again = sr_chunk_get(cc, g->city, &g->deltas, 0, 0, 1);
-  SR_CHECK(again && again->digest == d0); /* regenerated identically */
+  SR_CHECK(again && again->digest == d0);                            /* regenerated identically */
   SR_CHECK(sr_chunk_get(cc, g->city, &g->deltas, 0, 0, 0) == again); /* cached: no budget needed */
   SR_CHECK(sr_chunk_get(cc, g->city, &g->deltas, -1, 0, 1) == NULL);
   SR_CHECK(sr_chunk_get(cc, g->city, &g->deltas, n, 0, 1) == NULL);
@@ -285,8 +285,8 @@ static void test_ui(void) {
   SrInput in;
   sr_input_init(&in, true);
   /* every screen builds */
-  static const SrScreen screens[] = {SR_SCREEN_TITLE, SR_SCREEN_PLAY, SR_SCREEN_PAUSE,
-                                     SR_SCREEN_TERMINAL, SR_SCREEN_DEAD};
+  static const SrScreen screens[] = {SR_SCREEN_TITLE, SR_SCREEN_PLAY, SR_SCREEN_PAUSE, SR_SCREEN_TERMINAL,
+                                     SR_SCREEN_DEAD};
   sr_game_toast(g, "toast");
   int ids[4];
   int k = sr_game_fixer(g, g->city->factions.fixer_building[0], ids);

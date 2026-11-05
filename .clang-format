@@ -1,0 +1,23 @@
+# Silverrock C style. Checked by the lint job: clang-format --dry-run --Werror.
+BasedOnStyle: LLVM
+Language: Cpp
+IndentWidth: 2
+ColumnLimit: 120
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Always
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortEnumsOnASingleLine: true
+AlignConsecutiveMacros: Consecutive
+AlignTrailingComments: true
+BinPackArguments: true
+BinPackParameters: true
+PointerAlignment: Right
+SortIncludes: Never
+IncludeBlocks: Preserve
+SpaceAfterCStyleCast: false
+ReflowComments: false
+BreakBeforeBraces: Attach
+IndentCaseLabels: true
+Cpp11BracedListStyle: true

@@ -24,13 +24,9 @@ static const SrHousingDef k_housing[SR_HOUSE_COUNT] = {
     {"Spire Penthouse", 8000, 64, true, true, SR_D_SPIRE},
 };
 
-const SrBackgroundDef *sr_background_def(int bg) {
-  return bg >= 0 && bg < SR_BG_COUNT ? &k_backgrounds[bg] : NULL;
-}
+const SrBackgroundDef *sr_background_def(int bg) { return bg >= 0 && bg < SR_BG_COUNT ? &k_backgrounds[bg] : NULL; }
 
-const SrHousingDef *sr_housing_def(int tier) {
-  return tier >= 0 && tier < SR_HOUSE_COUNT ? &k_housing[tier] : NULL;
-}
+const SrHousingDef *sr_housing_def(int tier) { return tier >= 0 && tier < SR_HOUSE_COUNT ? &k_housing[tier] : NULL; }
 
 int64_t sr_rent_due_for(int64_t t) { return (t / SR_WEEK_S + 1) * SR_WEEK_S - 60; }
 
@@ -64,8 +60,7 @@ void sr_player_tx(SrPlayer *p, int64_t t, int32_t amount, const char *what) {
   sr_strlcpy(x->what, what, sizeof x->what);
 }
 
-void sr_player_create(SrPlayer *p, const SrCity *c, const char *name, SrBackground bg,
-                      uint64_t look_seed) {
+void sr_player_create(SrPlayer *p, const SrCity *c, const char *name, SrBackground bg, uint64_t look_seed) {
   memset(p, 0, sizeof *p);
   const SrBackgroundDef *d = sr_background_def(bg);
   if (!d) d = &k_backgrounds[0];
@@ -96,22 +91,22 @@ void sr_player_create(SrPlayer *p, const SrCity *c, const char *name, SrBackgrou
   sr_inv_add(&p->inv, sr_item_simple(SR_IK_FOOD, 1, 2));
   sr_inv_add(&p->inv, sr_item_simple(SR_IK_DECK, 0, 1)); /* every background has a deck */
   switch (bg) {
-  case SR_BG_MILITARY:
-    sr_inv_add(&p->inv, sr_item_weapon(1, SR_STREET_MAKER_FIRST, SR_RAR_STANDARD, 11));
-    p->armor = 20;
-    break;
-  case SR_BG_MEDIC:
-    sr_inv_add(&p->inv, sr_item_simple(SR_IK_GADGET, SR_GD_MEDKIT, 3));
-    sr_inv_add(&p->inv, sr_item_weapon(18, SR_STREET_MAKER_FIRST, SR_RAR_STREET, 12));
-    break;
-  case SR_BG_NETRUNNER:
-    p->inv.items[sr_inv_find(&p->inv, SR_IK_DECK, -1)].type = 1;
-    sr_inv_add(&p->inv, sr_item_weapon(16, SR_STREET_MAKER_FIRST, SR_RAR_STREET, 13));
-    break;
-  default:
-    sr_inv_add(&p->inv, sr_item_weapon(0, SR_STREET_MAKER_FIRST, SR_RAR_STREET, 10));
-    sr_inv_add(&p->inv, sr_item_weapon(18, SR_STREET_MAKER_FIRST, SR_RAR_STREET, 14));
-    break;
+    case SR_BG_MILITARY:
+      sr_inv_add(&p->inv, sr_item_weapon(1, SR_STREET_MAKER_FIRST, SR_RAR_STANDARD, 11));
+      p->armor = 20;
+      break;
+    case SR_BG_MEDIC:
+      sr_inv_add(&p->inv, sr_item_simple(SR_IK_GADGET, SR_GD_MEDKIT, 3));
+      sr_inv_add(&p->inv, sr_item_weapon(18, SR_STREET_MAKER_FIRST, SR_RAR_STREET, 12));
+      break;
+    case SR_BG_NETRUNNER:
+      p->inv.items[sr_inv_find(&p->inv, SR_IK_DECK, -1)].type = 1;
+      sr_inv_add(&p->inv, sr_item_weapon(16, SR_STREET_MAKER_FIRST, SR_RAR_STREET, 13));
+      break;
+    default:
+      sr_inv_add(&p->inv, sr_item_weapon(0, SR_STREET_MAKER_FIRST, SR_RAR_STREET, 10));
+      sr_inv_add(&p->inv, sr_item_weapon(18, SR_STREET_MAKER_FIRST, SR_RAR_STREET, 14));
+      break;
   }
   sr_inv_add(&p->inv, sr_item_simple(SR_IK_AMMO, SR_AMMO_STANDARD, 24));
   p->equipped = (int8_t)sr_inv_find(&p->inv, SR_IK_WEAPON, -1);
@@ -186,8 +181,10 @@ SrResult sr_player_sell(SrPlayer *p, const SrCity *c, int building, int idx, int
   int before = p->inv.count;
   sr_inv_remove_at(&p->inv, idx, 1);
   if (p->inv.count < before) {
-    if (p->equipped == idx) p->equipped = -1;
-    else if (p->equipped > idx) p->equipped--;
+    if (p->equipped == idx)
+      p->equipped = -1;
+    else if (p->equipped > idx)
+      p->equipped--;
   }
   sr_player_tx(p, t, price, "sale");
   return SR_OK;
@@ -259,8 +256,7 @@ SrResult sr_player_sleep_allowed(const SrPlayer *p, int hostiles) {
   return hostiles > 0 ? SR_ERR_DENIED : SR_OK;
 }
 
-void sr_player_wake(SrPlayer *p, SrSleepPlace place, uint64_t seed, int64_t t,
-                    SrDistrictType district) {
+void sr_player_wake(SrPlayer *p, SrSleepPlace place, uint64_t seed, int64_t t, SrDistrictType district) {
   if (place != SR_SLEEP_STREET) return;
   int chance = district == SR_D_UNDERCITY || district == SR_D_BARRENS ? 450 : 250;
   SrRng r = sr_rng_stream(seed, "robbery", (uint64_t)(t / SR_DAY_S), (uint64_t)district);

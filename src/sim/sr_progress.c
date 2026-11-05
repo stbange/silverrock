@@ -14,16 +14,16 @@ const char *sr_attr_name(SrAttr a) {
 }
 
 const char *sr_skill_name(SrSkill s) {
-  static const char *const n[SR_SK_COUNT] = {
-      "Pistols", "Long Guns", "Heavy Weapons", "Melee", "Athletics", "Stealth", "Netrunning",
-      "Electronics", "Engineering", "Medicine", "Persuasion", "Streetwise"};
+  static const char *const n[SR_SK_COUNT] = {"Pistols",     "Long Guns", "Heavy Weapons", "Melee",
+                                             "Athletics",   "Stealth",   "Netrunning",    "Electronics",
+                                             "Engineering", "Medicine",  "Persuasion",    "Streetwise"};
   return (unsigned)s < SR_SK_COUNT ? n[s] : "?";
 }
 
 SrAttr sr_skill_attr(SrSkill s) {
-  static const SrAttr a[SR_SK_COUNT] = {
-      SR_ATTR_REFLEX, SR_ATTR_REFLEX, SR_ATTR_BODY, SR_ATTR_BODY, SR_ATTR_BODY, SR_ATTR_COOL,
-      SR_ATTR_MIND, SR_ATTR_TECH, SR_ATTR_TECH, SR_ATTR_TECH, SR_ATTR_COOL, SR_ATTR_COOL};
+  static const SrAttr a[SR_SK_COUNT] = {SR_ATTR_REFLEX, SR_ATTR_REFLEX, SR_ATTR_BODY, SR_ATTR_BODY,
+                                        SR_ATTR_BODY,   SR_ATTR_COOL,   SR_ATTR_MIND, SR_ATTR_TECH,
+                                        SR_ATTR_TECH,   SR_ATTR_TECH,   SR_ATTR_COOL, SR_ATTR_COOL};
   return (unsigned)s < SR_SK_COUNT ? a[s] : SR_ATTR_BODY;
 }
 
@@ -41,8 +41,7 @@ bool sr_progress_use_skill(SrProgress *p, SrSkill s, SrSkillUse use, int amount)
   if (p->skill_rank[s] >= SR_MAX_SKILL_RANK) return false;
   p->skill_xp[s] += amount * (use == SR_USE_SUCCESS ? 2 : 1);
   bool ranked = false;
-  while (p->skill_rank[s] < SR_MAX_SKILL_RANK &&
-         p->skill_xp[s] >= sr_skill_xp_for_rank(p->skill_rank[s])) {
+  while (p->skill_rank[s] < SR_MAX_SKILL_RANK && p->skill_xp[s] >= sr_skill_xp_for_rank(p->skill_rank[s])) {
     p->skill_xp[s] -= sr_skill_xp_for_rank(p->skill_rank[s]);
     p->skill_rank[s]++;
     p->notifications++;

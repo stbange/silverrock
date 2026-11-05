@@ -145,7 +145,7 @@ static void test_writer_reader(void) {
   size_t off = w.len;
   sr_put_u32(&w, 0);
   sr_patch_u32(&w, off, 99);
-  sr_patch_u32(&w, w.len, 1); /* out of range: ignored */
+  sr_patch_u32(&w, w.len, 1);                              /* out of range: ignored */
   for (int i = 0; i < 300; i++) sr_put_u8(&w, (uint8_t)i); /* forces growth */
   SR_CHECK(!w.failed);
 

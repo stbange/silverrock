@@ -48,10 +48,22 @@ void sr_interior_generate(const SrCity *c, int building, SrInterior *in) {
     int o = opts[sr_rng_range(&r, 0, no - 1)];
     int nxt;
     switch (o) {
-    case 0: in->doors[cur] |= 1; nxt = cur + 1; break;
-    case 1: in->doors[cur - 1] |= 1; nxt = cur - 1; break;
-    case 2: in->doors[cur] |= 2; nxt = cur + in->w; break;
-    default: in->doors[cur - in->w] |= 2; nxt = cur - in->w; break;
+      case 0:
+        in->doors[cur] |= 1;
+        nxt = cur + 1;
+        break;
+      case 1:
+        in->doors[cur - 1] |= 1;
+        nxt = cur - 1;
+        break;
+      case 2:
+        in->doors[cur] |= 2;
+        nxt = cur + in->w;
+        break;
+      default:
+        in->doors[cur - in->w] |= 2;
+        nxt = cur - in->w;
+        break;
     }
     seen[nxt] = true;
     stack[sp++] = nxt;
@@ -77,21 +89,19 @@ void sr_interior_generate(const SrCity *c, int building, SrInterior *in) {
   }
   /* entries */
   in->entries[in->entry_count++] = (SrEntry){SR_ENTRY_FRONT, (uint8_t)room_index(in, 0, in->h - 1)};
-  in->entries[in->entry_count++] =
-      (SrEntry){SR_ENTRY_SERVICE, (uint8_t)room_index(in, in->w - 1, in->h - 1)};
+  in->entries[in->entry_count++] = (SrEntry){SR_ENTRY_SERVICE, (uint8_t)room_index(in, in->w - 1, in->h - 1)};
   if (mission) {
     in->entries[in->entry_count++] = (SrEntry){SR_ENTRY_ROOF, (uint8_t)room_index(in, 0, 0)};
     in->entries[in->entry_count++] = (SrEntry){SR_ENTRY_VENT, (uint8_t)room_index(in, 0, 0)};
-    if (sr_rng_chance(&r, 500))
-      in->entries[in->entry_count++] = (SrEntry){SR_ENTRY_WINDOW, (uint8_t)(in->w - 1)};
+    if (sr_rng_chance(&r, 500)) in->entries[in->entry_count++] = (SrEntry){SR_ENTRY_WINDOW, (uint8_t)(in->w - 1)};
   }
   /* devices: doors on every connection, locked doors guard the target, cameras, lights */
   for (int i = 0; i < n; i++) {
     for (int dir = 0; dir < 2; dir++) {
       if (!(in->doors[i] & (1 << dir))) continue;
       int other = dir == 0 ? i + 1 : i + in->w;
-      bool locked = mission && (other == in->target_room || i == in->target_room ||
-                                other == in->security_room || i == in->security_room);
+      bool locked = mission && (other == in->target_room || i == in->target_room || other == in->security_room ||
+                                i == in->security_room);
       add_device(in, SR_DEV_DOOR, i, dir, locked);
     }
   }
@@ -125,8 +135,7 @@ static bool vent_between(const SrInterior *in, int a, int b) {
   return (in->vents[lo] & (1 << dir)) != 0;
 }
 
-bool sr_interior_reachable(const SrInterior *in, int from, int to, bool use_vents,
-                           bool through_locked) {
+bool sr_interior_reachable(const SrInterior *in, int from, int to, bool use_vents, bool through_locked) {
   bool seen[SR_INT_MAX_ROOMS] = {false};
   int queue[SR_INT_MAX_ROOMS], head = 0, tail = 0;
   queue[tail++] = from;
@@ -135,8 +144,8 @@ bool sr_interior_reachable(const SrInterior *in, int from, int to, bool use_vent
     int cur = queue[head++];
     if (cur == to) return true;
     int cx = cur % in->w, cy = cur / in->w;
-    int nb[4] = {cx + 1 < in->w ? cur + 1 : -1, cx > 0 ? cur - 1 : -1,
-                 cy + 1 < in->h ? cur + in->w : -1, cy > 0 ? cur - in->w : -1};
+    int nb[4] = {cx + 1 < in->w ? cur + 1 : -1, cx > 0 ? cur - 1 : -1, cy + 1 < in->h ? cur + in->w : -1,
+                 cy > 0 ? cur - in->w : -1};
     for (int k = 0; k < 4; k++) {
       int o = nb[k];
       if (o < 0 || seen[o]) continue;
@@ -163,10 +172,8 @@ int sr_interior_route_count(const SrInterior *in) {
 bool sr_interior_security_chain_ok(const SrInterior *in) {
   for (int d = 0; d < in->device_count; d++) {
     const SrDevice *dev = &in->devices[d];
-    bool needs = dev->type == SR_DEV_CAMERA || (dev->type == SR_DEV_DOOR && dev->locked) ||
-                 dev->type == SR_DEV_TURRET;
-    if (needs && (dev->control_room < 0 || in->rooms[dev->control_room] != SR_ROOM_SECURITY))
-      return false;
+    bool needs = dev->type == SR_DEV_CAMERA || (dev->type == SR_DEV_DOOR && dev->locked) || dev->type == SR_DEV_TURRET;
+    if (needs && (dev->control_room < 0 || in->rooms[dev->control_room] != SR_ROOM_SECURITY)) return false;
   }
   return true;
 }

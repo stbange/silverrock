@@ -32,7 +32,8 @@ static SrResult fs_write(void *user, const char *name, const void *data, size_t 
   join((SrFileStore *)user, name, path, sizeof path);
   snprintf(tmp, sizeof tmp, "%s.tmp", path);
   if (!SDL_SaveFile(tmp, data, len)) return SR_ERR_IO;
-  if (!SDL_RenamePath(tmp, path)) return SR_ERR_IO; /* GCOVR_EXCL_LINE reason: rename failure needs a broken filesystem */
+  if (!SDL_RenamePath(tmp, path))
+    return SR_ERR_IO; /* GCOVR_EXCL_LINE reason: rename failure needs a broken filesystem */
   web_sync();
   return SR_OK;
 }
@@ -132,57 +133,57 @@ SrResult sr_app_save_settings(SrApp *a) {
 
 SrKey sr_platform_key(SDL_Scancode sc) {
   switch (sc) {
-  case SDL_SCANCODE_W: return SR_KEY_W;
-  case SDL_SCANCODE_A: return SR_KEY_A;
-  case SDL_SCANCODE_S: return SR_KEY_S;
-  case SDL_SCANCODE_D: return SR_KEY_D;
-  case SDL_SCANCODE_SPACE: return SR_KEY_SPACE;
-  case SDL_SCANCODE_C: return SR_KEY_C;
-  case SDL_SCANCODE_E: return SR_KEY_E;
-  case SDL_SCANCODE_R: return SR_KEY_R;
-  case SDL_SCANCODE_Q: return SR_KEY_Q;
-  case SDL_SCANCODE_F: return SR_KEY_F;
-  case SDL_SCANCODE_1: return SR_KEY_1;
-  case SDL_SCANCODE_2: return SR_KEY_2;
-  case SDL_SCANCODE_3: return SR_KEY_3;
-  case SDL_SCANCODE_4: return SR_KEY_4;
-  case SDL_SCANCODE_TAB: return SR_KEY_TAB;
-  case SDL_SCANCODE_M: return SR_KEY_M;
-  case SDL_SCANCODE_J: return SR_KEY_J;
-  case SDL_SCANCODE_V: return SR_KEY_V;
-  case SDL_SCANCODE_ESCAPE: return SR_KEY_ESCAPE;
-  case SDL_SCANCODE_LSHIFT: return SR_KEY_LSHIFT;
-  case SDL_SCANCODE_T: return SR_KEY_T;
-  case SDL_SCANCODE_UP: return SR_KEY_UP;
-  case SDL_SCANCODE_DOWN: return SR_KEY_DOWN;
-  case SDL_SCANCODE_LEFT: return SR_KEY_LEFT;
-  case SDL_SCANCODE_RIGHT: return SR_KEY_RIGHT;
-  case SDL_SCANCODE_RETURN: return SR_KEY_RETURN;
-  case SDL_SCANCODE_X: return SR_KEY_X;
-  case SDL_SCANCODE_Z: return SR_KEY_Z;
-  case SDL_SCANCODE_N: return SR_KEY_N;
-  case SDL_SCANCODE_Y: return SR_KEY_Y;
-  default: return SR_KEY_NONE;
+    case SDL_SCANCODE_W: return SR_KEY_W;
+    case SDL_SCANCODE_A: return SR_KEY_A;
+    case SDL_SCANCODE_S: return SR_KEY_S;
+    case SDL_SCANCODE_D: return SR_KEY_D;
+    case SDL_SCANCODE_SPACE: return SR_KEY_SPACE;
+    case SDL_SCANCODE_C: return SR_KEY_C;
+    case SDL_SCANCODE_E: return SR_KEY_E;
+    case SDL_SCANCODE_R: return SR_KEY_R;
+    case SDL_SCANCODE_Q: return SR_KEY_Q;
+    case SDL_SCANCODE_F: return SR_KEY_F;
+    case SDL_SCANCODE_1: return SR_KEY_1;
+    case SDL_SCANCODE_2: return SR_KEY_2;
+    case SDL_SCANCODE_3: return SR_KEY_3;
+    case SDL_SCANCODE_4: return SR_KEY_4;
+    case SDL_SCANCODE_TAB: return SR_KEY_TAB;
+    case SDL_SCANCODE_M: return SR_KEY_M;
+    case SDL_SCANCODE_J: return SR_KEY_J;
+    case SDL_SCANCODE_V: return SR_KEY_V;
+    case SDL_SCANCODE_ESCAPE: return SR_KEY_ESCAPE;
+    case SDL_SCANCODE_LSHIFT: return SR_KEY_LSHIFT;
+    case SDL_SCANCODE_T: return SR_KEY_T;
+    case SDL_SCANCODE_UP: return SR_KEY_UP;
+    case SDL_SCANCODE_DOWN: return SR_KEY_DOWN;
+    case SDL_SCANCODE_LEFT: return SR_KEY_LEFT;
+    case SDL_SCANCODE_RIGHT: return SR_KEY_RIGHT;
+    case SDL_SCANCODE_RETURN: return SR_KEY_RETURN;
+    case SDL_SCANCODE_X: return SR_KEY_X;
+    case SDL_SCANCODE_Z: return SR_KEY_Z;
+    case SDL_SCANCODE_N: return SR_KEY_N;
+    case SDL_SCANCODE_Y: return SR_KEY_Y;
+    default: return SR_KEY_NONE;
   }
 }
 
 SrPad sr_platform_pad_button(int b) {
   switch (b) {
-  case SDL_GAMEPAD_BUTTON_SOUTH: return SR_PAD_SOUTH;
-  case SDL_GAMEPAD_BUTTON_EAST: return SR_PAD_EAST;
-  case SDL_GAMEPAD_BUTTON_WEST: return SR_PAD_WEST;
-  case SDL_GAMEPAD_BUTTON_NORTH: return SR_PAD_NORTH;
-  case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return SR_PAD_LB;
-  case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return SR_PAD_RB;
-  case SDL_GAMEPAD_BUTTON_LEFT_STICK: return SR_PAD_LSTICK;
-  case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return SR_PAD_RSTICK;
-  case SDL_GAMEPAD_BUTTON_START: return SR_PAD_START;
-  case SDL_GAMEPAD_BUTTON_BACK: return SR_PAD_BACK;
-  case SDL_GAMEPAD_BUTTON_DPAD_UP: return SR_PAD_DUP;
-  case SDL_GAMEPAD_BUTTON_DPAD_DOWN: return SR_PAD_DDOWN;
-  case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return SR_PAD_DLEFT;
-  case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return SR_PAD_DRIGHT;
-  default: return SR_PAD_NONE;
+    case SDL_GAMEPAD_BUTTON_SOUTH: return SR_PAD_SOUTH;
+    case SDL_GAMEPAD_BUTTON_EAST: return SR_PAD_EAST;
+    case SDL_GAMEPAD_BUTTON_WEST: return SR_PAD_WEST;
+    case SDL_GAMEPAD_BUTTON_NORTH: return SR_PAD_NORTH;
+    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return SR_PAD_LB;
+    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return SR_PAD_RB;
+    case SDL_GAMEPAD_BUTTON_LEFT_STICK: return SR_PAD_LSTICK;
+    case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return SR_PAD_RSTICK;
+    case SDL_GAMEPAD_BUTTON_START: return SR_PAD_START;
+    case SDL_GAMEPAD_BUTTON_BACK: return SR_PAD_BACK;
+    case SDL_GAMEPAD_BUTTON_DPAD_UP: return SR_PAD_DUP;
+    case SDL_GAMEPAD_BUTTON_DPAD_DOWN: return SR_PAD_DDOWN;
+    case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return SR_PAD_DLEFT;
+    case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return SR_PAD_DRIGHT;
+    default: return SR_PAD_NONE;
   }
 }
 
@@ -190,7 +191,8 @@ SrPad sr_platform_pad_button(int b) {
 
 static bool coarse_pointer(void) {
 #ifdef __EMSCRIPTEN__
-  return emscripten_run_script_int("(window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? 1 : 0") != 0;
+  return emscripten_run_script_int("(window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? 1 : 0") !=
+         0;
 #else
   return SDL_GetHintBoolean("SR_COARSE_POINTER", false);
 #endif
@@ -275,8 +277,9 @@ bool sr_app_init(SrApp *a, int argc, char **argv) {
   sr_ui_init(&a->ui);
   if (a->headless) return true;
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS)) {
-    sr_log(SR_LOG_ERROR, "platform", "SDL_Init failed: %s", SDL_GetError()); /* GCOVR_EXCL_LINE reason: needs a broken SDL */
-    return false;                                                           /* GCOVR_EXCL_LINE */
+    sr_log(SR_LOG_ERROR, "platform", "SDL_Init failed: %s",
+           SDL_GetError()); /* GCOVR_EXCL_LINE reason: needs a broken SDL */
+    return false;           /* GCOVR_EXCL_LINE */
   }
   if (!create_gl(a)) return false; /* GCOVR_EXCL_LINE reason: depends on the GPU driver */
   update_size(a);
@@ -309,142 +312,146 @@ static void start_created(SrApp *a) {
 /* Creation screen by pointer: left half cycles the background, right half re-rolls the look,
  * bottom right starts. */
 static void create_tap(SrApp *a, float x, float y) {
-  if (x < 0.5f) sr_game_create_select(a->game, (a->game->create_bg + 1) % SR_BG_COUNT);
-  else if (y > 0.75f) start_created(a);
-  else sr_game_create_randomize(a->game);
+  if (x < 0.5f)
+    sr_game_create_select(a->game, (a->game->create_bg + 1) % SR_BG_COUNT);
+  else if (y > 0.75f)
+    start_created(a);
+  else
+    sr_game_create_randomize(a->game);
 }
 
 void sr_app_event(SrApp *a, const SDL_Event *e) {
   SrGame *g = a->game;
   switch (e->type) {
-  case SDL_EVENT_QUIT: a->quit = true; break;
-  case SDL_EVENT_KEY_DOWN:
-  case SDL_EVENT_KEY_UP: {
-    bool down = e->type == SDL_EVENT_KEY_DOWN;
-    if (down && g->screen == SR_SCREEN_CREATE) {
-      SDL_Scancode sc = e->key.scancode;
-      if (sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_5) sr_game_create_select(g, (int)(sc - SDL_SCANCODE_1));
-      if (sc == SDL_SCANCODE_R) sr_game_create_randomize(g);
-      if (sc == SDL_SCANCODE_DOWN) sr_game_create_select(g, (g->create_bg + 1) % SR_BG_COUNT);
-      if (sc == SDL_SCANCODE_RETURN) start_created(a);
+    case SDL_EVENT_QUIT: a->quit = true; break;
+    case SDL_EVENT_KEY_DOWN:
+    case SDL_EVENT_KEY_UP: {
+      bool down = e->type == SDL_EVENT_KEY_DOWN;
+      if (down && g->screen == SR_SCREEN_CREATE) {
+        SDL_Scancode sc = e->key.scancode;
+        if (sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_5) sr_game_create_select(g, (int)(sc - SDL_SCANCODE_1));
+        if (sc == SDL_SCANCODE_R) sr_game_create_randomize(g);
+        if (sc == SDL_SCANCODE_DOWN) sr_game_create_select(g, (g->create_bg + 1) % SR_BG_COUNT);
+        if (sc == SDL_SCANCODE_RETURN) start_created(a);
+        break;
+      }
+      if (down && e->key.scancode == SDL_SCANCODE_RETURN && g->screen == SR_SCREEN_TITLE) {
+        sr_game_begin_create(g, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+        break;
+      }
+      if (down && e->key.scancode == SDL_SCANCODE_F11 && a->window) {
+        g->settings.fullscreen = !g->settings.fullscreen;
+        SDL_SetWindowFullscreen(a->window, g->settings.fullscreen);
+      }
+      sr_input_key(&a->input, sr_platform_key(e->key.scancode), down);
       break;
     }
-    if (down && e->key.scancode == SDL_SCANCODE_RETURN && g->screen == SR_SCREEN_TITLE) {
-      sr_game_begin_create(g, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+    case SDL_EVENT_MOUSE_MOTION:
+      if (a->relative_mouse) sr_input_mouse_motion(&a->input, e->motion.xrel, e->motion.yrel);
+      break;
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP: {
+      bool down = e->type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+      if (e->button.which == SDL_TOUCH_MOUSEID) break; /* synthesized from touch */
+      if (down && g->screen == SR_SCREEN_TITLE) {
+        sr_game_begin_create(g, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+        break;
+      }
+      if (down && g->screen == SR_SCREEN_CREATE) {
+        float mx = a->css_w > 0 ? e->button.x / a->css_w : 0.5f, my = a->css_h > 0 ? e->button.y / a->css_h : 0.5f;
+        create_tap(a, mx, my);
+        break;
+      }
+      if (down && g->screen == SR_SCREEN_PAUSE) sr_game_confirm_resume(g);
+      if (down && g->screen == SR_SCREEN_PLAY && !a->relative_mouse && a->window) {
+        a->relative_mouse = SDL_SetWindowRelativeMouseMode(a->window, true); /* pointer lock on the web */
+        a->input.pointer_lock_wanted = true;
+      }
+      sr_input_key(&a->input, e->button.button == SDL_BUTTON_RIGHT ? SR_KEY_MOUSE_RIGHT : SR_KEY_MOUSE_LEFT, down);
       break;
     }
-    if (down && e->key.scancode == SDL_SCANCODE_F11 && a->window) {
-      g->settings.fullscreen = !g->settings.fullscreen;
-      SDL_SetWindowFullscreen(a->window, g->settings.fullscreen);
-    }
-    sr_input_key(&a->input, sr_platform_key(e->key.scancode), down);
-    break;
-  }
-  case SDL_EVENT_MOUSE_MOTION:
-    if (a->relative_mouse) sr_input_mouse_motion(&a->input, e->motion.xrel, e->motion.yrel);
-    break;
-  case SDL_EVENT_MOUSE_BUTTON_DOWN:
-  case SDL_EVENT_MOUSE_BUTTON_UP: {
-    bool down = e->type == SDL_EVENT_MOUSE_BUTTON_DOWN;
-    if (e->button.which == SDL_TOUCH_MOUSEID) break; /* synthesized from touch */
-    if (down && g->screen == SR_SCREEN_TITLE) {
-      sr_game_begin_create(g, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+    case SDL_EVENT_FINGER_DOWN:
+    case SDL_EVENT_FINGER_MOTION:
+    case SDL_EVENT_FINGER_UP: {
+      int phase = e->type == SDL_EVENT_FINGER_DOWN ? 0 : e->type == SDL_EVENT_FINGER_MOTION ? 1 : 2;
+      if (phase == 0 && g->screen == SR_SCREEN_TITLE) {
+        sr_input_touch(&a->input, (int64_t)e->tfinger.fingerID, e->tfinger.x, e->tfinger.y, 0);
+        sr_input_touch(&a->input, (int64_t)e->tfinger.fingerID, e->tfinger.x, e->tfinger.y, 2);
+        sr_game_begin_create(g, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+        break;
+      }
+      if (g->screen == SR_SCREEN_CREATE) {
+        if (phase == 0) create_tap(a, e->tfinger.x, e->tfinger.y);
+        break;
+      }
+      if (phase == 0 && g->screen == SR_SCREEN_PAUSE) sr_game_confirm_resume(g);
+      sr_input_touch(&a->input, (int64_t)e->tfinger.fingerID, e->tfinger.x, e->tfinger.y, phase);
+      if (a->relative_mouse && a->window) {
+        SDL_SetWindowRelativeMouseMode(a->window, false);
+        a->relative_mouse = false;
+      }
       break;
     }
-    if (down && g->screen == SR_SCREEN_CREATE) {
-      float mx = a->css_w > 0 ? e->button.x / a->css_w : 0.5f, my = a->css_h > 0 ? e->button.y / a->css_h : 0.5f;
-      create_tap(a, mx, my);
+    case SDL_EVENT_GAMEPAD_ADDED:
+      if (!a->pad) a->pad = SDL_OpenGamepad(e->gdevice.which);
+      sr_input_gamepad_connected(&a->input, true);
+      break;
+    case SDL_EVENT_GAMEPAD_REMOVED:
+      if (a->pad) SDL_CloseGamepad(a->pad);
+      a->pad = NULL;
+      sr_input_gamepad_connected(&a->input, false);
+      if (a->input.gamepad_lost && g->screen == SR_SCREEN_PLAY) {
+        sr_game_focus(g, false);
+        sr_game_toast(g, "Controller disconnected. Reconnect to continue.");
+      }
+      break;
+    case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+    case SDL_EVENT_GAMEPAD_BUTTON_UP:
+      if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && g->screen == SR_SCREEN_TITLE) {
+        sr_game_begin_create(g, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+        break;
+      }
+      if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && g->screen == SR_SCREEN_CREATE) {
+        if (e->gbutton.button == SDL_GAMEPAD_BUTTON_SOUTH)
+          start_created(a);
+        else if (e->gbutton.button == SDL_GAMEPAD_BUTTON_WEST)
+          sr_game_create_randomize(g);
+        else
+          sr_game_create_select(g, (g->create_bg + 1) % SR_BG_COUNT);
+        break;
+      }
+      sr_input_gamepad_button(&a->input, sr_platform_pad_button(e->gbutton.button),
+                              e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN);
+      break;
+    case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
+      float v = (float)e->gaxis.value / 32767.0f;
+      float lx = a->input.pad_lx, ly = a->input.pad_ly, rx = a->input.pad_rx, ry = a->input.pad_ry;
+      switch (e->gaxis.axis) {
+        case SDL_GAMEPAD_AXIS_LEFTX: lx = v; break;
+        case SDL_GAMEPAD_AXIS_LEFTY: ly = v; break;
+        case SDL_GAMEPAD_AXIS_RIGHTX: rx = v; break;
+        case SDL_GAMEPAD_AXIS_RIGHTY: ry = v; break;
+        case SDL_GAMEPAD_AXIS_LEFT_TRIGGER: sr_input_gamepad_button(&a->input, SR_PAD_LT, v > 0.5f); break;
+        case SDL_GAMEPAD_AXIS_RIGHT_TRIGGER: sr_input_gamepad_button(&a->input, SR_PAD_RT, v > 0.5f); break;
+        default: break;
+      }
+      sr_input_gamepad_axes(&a->input, lx, ly, rx, ry);
       break;
     }
-    if (down && g->screen == SR_SCREEN_PAUSE) sr_game_confirm_resume(g);
-    if (down && g->screen == SR_SCREEN_PLAY && !a->relative_mouse && a->window) {
-      a->relative_mouse = SDL_SetWindowRelativeMouseMode(a->window, true); /* pointer lock on the web */
-      a->input.pointer_lock_wanted = true;
-    }
-    sr_input_key(&a->input, e->button.button == SDL_BUTTON_RIGHT ? SR_KEY_MOUSE_RIGHT : SR_KEY_MOUSE_LEFT, down);
-    break;
-  }
-  case SDL_EVENT_FINGER_DOWN:
-  case SDL_EVENT_FINGER_MOTION:
-  case SDL_EVENT_FINGER_UP: {
-    int phase = e->type == SDL_EVENT_FINGER_DOWN ? 0 : e->type == SDL_EVENT_FINGER_MOTION ? 1 : 2;
-    if (phase == 0 && g->screen == SR_SCREEN_TITLE) {
-      sr_input_touch(&a->input, (int64_t)e->tfinger.fingerID, e->tfinger.x, e->tfinger.y, 0);
-      sr_input_touch(&a->input, (int64_t)e->tfinger.fingerID, e->tfinger.x, e->tfinger.y, 2);
-      sr_game_begin_create(g, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
-      break;
-    }
-    if (g->screen == SR_SCREEN_CREATE) {
-      if (phase == 0) create_tap(a, e->tfinger.x, e->tfinger.y);
-      break;
-    }
-    if (phase == 0 && g->screen == SR_SCREEN_PAUSE) sr_game_confirm_resume(g);
-    sr_input_touch(&a->input, (int64_t)e->tfinger.fingerID, e->tfinger.x, e->tfinger.y, phase);
-    if (a->relative_mouse && a->window) {
-      SDL_SetWindowRelativeMouseMode(a->window, false);
-      a->relative_mouse = false;
-    }
-    break;
-  }
-  case SDL_EVENT_GAMEPAD_ADDED:
-    if (!a->pad) a->pad = SDL_OpenGamepad(e->gdevice.which);
-    sr_input_gamepad_connected(&a->input, true);
-    break;
-  case SDL_EVENT_GAMEPAD_REMOVED:
-    if (a->pad) SDL_CloseGamepad(a->pad);
-    a->pad = NULL;
-    sr_input_gamepad_connected(&a->input, false);
-    if (a->input.gamepad_lost && g->screen == SR_SCREEN_PLAY) {
+    case SDL_EVENT_WINDOW_FOCUS_LOST:
+    case SDL_EVENT_WINDOW_HIDDEN:
+    case SDL_EVENT_WINDOW_MINIMIZED:
+    case SDL_EVENT_WILL_ENTER_BACKGROUND:
       sr_game_focus(g, false);
-      sr_game_toast(g, "Controller disconnected. Reconnect to continue.");
-    }
-    break;
-  case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
-  case SDL_EVENT_GAMEPAD_BUTTON_UP:
-    if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && g->screen == SR_SCREEN_TITLE) {
-      sr_game_begin_create(g, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
+      autosave_if_needed(a);
+      if (a->relative_mouse && a->window) {
+        SDL_SetWindowRelativeMouseMode(a->window, false);
+        a->relative_mouse = false;
+      }
       break;
-    }
-    if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && g->screen == SR_SCREEN_CREATE) {
-      if (e->gbutton.button == SDL_GAMEPAD_BUTTON_SOUTH) start_created(a);
-      else if (e->gbutton.button == SDL_GAMEPAD_BUTTON_WEST) sr_game_create_randomize(g);
-      else sr_game_create_select(g, (g->create_bg + 1) % SR_BG_COUNT);
-      break;
-    }
-    sr_input_gamepad_button(&a->input, sr_platform_pad_button(e->gbutton.button),
-                            e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN);
-    break;
-  case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
-    float v = (float)e->gaxis.value / 32767.0f;
-    float lx = a->input.pad_lx, ly = a->input.pad_ly, rx = a->input.pad_rx, ry = a->input.pad_ry;
-    switch (e->gaxis.axis) {
-    case SDL_GAMEPAD_AXIS_LEFTX: lx = v; break;
-    case SDL_GAMEPAD_AXIS_LEFTY: ly = v; break;
-    case SDL_GAMEPAD_AXIS_RIGHTX: rx = v; break;
-    case SDL_GAMEPAD_AXIS_RIGHTY: ry = v; break;
-    case SDL_GAMEPAD_AXIS_LEFT_TRIGGER: sr_input_gamepad_button(&a->input, SR_PAD_LT, v > 0.5f); break;
-    case SDL_GAMEPAD_AXIS_RIGHT_TRIGGER: sr_input_gamepad_button(&a->input, SR_PAD_RT, v > 0.5f); break;
+    case SDL_EVENT_WINDOW_RESIZED:
+    case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: update_size(a); break;
     default: break;
-    }
-    sr_input_gamepad_axes(&a->input, lx, ly, rx, ry);
-    break;
-  }
-  case SDL_EVENT_WINDOW_FOCUS_LOST:
-  case SDL_EVENT_WINDOW_HIDDEN:
-  case SDL_EVENT_WINDOW_MINIMIZED:
-  case SDL_EVENT_WILL_ENTER_BACKGROUND:
-    sr_game_focus(g, false);
-    autosave_if_needed(a);
-    if (a->relative_mouse && a->window) {
-      SDL_SetWindowRelativeMouseMode(a->window, false);
-      a->relative_mouse = false;
-    }
-    break;
-  case SDL_EVENT_WINDOW_RESIZED:
-  case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-    update_size(a);
-    break;
-  default: break;
   }
 }
 
@@ -524,7 +531,8 @@ const char *sr_app_test_exec(SrApp *a, const char *cmd) {
     static const char *const n[] = {"kbm", "gamepad", "touch"};
     snprintf(out, sizeof out, "%s", n[a->input.scheme]);
   } else if (strcmp(cmd, "overlay.visible") == 0) {
-    snprintf(out, sizeof out, "%s", a->input.scheme == SR_SCHEME_TOUCH && a->game->screen == SR_SCREEN_PLAY ? "true" : "false");
+    snprintf(out, sizeof out, "%s",
+             a->input.scheme == SR_SCHEME_TOUCH && a->game->screen == SR_SCREEN_PLAY ? "true" : "false");
   } else if (strcmp(cmd, "pointer.lock") == 0) {
     snprintf(out, sizeof out, "%s", a->relative_mouse ? "true" : "false");
   } else if (strcmp(cmd, "portrait") == 0) {

@@ -187,10 +187,18 @@ static bool get_player(SrReader *r, SrPlayer *p, uint32_t version, const SrCity 
 
 static void put_job(SrWriter *w, const SrJob *j) {
   sr_put_i32(w, j->id);
-  uint8_t b[12] = {j->type, j->tier, j->state, j->source, (uint8_t)j->client_faction,
-                   (uint8_t)j->target_faction, j->constraints, j->constraint_fails,
-                   j->approaches, j->intel, (uint8_t)(j->negotiated | (j->executed << 1) |
-                   (j->has_bonus << 2) | (j->bonus_done << 3)), 0};
+  uint8_t b[12] = {j->type,
+                   j->tier,
+                   j->state,
+                   j->source,
+                   (uint8_t)j->client_faction,
+                   (uint8_t)j->target_faction,
+                   j->constraints,
+                   j->constraint_fails,
+                   j->approaches,
+                   j->intel,
+                   (uint8_t)(j->negotiated | (j->executed << 1) | (j->has_bonus << 2) | (j->bonus_done << 3)),
+                   0};
   sr_put_bytes(w, b, sizeof b);
   sr_put_i32(w, j->client_building);
   sr_put_i32(w, j->target_building);
@@ -288,8 +296,7 @@ SrResult sr_save_write(const SrGame *g, SrWriter *w, uint32_t version, int64_t c
   for (int i = 0; i < g->pop->count; i++) base += !g->pop->npcs[i].promoted;
   sr_put_u32(w, (uint32_t)base);
   int changed = 0;
-  for (int i = 0; i < base; i++)
-    changed += g->pop->npcs[i].status != SR_NPC_ALIVE || g->pop->npcs[i].attitude != 0;
+  for (int i = 0; i < base; i++) changed += g->pop->npcs[i].status != SR_NPC_ALIVE || g->pop->npcs[i].attitude != 0;
   sr_put_u32(w, (uint32_t)changed);
   for (int i = 0; i < base; i++) {
     const SrNpc *n = &g->pop->npcs[i];
@@ -414,97 +421,97 @@ SrResult sr_save_read(SrGame *g, const void *data, size_t len) {
     sr_reader_init(&s, r.data + r.pos, plen);
     sr_get_bytes(&r, NULL, plen + 4);
     switch (type) {
-    case SR_SEC_META:
-      sr_get_i64(&s);
-      g->difficulty = (SrDifficulty)sr_get_u8(&s);
-      g->hardcore = sr_get_u8(&s) != 0;
-      g->pall_removed = sr_get_u8(&s) != 0;
-      break;
-    case SR_SEC_CLOCK:
-      g->clock.scaled = sr_get_i64(&s);
-      g->clock.rate = sr_get_i32(&s);
-      g->last_minute = sr_get_i64(&s);
-      g->steps = sr_get_u64(&s);
-      g->clock.paused = false;
-      break;
-    case SR_SEC_PLAYER:
-      if (!get_player(&s, &g->player, sver, g->city)) return SR_ERR_CORRUPT;
-      break;
-    case SR_SEC_NPCS: {
-      uint32_t base = sr_get_u32(&s);
-      if ((int)base != g->pop->count) return SR_ERR_CORRUPT;
-      uint32_t changed = sr_get_u32(&s);
-      for (uint32_t i = 0; i < changed; i++) {
-        uint32_t id = sr_get_u32(&s);
-        uint8_t st = sr_get_u8(&s);
-        int8_t att = (int8_t)sr_get_u8(&s);
-        if (id >= base) return SR_ERR_CORRUPT;
-        g->pop->npcs[id].status = st;
-        g->pop->npcs[id].attitude = att;
+      case SR_SEC_META:
+        sr_get_i64(&s);
+        g->difficulty = (SrDifficulty)sr_get_u8(&s);
+        g->hardcore = sr_get_u8(&s) != 0;
+        g->pall_removed = sr_get_u8(&s) != 0;
+        break;
+      case SR_SEC_CLOCK:
+        g->clock.scaled = sr_get_i64(&s);
+        g->clock.rate = sr_get_i32(&s);
+        g->last_minute = sr_get_i64(&s);
+        g->steps = sr_get_u64(&s);
+        g->clock.paused = false;
+        break;
+      case SR_SEC_PLAYER:
+        if (!get_player(&s, &g->player, sver, g->city)) return SR_ERR_CORRUPT;
+        break;
+      case SR_SEC_NPCS: {
+        uint32_t base = sr_get_u32(&s);
+        if ((int)base != g->pop->count) return SR_ERR_CORRUPT;
+        uint32_t changed = sr_get_u32(&s);
+        for (uint32_t i = 0; i < changed; i++) {
+          uint32_t id = sr_get_u32(&s);
+          uint8_t st = sr_get_u8(&s);
+          int8_t att = (int8_t)sr_get_u8(&s);
+          if (id >= base) return SR_ERR_CORRUPT;
+          g->pop->npcs[id].status = st;
+          g->pop->npcs[id].attitude = att;
+        }
+        uint32_t promoted = sr_get_u32(&s);
+        for (uint32_t i = 0; i < promoted && g->pop->count < SR_MAX_NPCS; i++)
+          sr_get_bytes(&s, &g->pop->npcs[g->pop->count++], sizeof(SrNpc));
+        break;
       }
-      uint32_t promoted = sr_get_u32(&s);
-      for (uint32_t i = 0; i < promoted && g->pop->count < SR_MAX_NPCS; i++)
-        sr_get_bytes(&s, &g->pop->npcs[g->pop->count++], sizeof(SrNpc));
-      break;
-    }
-    case SR_SEC_JOBS: {
-      int n = sr_get_u16(&s);
-      if (n > SR_MAX_JOBS) return SR_ERR_CORRUPT;
-      g->jobs.next_id = sr_get_i32(&s);
-      g->jobs.completed = sr_get_i32(&s);
-      g->jobs.failed = sr_get_i32(&s);
-      g->active_job = sr_get_i32(&s);
-      for (int i = 0; i < n; i++) get_job(&s, &g->jobs.jobs[i]);
-      g->jobs.count = n;
-      break;
-    }
-    case SR_SEC_HEAT:
-      for (int j = 0; j < SR_MAX_FACTIONS; j++) {
-        g->heat.level[j] = (int8_t)sr_get_u8(&s);
-        g->heat.last_seen[j] = sr_get_i64(&s);
-        g->heat.decay_from[j] = sr_get_i64(&s);
-        g->heat.known_look[j] = sr_get_u64(&s);
+      case SR_SEC_JOBS: {
+        int n = sr_get_u16(&s);
+        if (n > SR_MAX_JOBS) return SR_ERR_CORRUPT;
+        g->jobs.next_id = sr_get_i32(&s);
+        g->jobs.completed = sr_get_i32(&s);
+        g->jobs.failed = sr_get_i32(&s);
+        g->active_job = sr_get_i32(&s);
+        for (int i = 0; i < n; i++) get_job(&s, &g->jobs.jobs[i]);
+        g->jobs.count = n;
+        break;
       }
-      g->heat.evidence_count = sr_get_u8(&s);
-      if (g->heat.evidence_count > SR_MAX_EVIDENCE) return SR_ERR_CORRUPT;
-      for (int i = 0; i < g->heat.evidence_count; i++) {
-        SrEvidence *e = &g->heat.evidence[i];
-        uint8_t b[4];
-        sr_get_bytes(&s, b, 4);
-        e->type = b[0];
-        e->jurisdiction = (int8_t)b[1];
-        e->points_to = (int8_t)b[2];
-        e->severity = b[3];
-        e->time = sr_get_i64(&s);
-        e->look = sr_get_u64(&s);
+      case SR_SEC_HEAT:
+        for (int j = 0; j < SR_MAX_FACTIONS; j++) {
+          g->heat.level[j] = (int8_t)sr_get_u8(&s);
+          g->heat.last_seen[j] = sr_get_i64(&s);
+          g->heat.decay_from[j] = sr_get_i64(&s);
+          g->heat.known_look[j] = sr_get_u64(&s);
+        }
+        g->heat.evidence_count = sr_get_u8(&s);
+        if (g->heat.evidence_count > SR_MAX_EVIDENCE) return SR_ERR_CORRUPT;
+        for (int i = 0; i < g->heat.evidence_count; i++) {
+          SrEvidence *e = &g->heat.evidence[i];
+          uint8_t b[4];
+          sr_get_bytes(&s, b, 4);
+          e->type = b[0];
+          e->jurisdiction = (int8_t)b[1];
+          e->points_to = (int8_t)b[2];
+          e->severity = b[3];
+          e->time = sr_get_i64(&s);
+          e->look = sr_get_u64(&s);
+        }
+        break;
+      case SR_SEC_EVENTS: {
+        int n = sr_get_u16(&s);
+        for (int i = 0; i < n; i++) {
+          SrWorldEvent e;
+          memset(&e, 0, sizeof e);
+          e.type = (SrEventType)sr_get_u8(&s);
+          e.time = sr_get_i64(&s);
+          e.district = (int8_t)sr_get_u8(&s);
+          e.building = sr_get_i32(&s);
+          e.victim_faction = (int8_t)sr_get_u8(&s);
+          e.blamed_faction = (int8_t)sr_get_u8(&s);
+          e.significant = sr_get_u8(&s) != 0;
+          sr_get_str(&s, e.text, sizeof e.text);
+          sr_events_add(&g->events, &e);
+        }
+        break;
       }
-      break;
-    case SR_SEC_EVENTS: {
-      int n = sr_get_u16(&s);
-      for (int i = 0; i < n; i++) {
-        SrWorldEvent e;
-        memset(&e, 0, sizeof e);
-        e.type = (SrEventType)sr_get_u8(&s);
-        e.time = sr_get_i64(&s);
-        e.district = (int8_t)sr_get_u8(&s);
-        e.building = sr_get_i32(&s);
-        e.victim_faction = (int8_t)sr_get_u8(&s);
-        e.blamed_faction = (int8_t)sr_get_u8(&s);
-        e.significant = sr_get_u8(&s) != 0;
-        sr_get_str(&s, e.text, sizeof e.text);
-        sr_events_add(&g->events, &e);
+      case SR_SEC_DELTAS: {
+        int n = sr_get_u16(&s);
+        for (int i = 0; i < n; i++) {
+          uint32_t id = sr_get_u32(&s);
+          sr_deltas_set(&g->deltas, id, sr_get_u8(&s));
+        }
+        break;
       }
-      break;
-    }
-    case SR_SEC_DELTAS: {
-      int n = sr_get_u16(&s);
-      for (int i = 0; i < n; i++) {
-        uint32_t id = sr_get_u32(&s);
-        sr_deltas_set(&g->deltas, id, sr_get_u8(&s));
-      }
-      break;
-    }
-    default: break; /* unknown sections from the future are skipped */
+      default: break; /* unknown sections from the future are skipped */
     }
     if (s.failed) return SR_ERR_CORRUPT;
   }

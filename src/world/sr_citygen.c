@@ -44,18 +44,17 @@ static void block_center(const SrCity *c, int block, int32_t *x, int32_t *y) {
 }
 
 const char *sr_district_type_name(SrDistrictType t) {
-  static const char *const n[SR_D_COUNT] = {"Corporate Spire", "Civic Center", "Commercial",
-                                            "Entertainment", "Residential", "Old Quarter",
-                                            "Industrial", "Docks", "Research Campus",
-                                            "Undercity", "Barrens"};
+  static const char *const n[SR_D_COUNT] = {"Corporate Spire", "Civic Center", "Commercial", "Entertainment",
+                                            "Residential",     "Old Quarter",  "Industrial", "Docks",
+                                            "Research Campus", "Undercity",    "Barrens"};
   return (unsigned)t < SR_D_COUNT ? n[t] : "?";
 }
 
 const char *sr_poi_name(SrPoi p) {
   static const char *const n[SR_POI_COUNT] = {
-      "none", "food", "bar", "clinic", "ripperdoc", "gun shop", "electronics", "clothing",
-      "fence", "capsule hotel", "matrix booth", "fixer", "police", "grocery", "uv booth",
-      "city hall", "corp hq", "corp facility", "gang hideout", "media", "home"};
+      "none",     "food",      "bar",           "clinic",        "ripperdoc",    "gun shop", "electronics",
+      "clothing", "fence",     "capsule hotel", "matrix booth",  "fixer",        "police",   "grocery",
+      "uv booth", "city hall", "corp hq",       "corp facility", "gang hideout", "media",    "home"};
   return (unsigned)p < SR_POI_COUNT ? n[p] : "?";
 }
 
@@ -180,11 +179,11 @@ static void gen_geography(SrCity *c, SrRng *r) {
       int idx = by * g + bx;
       int water = 0;
       switch (c->coast_side) {
-      case 0: water = bx < depth[by]; break;
-      case 1: water = bx >= g - depth[by]; break;
-      case 2: water = by < depth[bx]; break;
-      case 3: water = by >= g - depth[bx]; break;
-      default: water = 0; break;
+        case 0: water = bx < depth[by]; break;
+        case 1: water = bx >= g - depth[by]; break;
+        case 2: water = by < depth[bx]; break;
+        case 3: water = by >= g - depth[bx]; break;
+        default: water = 0; break;
       }
       c->blocks[idx].water = (uint8_t)water;
       c->blocks[idx].district = -1;
@@ -285,7 +284,7 @@ static void gen_districts(SrCity *c, SrRng *r) {
 
   /* Type assignment with constraints. */
   int32_t cx = g * SR_BLOCK_CM / 2, cy = cx;
-  int order[SR_MAX_DISTRICTS];
+  int order[SR_MAX_DISTRICTS] = {0};
   for (int k = 0; k < n; k++) order[k] = k;
   /* sort by distance to centre (insertion sort, deterministic) */
   for (int i = 1; i < n; i++) {
@@ -331,8 +330,7 @@ static void gen_districts(SrCity *c, SrRng *r) {
     }
   }
   /* Required types in shuffled order, then free choice. */
-  static const SrDistrictType required[] = {SR_D_RESIDENTIAL, SR_D_COMMERCIAL,
-                                            SR_D_ENTERTAINMENT, SR_D_UNDERCITY};
+  static const SrDistrictType required[] = {SR_D_RESIDENTIAL, SR_D_COMMERCIAL, SR_D_ENTERTAINMENT, SR_D_UNDERCITY};
   int free_list[SR_MAX_DISTRICTS], nf = 0;
   for (int i = 2; i < n; i++)
     if (c->districts[order[i]].type == SR_D_COUNT) free_list[nf++] = order[i];
@@ -343,10 +341,9 @@ static void gen_districts(SrCity *c, SrRng *r) {
     free_list[j] = t;
   }
   int fi = 0;
-  for (size_t q = 0; q < SR_ARRAY_LEN(required) && fi < nf; q++)
-    c->districts[free_list[fi++]].type = required[q];
+  for (size_t q = 0; q < SR_ARRAY_LEN(required) && fi < nf; q++) c->districts[free_list[fi++]].type = required[q];
   static const SrDistrictType extra[] = {SR_D_RESIDENTIAL, SR_D_COMMERCIAL, SR_D_OLDQUARTER,
-                                         SR_D_INDUSTRIAL, SR_D_BARRENS, SR_D_RESIDENTIAL};
+                                         SR_D_INDUSTRIAL,  SR_D_BARRENS,    SR_D_RESIDENTIAL};
   for (; fi < nf; fi++) {
     SrDistrict *d = &c->districts[free_list[fi]];
     SrDistrictType t = extra[sr_rng_range(r, 0, (int32_t)SR_ARRAY_LEN(extra) - 1)];
@@ -451,22 +448,20 @@ static void gen_buildings(SrCity *c, SrRng *r) {
 /* Per-district weights for places of interest (index = SrPoi up to UV_BOOTH). */
 static const int32_t k_poi_weights[SR_D_COUNT][SR_POI_UV_BOOTH + 1] = {
     /* none food bar clin rip gun elec clo fence caps booth fixer pol groc uv */
-    {60, 6, 3, 3, 1, 1, 3, 4, 0, 1, 2, 0, 0, 2, 3},     /* spire */
-    {60, 6, 2, 3, 0, 0, 2, 2, 0, 1, 2, 1, 4, 3, 2},     /* civic */
-    {35, 10, 5, 3, 2, 3, 6, 6, 2, 3, 3, 1, 0, 6, 3},    /* commercial */
-    {35, 10, 14, 2, 3, 2, 3, 4, 3, 4, 3, 2, 0, 3, 2},   /* entertainment */
-    {55, 8, 3, 3, 2, 1, 2, 2, 1, 2, 2, 1, 0, 6, 3},     /* residential */
-    {40, 10, 6, 3, 3, 2, 2, 3, 3, 2, 2, 3, 0, 4, 2},    /* old quarter */
-    {60, 5, 3, 2, 3, 2, 3, 1, 3, 2, 2, 1, 0, 2, 1},     /* industrial */
-    {60, 5, 4, 1, 2, 2, 2, 1, 4, 2, 2, 2, 0, 2, 1},     /* docks */
-    {70, 6, 1, 4, 0, 0, 3, 1, 0, 1, 2, 0, 0, 2, 2},     /* campus */
-    {40, 8, 6, 2, 6, 4, 3, 2, 6, 4, 3, 3, 0, 3, 1},     /* undercity */
-    {60, 4, 2, 1, 4, 3, 1, 1, 5, 1, 1, 2, 0, 1, 0},     /* barrens */
+    {60, 6, 3, 3, 1, 1, 3, 4, 0, 1, 2, 0, 0, 2, 3},   /* spire */
+    {60, 6, 2, 3, 0, 0, 2, 2, 0, 1, 2, 1, 4, 3, 2},   /* civic */
+    {35, 10, 5, 3, 2, 3, 6, 6, 2, 3, 3, 1, 0, 6, 3},  /* commercial */
+    {35, 10, 14, 2, 3, 2, 3, 4, 3, 4, 3, 2, 0, 3, 2}, /* entertainment */
+    {55, 8, 3, 3, 2, 1, 2, 2, 1, 2, 2, 1, 0, 6, 3},   /* residential */
+    {40, 10, 6, 3, 3, 2, 2, 3, 3, 2, 2, 3, 0, 4, 2},  /* old quarter */
+    {60, 5, 3, 2, 3, 2, 3, 1, 3, 2, 2, 1, 0, 2, 1},   /* industrial */
+    {60, 5, 4, 1, 2, 2, 2, 1, 4, 2, 2, 2, 0, 2, 1},   /* docks */
+    {70, 6, 1, 4, 0, 0, 3, 1, 0, 1, 2, 0, 0, 2, 2},   /* campus */
+    {40, 8, 6, 2, 6, 4, 3, 2, 6, 4, 3, 3, 0, 3, 1},   /* undercity */
+    {60, 4, 2, 1, 4, 3, 1, 1, 5, 1, 1, 2, 0, 1, 0},   /* barrens */
 };
 
-static int district_of_building(const SrCity *c, int b) {
-  return c->blocks[c->buildings[b].block].district;
-}
+static int district_of_building(const SrCity *c, int b) { return c->blocks[c->buildings[b].block].district; }
 
 static bool is_free_building(const SrCity *c, int b) {
   return c->buildings[b].poi == SR_POI_NONE && !(c->buildings[b].flags & SR_BF_LANDMARK);
@@ -682,8 +677,8 @@ static void gen_names(SrCity *c) {
   sr_name_city(c->seed, c->name, sizeof c->name);
   for (int k = 0; k < c->district_count; k++) {
     for (uint64_t salt = 0;; salt++) {
-      sr_name_district(c->seed, (uint64_t)k * 1000u + salt, c->districts[k].type,
-                       c->districts[k].name, sizeof c->districts[k].name);
+      sr_name_district(c->seed, (uint64_t)k * 1000u + salt, c->districts[k].type, c->districts[k].name,
+                       sizeof c->districts[k].name);
       bool dup = false;
       for (int j = 0; j < k; j++) dup |= strcmp(c->districts[j].name, c->districts[k].name) == 0;
       if (!dup) break;
@@ -701,15 +696,25 @@ static void gen_names(SrCity *c) {
 /* ---- validation ---------------------------------------------------------------------------- */
 
 enum {
-  INV_OK = 0, INV_DISTRICT_COUNT, INV_DISTRICT_TYPES, INV_DOCKS, INV_CONNECTED, INV_METRO,
-  INV_STARTER, INV_SERVICES, INV_LANDMARKS, INV_NAMES, INV_FACTIONS, INV_FORCED, INV_COUNT
+  INV_OK = 0,
+  INV_DISTRICT_COUNT,
+  INV_DISTRICT_TYPES,
+  INV_DOCKS,
+  INV_CONNECTED,
+  INV_METRO,
+  INV_STARTER,
+  INV_SERVICES,
+  INV_LANDMARKS,
+  INV_NAMES,
+  INV_FACTIONS,
+  INV_FORCED,
+  INV_COUNT
 };
 
 const char *sr_city_invariant_name(int code) {
-  static const char *const n[INV_COUNT] = {"ok", "district count", "district types", "docks",
-                                           "connectivity", "metro", "starter neighbourhood",
-                                           "services", "landmarks", "names", "factions",
-                                           "forced failure"};
+  static const char *const n[INV_COUNT] = {
+      "ok",       "district count", "district types", "docks",    "connectivity",  "metro", "starter neighbourhood",
+      "services", "landmarks",      "names",          "factions", "forced failure"};
   return code >= 0 && code < INV_COUNT ? n[code] : "?";
 }
 
@@ -717,13 +722,11 @@ int sr_city_validate(const SrCity *c) {
   if (c->district_count < 8 || c->district_count > 14) return INV_DISTRICT_COUNT;
   int counts[SR_D_COUNT] = {0};
   for (int k = 0; k < c->district_count; k++) {
-    if (c->districts[k].type >= SR_D_COUNT || c->districts[k].block_count == 0)
-      return INV_DISTRICT_TYPES;
+    if (c->districts[k].type >= SR_D_COUNT || c->districts[k].block_count == 0) return INV_DISTRICT_TYPES;
     counts[c->districts[k].type]++;
   }
-  if (counts[SR_D_SPIRE] != 1 || counts[SR_D_CIVIC] != 1 || !counts[SR_D_RESIDENTIAL] ||
-      !counts[SR_D_COMMERCIAL] || !counts[SR_D_INDUSTRIAL] || !counts[SR_D_ENTERTAINMENT] ||
-      !counts[SR_D_UNDERCITY])
+  if (counts[SR_D_SPIRE] != 1 || counts[SR_D_CIVIC] != 1 || !counts[SR_D_RESIDENTIAL] || !counts[SR_D_COMMERCIAL] ||
+      !counts[SR_D_INDUSTRIAL] || !counts[SR_D_ENTERTAINMENT] || !counts[SR_D_UNDERCITY])
     return INV_DISTRICT_TYPES;
   for (int k = 0; k < c->district_count; k++)
     if (c->districts[k].type == SR_D_DOCKS && !c->districts[k].touches_water) return INV_DOCKS;
@@ -739,12 +742,11 @@ int sr_city_validate(const SrCity *c) {
   if (c->buildings[c->home_building].poi != SR_POI_HOME) return INV_STARTER;
   static const SrPoi near[] = {SR_POI_FOOD, SR_POI_FIXER, SR_POI_CLINIC};
   for (size_t q = 0; q < SR_ARRAY_LEN(near); q++) {
-    if (sr_city_find_poi_near(c, near[q], c->home_building, &d) < 0 || d > 15000)
-      return INV_STARTER;
+    if (sr_city_find_poi_near(c, near[q], c->home_building, &d) < 0 || d > 15000) return INV_STARTER;
   }
   int ns = sr_city_nearest_station(c, c->buildings[c->home_building].block);
-  if (ns < 0 || sr_city_block_steps(c, c->buildings[c->home_building].block,
-                                    c->stations[ns].block) * SR_BLOCK_CM > 30000)
+  if (ns < 0 ||
+      sr_city_block_steps(c, c->buildings[c->home_building].block, c->stations[ns].block) * SR_BLOCK_CM > 30000)
     return INV_STARTER;
   bool has[SR_POI_COUNT] = {false};
   bool food[SR_MAX_DISTRICTS] = {false};
@@ -797,7 +799,7 @@ SrResult sr_city_generate(SrCity *c, uint64_t seed, const SrCityOptions *opt) {
 
 SrCity *sr_city_create(uint64_t seed, const SrCityOptions *opt) {
   SrCity *c = (SrCity *)calloc(1, sizeof(SrCity));
-  if (!c) return NULL; /* GCOVR_EXCL_LINE reason: calloc failure not injectable */
+  if (!c) return NULL;                           /* GCOVR_EXCL_LINE reason: calloc failure not injectable */
   if (sr_city_generate(c, seed, opt) != SR_OK) { /* GCOVR_EXCL_START reason: see above */
     free(c);
     return NULL;
@@ -823,8 +825,7 @@ uint64_t sr_city_digest(const SrCity *c) {
   }
   for (int i = 0; i < c->building_count; i++) {
     const SrBuilding *b = &c->buildings[i];
-    int32_t v[9] = {b->x0, b->y0, b->x1, b->y1, b->height_cm, b->poi, b->flags, b->owner,
-                    b->style};
+    int32_t v[9] = {b->x0, b->y0, b->x1, b->y1, b->height_cm, b->poi, b->flags, b->owner, b->style};
     h = sr_hash_bytes(h, v, sizeof v);
   }
   for (int s = 0; s < c->station_count; s++) h = sr_hash_combine(h, (uint64_t)c->stations[s].block);

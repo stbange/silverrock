@@ -85,7 +85,7 @@ static void reference_scene(SrApp *a) {
   g->settings.vertex_snap = g->settings.affine = g->settings.crt = false;
   sr_clock_set_seconds(&g->clock, 2 * 86400 + 1); /* Wed 00:00, weather slot fixed */
   g->steps = 0;
-  a->fixed_frame_dt = 0.0001; /* render without advancing the simulation */
+  a->fixed_frame_dt = 0.0001;                     /* render without advancing the simulation */
   for (int i = 0; i < 40; i++) sr_app_iterate(a); /* stream chunks (2 per frame) */
 }
 
@@ -402,8 +402,14 @@ static void test_title_starts(void) {
     /* left side cycles the background, right side re-rolls, bottom right starts */
     memset(&e, 0, sizeof e);
     e.type = types[i];
-    if (types[i] == SDL_EVENT_MOUSE_BUTTON_DOWN) { e.button.x = 10; e.button.y = 10; }
-    if (types[i] == SDL_EVENT_FINGER_DOWN) { e.tfinger.x = 0.9f; e.tfinger.y = 0.2f; }
+    if (types[i] == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+      e.button.x = 10;
+      e.button.y = 10;
+    }
+    if (types[i] == SDL_EVENT_FINGER_DOWN) {
+      e.tfinger.x = 0.9f;
+      e.tfinger.y = 0.2f;
+    }
     if (types[i] == SDL_EVENT_GAMEPAD_BUTTON_DOWN) e.gbutton.button = SDL_GAMEPAD_BUTTON_WEST;
     sr_app_event(&g_app, &e);
     if (types[i] == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {

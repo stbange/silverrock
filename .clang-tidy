@@ -1,0 +1,24 @@
+# Checked by the lint job on first-party sources (compile_commands.json from linux-gcc-debug).
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-assignment-in-if-condition,
+  -bugprone-branch-clone,
+  -bugprone-multi-level-implicit-pointer-conversion,
+  -bugprone-switch-missing-default-case,
+  -bugprone-signed-char-misuse,
+  -bugprone-macro-parentheses,
+  clang-analyzer-*,
+  -clang-analyzer-optin.performance.Padding,
+  -clang-analyzer-valist.Uninitialized,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  -clang-analyzer-security.insecureAPI.strcpy,
+  misc-redundant-expression,
+  misc-misplaced-const,
+  performance-*,
+  -performance-no-int-to-ptr,
+WarningsAsErrors: '*'
+HeaderFilterRegex: 'src/.*'

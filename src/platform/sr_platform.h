@@ -36,8 +36,8 @@ typedef struct SrApp {
   bool portrait;
   bool context_lost;
   bool relative_mouse;
-  int win_w, win_h;  /* pixels */
-  float css_w, css_h; /* logical size */
+  int win_w, win_h;      /* pixels */
+  float css_w, css_h;    /* logical size */
   double fixed_frame_dt; /* tests: run frames with a fixed dt instead of the clock (0 = real) */
   int frames;
   char log_path[600];

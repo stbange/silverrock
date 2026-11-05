@@ -46,8 +46,8 @@ static void pick_target(SrAgent *a, const SrCity *c) {
   float corners[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
   int k = sr_rng_range(&r, 0, 3);
   float span = (float)SR_BLOCK_CM / 100.0f;
-  a->target = sr_v3((float)ox / 100.0f + m + corners[k][0] * (span - m),
-                    0, (float)oy / 100.0f + m + corners[k][1] * (span - m));
+  a->target = sr_v3((float)ox / 100.0f + m + corners[k][0] * (span - m), 0,
+                    (float)oy / 100.0f + m + corners[k][1] * (span - m));
 }
 
 static void spawn(SrCrowd *cr, const SrCity *c, const SrAmbient *amb, int npc, int block) {
@@ -68,8 +68,8 @@ static void spawn(SrCrowd *cr, const SrCity *c, const SrAmbient *amb, int npc, i
   pick_target(a, c);
 }
 
-void sr_crowd_refresh(SrCrowd *cr, const SrCity *c, const SrPopulation *pop, const SrCamera *cam,
-                      int64_t t, int max_agents) {
+void sr_crowd_refresh(SrCrowd *cr, const SrCity *c, const SrPopulation *pop, const SrCamera *cam, int64_t t,
+                      int max_agents) {
   int64_t slot = t / 1800;
   bool new_slot = slot != cr->last_slot;
   cr->last_slot = slot;
@@ -79,9 +79,7 @@ void sr_crowd_refresh(SrCrowd *cr, const SrCity *c, const SrPopulation *pop, con
     float d = dist_xz(a->pos, cam->pos);
     bool far = d > SR_CROWD_RADIUS + 20.0f;
     bool stale = new_slot && a->npc < 0 && d > SR_CROWD_RADIUS * 0.6f;
-    if ((far || stale) && may_pop(cam, a->pos)) {
-      cr->agents[i] = cr->agents[--cr->count];
-    }
+    if ((far || stale) && may_pop(cam, a->pos)) { cr->agents[i] = cr->agents[--cr->count]; }
   }
   int bx = (int)(cam->pos.x * 100.0f) / SR_BLOCK_CM, by = (int)(cam->pos.z * 100.0f) / SR_BLOCK_CM;
   int rad = (int)(SR_CROWD_RADIUS * 100.0f) / SR_BLOCK_CM + 1;
@@ -148,9 +146,9 @@ void sr_crowd_update(SrCrowd *cr, const SrCity *c, float dt, float rain) {
     float speed = 0.0f;
     SrVec3 goal = a->target;
     switch (a->state) {
-    case SR_AG_WALK: speed = a->speed; break;
-    case SR_AG_FLEE: speed = 4.0f; break;
-    default: speed = 0.0f; break;
+      case SR_AG_WALK: speed = a->speed; break;
+      case SR_AG_FLEE: speed = 4.0f; break;
+      default: speed = 0.0f; break;
     }
     if (speed > 0) {
       SrVec3 d = sr_v3_sub(goal, a->pos);
@@ -168,8 +166,7 @@ void sr_crowd_update(SrCrowd *cr, const SrCity *c, float dt, float rain) {
   }
 }
 
-int sr_crowd_gunfire(SrCrowd *cr, const SrCity *c, SrVec3 pos, float radius, SrEventLog *log,
-                     int64_t t) {
+int sr_crowd_gunfire(SrCrowd *cr, const SrCity *c, SrVec3 pos, float radius, SrEventLog *log, int64_t t) {
   int reacted = 0;
   bool reported = false;
   int block = sr_city_block_at(c, (int32_t)(pos.x * 100.0f), (int32_t)(pos.z * 100.0f));
@@ -180,16 +177,23 @@ int sr_crowd_gunfire(SrCrowd *cr, const SrCity *c, SrVec3 pos, float radius, SrE
     SrResponse r = sr_react_gunfire(a->bravery, dt, a->key);
     reacted++;
     switch (r) {
-    case SR_RESP_FLEE: {
-      a->state = SR_AG_FLEE;
-      SrVec3 away = sr_v3_norm(sr_v3_sub(a->pos, pos));
-      if (sr_v3_len(away) < 0.1f) away = sr_v3(1, 0, 0);
-      a->target = sr_v3_add(a->pos, sr_v3_scale(away, 40.0f));
-      a->timer = 10.0f;
-      break;
-    }
-    case SR_RESP_COVER: a->state = SR_AG_COVER; a->timer = 8.0f; break;
-    default: a->state = SR_AG_GAWK; a->timer = 6.0f; a->dir = sr_v3_norm(sr_v3_sub(pos, a->pos)); break;
+      case SR_RESP_FLEE: {
+        a->state = SR_AG_FLEE;
+        SrVec3 away = sr_v3_norm(sr_v3_sub(a->pos, pos));
+        if (sr_v3_len(away) < 0.1f) away = sr_v3(1, 0, 0);
+        a->target = sr_v3_add(a->pos, sr_v3_scale(away, 40.0f));
+        a->timer = 10.0f;
+        break;
+      }
+      case SR_RESP_COVER:
+        a->state = SR_AG_COVER;
+        a->timer = 8.0f;
+        break;
+      default:
+        a->state = SR_AG_GAWK;
+        a->timer = 6.0f;
+        a->dir = sr_v3_norm(sr_v3_sub(pos, a->pos));
+        break;
     }
     if (!reported && sr_witness_reports(dt, a->bravery, a->key)) {
       reported = true;

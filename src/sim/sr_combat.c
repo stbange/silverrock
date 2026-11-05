@@ -6,9 +6,9 @@
 #include <string.h>
 
 #define SUSPICIOUS_AT 0.3f
-#define COMBAT_AT 1.0f
-#define SEARCH_TIME 20.0f
-#define KO_TIME (30.0f * 60.0f)
+#define COMBAT_AT     1.0f
+#define SEARCH_TIME   20.0f
+#define KO_TIME       (30.0f * 60.0f)
 
 const SrDifficultyDef *sr_difficulty(SrDifficulty d) {
   static const SrDifficultyDef defs[4] = {
@@ -18,25 +18,25 @@ const SrDifficultyDef *sr_difficulty(SrDifficulty d) {
 
 float sr_zone_multiplier(SrHitZone z) {
   switch (z) {
-  case SR_ZONE_HEAD: return 2.0f;
-  case SR_ZONE_LIMB: return 0.75f;
-  default: return 1.0f;
+    case SR_ZONE_HEAD: return 2.0f;
+    case SR_ZONE_LIMB: return 0.75f;
+    default: return 1.0f;
   }
 }
 
 float sr_type_multiplier(SrDamageType t, bool drone, int cyber) {
   switch (t) {
-  case SR_DMG_EMP: return drone ? 3.0f : 0.2f + 0.25f * (float)cyber;
-  case SR_DMG_SHOCK: return drone ? 0.5f : 1.0f;
-  case SR_DMG_TOXIN: return drone ? 0.0f : 1.0f;
-  case SR_DMG_THERMAL: return 1.1f;
-  default: return 1.0f;
+    case SR_DMG_EMP: return drone ? 3.0f : 0.2f + 0.25f * (float)cyber;
+    case SR_DMG_SHOCK: return drone ? 0.5f : 1.0f;
+    case SR_DMG_TOXIN: return drone ? 0.0f : 1.0f;
+    case SR_DMG_THERMAL: return 1.1f;
+    default: return 1.0f;
   }
 }
 
 float sr_compute_damage(const SrWeaponStats *w, SrHitZone zone, const SrEnemy *t) {
-  float dmg = w->damage * sr_zone_multiplier(zone) *
-              sr_type_multiplier((SrDamageType)w->damage_type, t->drone, t->cyber);
+  float dmg =
+      w->damage * sr_zone_multiplier(zone) * sr_type_multiplier((SrDamageType)w->damage_type, t->drone, t->cyber);
   float armor_left = t->armor * (1.0f - SR_CLAMP(w->penetration, 0.0f, 1.0f));
   float reduction = armor_left / (armor_left + 50.0f);
   return dmg * (1.0f - reduction);
