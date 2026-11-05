@@ -1,0 +1,2 @@
+# Deliberately misformatted fixtures for the lint self-tests: never reformat.
+DisableFormat: true
