@@ -4,6 +4,7 @@
 #include "core/sr_str.h"
 #include "game/sr_save.h"
 #include "world/sr_interior.h"
+#include "world/sr_nav.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -758,10 +759,13 @@ int sr_sweep_seeds(uint64_t first, int n, char *err, size_t cap) {
       sr_interior_generate(c, b, &in);
       routes = sr_interior_route_count(&in) >= 2 && sr_interior_security_chain_ok(&in);
     }
-    if (inv != 0 || !routes) {
+    bool nav = sr_nav_connected(c);
+    if (inv != 0 || !routes || !nav) {
       if (!failures)
         snprintf(err, cap, "seed %llu: %s", (unsigned long long)seed,
-                 inv ? sr_city_invariant_name(inv) : "mission routes");
+                 inv       ? sr_city_invariant_name(inv)
+                 : !routes ? "mission routes"
+                           : "navigation connectivity");
       failures++;
     }
   }

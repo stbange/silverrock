@@ -127,6 +127,10 @@ if(SR_BUILD_TESTS)
     endif()
     add_test(NAME game_${scn_name} COMMAND sr_headless --script ${scn})
   endforeach()
+  if(NOT EMSCRIPTEN)
+    # city invariants, mission routes and navigation connectivity on 50 seeds
+    add_test(NAME game_sweep_50 COMMAND sr_headless --sweep 50)
+  endif()
 
   if(SR_BUILD_APP AND NOT EMSCRIPTEN)
     file(GLOB SR_PLATFORM_TESTS CONFIGURE_DEPENDS tests/platform/*.c)

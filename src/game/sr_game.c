@@ -3,6 +3,7 @@
 #include "core/sr_log.h"
 #include "core/sr_rng.h"
 #include "core/sr_str.h"
+#include "world/sr_nav.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -495,7 +496,7 @@ SrResult sr_game_cab(SrGame *g, int to) {
 
 SrResult sr_game_walk_to(SrGame *g, int to) {
   int from = player_building_near(g);
-  int32_t d = sr_city_walk_dist(g->city, from, to);
+  int32_t d = from == to ? 0 : sr_nav_walk_cm(g->city, from, to); /* sidewalks and crossings */
   if (d < 0) return SR_ERR_INVALID;
   sr_game_skip(g, (int64_t)(d / 140) + 30, false); /* 1.4 m/s */
   sr_game_teleport_building(g, to);

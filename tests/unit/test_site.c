@@ -41,6 +41,14 @@ static void steps(SrGame *g, int n) {
   for (int i = 0; i < n; i++) sr_game_step(g, &a);
 }
 
+/* Runs only the per-step upkeep of gadgets and cyberware (cheap): n steps of 1/60 s. */
+static void upkeep(SrGame *g, int n) {
+  for (int i = 0; i < n; i++) {
+    g->steps++;
+    sr_game_site_step(g, (float)SR_STEP_DT);
+  }
+}
+
 static SrJob *add_site_job(SrGame *g, int building) {
   SrJob j;
   sr_job_generate(g->city, SR_JT_STEAL_DATA, 7, sr_game_time(g), &j);
@@ -866,13 +874,13 @@ static void test_cyberware_in_play(void) {
   SR_CHECK(sr_game_cyber_load(g) <= sr_game_neural_capacity(g));
   /* glitches at the configured rate while over capacity, none within it */
   int glitches = g->glitches;
-  steps(g, 60 * 60 * 5);
+  upkeep(g, 60 * 60 * 5);
   SR_CHECK_EQ(g->glitches, glitches);
   p->prog.attr[SR_ATTR_BODY] = 1;
   p->prog.attr[SR_ATTR_TECH] = 1;
   SR_CHECK(sr_game_cyber_load(g) > sr_game_neural_capacity(g));
   int minutes = 30;
-  steps(g, 60 * 60 * minutes);
+  upkeep(g, 60 * 60 * minutes);
   int n = g->glitches - glitches;
   printf("  glitches over %d minutes: %d (rate %.1f/min)\n", minutes, n, (double)SR_GLITCH_PER_MINUTE);
   SR_CHECK(n >= (int)(minutes * SR_GLITCH_PER_MINUTE * 0.5f) && n <= (int)(minutes * SR_GLITCH_PER_MINUTE * 1.6f));
@@ -936,7 +944,7 @@ static void test_street_gadgets(void) {
   a.pressed[SR_ACT_GADGET] = true;
   sr_game_step(g, &a);
   /* buffs wear off */
-  steps(g, 60 * 610);
+  upkeep(g, 60 * 610);
   SR_CHECK(g->buff_pain <= 0 && g->buff_reflex <= 0 && g->buff_mask <= 0);
   sr_game_destroy(g);
 }
