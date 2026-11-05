@@ -119,16 +119,34 @@ void sr_chunk_build(const SrCity *c, const SrDeltas *d, int cx, int cy, SrMesh *
 SrChunk *sr_chunk_get(SrChunkCache *cc, const SrCity *c, const SrDeltas *d, int cx, int cy, int budget);
 int sr_chunk_count(const SrCity *c); /* chunks per side */
 
+/* Rotated box for rigid parts (see sr_mesh.c). */
+void sr_mesh_part(SrMesh *m, SrVec3 origin, float yaw, SrVec3 pivot, float swing, SrVec3 lo, SrVec3 hi, SrColor col,
+                  int layer, int em);
+
 /* Characters, rain, skyline, landmarks */
 void sr_build_characters(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *out);
 void sr_build_character(const SrAppearance *a, SrVec3 pos, SrVec3 dir, bool umbrella, SrMesh *out);
+/* Character facing `dir`; walk >= 0 is the distance walked and swings legs and arms (walk cycle). */
+void sr_build_character_walk(const SrAppearance *a, SrVec3 pos, SrVec3 dir, float walk, bool umbrella, SrMesh *out);
+/* Leg swing angle for a walked distance (radians). */
+float sr_walk_swing(float walk);
+
+/* Interiors (sr_interior_mesh.c) */
+void sr_build_interior_room(const SrSite *s, int room, SrMesh *out);
+uint64_t sr_site_mesh_key(const SrSite *s, const SrDeltas *d);
+void sr_build_site_dynamic(const SrSite *s, const SrDeltas *d, float time_s, SrMesh *out);
+void sr_build_guards(const SrSite *s, SrMesh *out);
+int sr_site_collect_lights(const SrSite *s, SrLight *out, int max);
+/* Thermal vision: recolours vertices from `from` as glowing heat signatures. */
+void sr_mesh_thermal(SrMesh *m, int from_vertex);
 void sr_build_rain(SrVec3 cam, float intensity, uint64_t frame, const SrCity *c, SrMesh *out);
 bool sr_point_covered(const SrCity *c, SrVec3 p);
 void sr_build_skyline(const SrCity *c, SrMesh *out);
 void sr_build_landmarks(const SrCity *c, float time_s, SrMesh *out);
 
 /* Frame description */
-typedef enum SrPass { SR_PASS_WORLD, SR_PASS_NOFOG } SrPass;
+/* XRAY: no depth test and no fog (thermal signatures through walls and smoke). */
+typedef enum SrPass { SR_PASS_WORLD, SR_PASS_NOFOG, SR_PASS_XRAY } SrPass;
 
 typedef struct SrDraw {
   SrMesh *mesh;
@@ -157,6 +175,8 @@ typedef struct SrFrame {
 typedef struct SrSceneCache {
   SrChunkCache chunks;
   SrMesh characters, rain, skyline, landmarks;
+  SrMesh rooms[SR_INT_MAX_ROOMS], site_dyn, guards;
+  uint64_t site_key;
   bool skyline_built;
   uint64_t frame_no;
   int view_chunks; /* radius in chunks */

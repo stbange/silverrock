@@ -31,25 +31,6 @@ int sr_loop_advance(SrLoop *l, double frame_dt) {
   return steps;
 }
 
-void sr_deltas_set(SrDeltas *d, uint32_t id, uint8_t value) {
-  for (int i = 0; i < d->count; i++)
-    if (d->id[i] == id) {
-      d->value[i] = value;
-      return;
-    }
-  if (d->count < SR_MAX_DELTAS) {
-    d->id[d->count] = id;
-    d->value[d->count] = value;
-    d->count++;
-  }
-}
-
-int sr_deltas_get(const SrDeltas *d, uint32_t id) {
-  for (int i = 0; i < d->count; i++)
-    if (d->id[i] == id) return d->value[i];
-  return -1;
-}
-
 SrGame *sr_game_create(void) {
   SrGame *g = (SrGame *)calloc(1, sizeof(SrGame));
   if (!g) return NULL; /* GCOVR_EXCL_LINE reason: calloc failure not injectable */
@@ -65,6 +46,8 @@ SrGame *sr_game_create(void) {
   g->max_agents = 400;
   g->screen = SR_SCREEN_TITLE;
   g->active_job = -1;
+  g->approach_building = -1;
+  g->roof_building = -1;
   g->cam.cos_half_fov = 0.5f; /* 120 degree horizontal view */
   return g;
 }
@@ -113,7 +96,26 @@ SrResult sr_game_new(SrGame *g, uint64_t seed, const SrCityOptions *opt, SrBackg
   g->screen = SR_SCREEN_PLAY;
   g->active_job = -1;
   g->on_ground = true;
-  sr_game_teleport_building(g, g->player.home); /* step out onto the sidewalk */
+  memset(&g->site, 0, sizeof g->site);
+  g->approach_building = -1;
+  g->buff_camo = g->buff_reflex = g->buff_mask = g->buff_focus = g->buff_pain = 0;
+  g->thermal = false;
+  g->ability_cd = g->glitch_time = 0;
+  g->glitches = 0;
+  g->cyber_offline = 0;
+  g->cyber_day = 0;
+  sr_game_teleport_building(g, g->player.home);
+  /* wake up at home, next to the bed */
+  if (sr_game_enter(g, g->player.home, SR_ENTRY_FRONT) == SR_OK) {
+    int bed = sr_interior_find_prop(&g->site.in, SR_PROP_BED);
+    SrVec3 at = sr_site_prop_pos(&g->site, bed);
+    SrVec3 c = sr_site_room_center(&g->site, g->site.in.props[bed].room);
+    SrVec3 dir = sr_v3_norm(sr_v3(c.x - at.x, 0, c.z - at.z));
+    g->player.pos = sr_v3(at.x + dir.x * 1.2f, SR_SITE_FLOOR_Y + EYE_HEIGHT, at.z + dir.z * 1.2f);
+    SrVec3 door = sr_site_prop_pos(&g->site, sr_interior_find_prop(&g->site.in, SR_PROP_EXIT));
+    g->player.yaw = atan2f(-(door.x - g->player.pos.x), -(door.z - g->player.pos.z)); /* towards the front door */
+    sr_game_toast(g, "You wake up at home. Rent is due on Sunday.");
+  }
   sr_log(SR_LOG_INFO, "game", "new game in %s (%d districts, %d megacorps)", g->city->name, g->city->district_count,
          g->city->factions.corp_count);
   return SR_OK;
@@ -186,13 +188,27 @@ bool sr_game_blocked(const SrGame *g, float x, float z) {
   return false;
 }
 
-void sr_game_teleport_building(SrGame *g, int building) {
-  /* stand on the sidewalk in front of the building (south side, towards +z) */
+static SrVec3 front_of(const SrGame *g, int building) {
   const SrBuilding *b = &g->city->buildings[building];
   float x = (float)(b->x0 + b->x1) / 200.0f;
   float z = (float)b->y1 / 100.0f + 1.2f;
   for (int k = 0; k < 40 && sr_game_blocked(g, x, z); k++) z += 0.5f;
-  g->player.pos = sr_v3(x, EYE_HEIGHT, z);
+  return sr_v3(x, EYE_HEIGHT, z);
+}
+
+SrVec3 sr_game_outside_pos(const SrGame *g) {
+  if (g->site.active && g->site.in.apartment) return g->player.pos; /* reopened on load */
+  if (g->site.active) return front_of(g, g->site.building);
+  if (g->roof_building >= 0) return front_of(g, g->roof_building);
+  return g->player.pos;
+}
+
+void sr_game_teleport_building(SrGame *g, int building) {
+  /* stand on the sidewalk in front of the building (south side, towards +z) */
+  if (g->site.active) sr_site_close(&g->site);
+  g->roof_building = -1;
+  g->floor_y = 0;
+  g->player.pos = front_of(g, building);
   g->player.yaw = 0; /* facing -z: towards the building */
 }
 
@@ -204,6 +220,7 @@ static void move_player(SrGame *g, const SrActionState *a, float dt) {
   bool sprint = (a->down[SR_ACT_SPRINT] || a->sprint_from_stick) && !crouch;
   float speed = crouch ? CROUCH_SPEED : sprint ? SPRINT_SPEED : WALK_SPEED;
   if (sr_inv_weight(&p->inv) > sr_carry_limit(p->prog.attr[SR_ATTR_BODY])) speed = CROUCH_SPEED;
+  if (g->buff_reflex > 0) speed *= 1.35f; /* boosted reflexes: the world seems to slow down */
   float s = sinf(p->yaw), c = cosf(p->yaw);
   float fx = -s, fz = -c; /* forward */
   float rx = c, rz = -s;  /* right */
@@ -215,13 +232,15 @@ static void move_player(SrGame *g, const SrActionState *a, float dt) {
   }
   float vx = (fx * my + rx * mx) * speed * dt;
   float vz = (fz * my + rz * mx) * speed * dt;
-  if (!sr_game_blocked(g, p->pos.x + vx, p->pos.z)) p->pos.x += vx;
-  if (!sr_game_blocked(g, p->pos.x, p->pos.z + vz)) p->pos.z += vz;
   p->crouched = crouch;
+  float x0 = p->pos.x, z0 = p->pos.z;
+  if (!sr_game_blocked_here(g, p->pos.x + vx, p->pos.z)) p->pos.x += vx;
+  if (!sr_game_blocked_here(g, p->pos.x, p->pos.z + vz)) p->pos.z += vz;
+  g->speed = sqrtf((p->pos.x - x0) * (p->pos.x - x0) + (p->pos.z - z0) * (p->pos.z - z0)) / dt;
   /* jumping */
-  float eye = crouch ? CROUCH_HEIGHT : EYE_HEIGHT;
+  float eye = g->floor_y + (crouch ? CROUCH_HEIGHT : EYE_HEIGHT);
   if (a->pressed[SR_ACT_JUMP] && g->on_ground) {
-    g->vel_y = 4.5f;
+    g->vel_y = sr_game_has_cyber(g, 8) ? 7.0f : 4.5f; /* jump boosters */
     g->on_ground = false;
   }
   if (!g->on_ground) {
@@ -240,6 +259,17 @@ static void move_player(SrGame *g, const SrActionState *a, float dt) {
 
 void sr_game_step(SrGame *g, const SrActionState *a) {
   if (!g->started) return;
+  if (g->screen == SR_SCREEN_SHOP) {
+    if (a) {
+      int dir = a->move_y > 0.5f ? -1 : a->move_y < -0.5f ? 1 : 0;
+      if (dir != 0 && dir != g->menu_axis && g->menu.count > 0)
+        g->menu.sel = (g->menu.sel + dir + g->menu.count) % g->menu.count;
+      g->menu_axis = dir;
+      if (a->pressed[SR_ACT_INTERACT]) sr_game_shop_buy(g, g->menu.sel);
+      if (a->pressed[SR_ACT_PAUSE]) sr_game_shop_close(g);
+    }
+    return;
+  }
   if (g->screen != SR_SCREEN_PLAY) {
     if (a && a->pressed[SR_ACT_PAUSE] && g->screen == SR_SCREEN_PAUSE)
       sr_game_confirm_resume(g);
@@ -255,19 +285,23 @@ void sr_game_step(SrGame *g, const SrActionState *a) {
       g->clock.paused = true;
       return;
     }
-    move_player(g, a, dt);
-    if (a->pressed[SR_ACT_INTERACT]) sr_game_interact(g);
-    if (a->pressed[SR_ACT_FIRE]) sr_game_fire(g);
+    if (g->glitch_time <= 0) { /* a glitch freezes the body for a moment */
+      move_player(g, a, dt);
+      if (a->pressed[SR_ACT_INTERACT]) sr_game_interact(g);
+      if (a->pressed[SR_ACT_FIRE]) sr_game_fire(g);
+      if (a->pressed[SR_ACT_GADGET]) sr_game_ability(g);
+      for (int q = 0; q < 4; q++)
+        if (a->pressed[SR_ACT_QUICK1 + q]) sr_game_use_quick(g, q);
+    }
     if (a->pressed[SR_ACT_TERMINAL]) g->screen = SR_SCREEN_TERMINAL;
-    for (int q = 0; q < 4; q++)
-      if (a->pressed[SR_ACT_QUICK1 + q]) sr_game_use_quick(g, q);
   }
   sr_clock_step(&g->clock);
   process_minutes(g, false);
   int64_t t = sr_game_time(g);
   g->cam.pos = g->player.pos;
   g->cam.forward = sr_dir_from_yaw_pitch(g->player.yaw, 0);
-  if (g->crowd_enabled) {
+  sr_game_site_step(g, dt);
+  if (g->crowd_enabled && !g->site.active) {
     if (g->steps % 30 == 1) sr_crowd_refresh(&g->crowd, g->city, g->pop, &g->cam, t, g->max_agents);
     SrWeatherState w = sr_weather_at(g->seed, t);
     sr_crowd_update(&g->crowd, g->city, dt, w.rain);
@@ -312,7 +346,8 @@ static float dist_to_building(const SrGame *g, int b) {
 }
 
 SrContext sr_game_context(SrGame *g) {
-  SrContext ctx = {SR_CTX_NONE, -1, -1, -1, 1e9f};
+  if (g->site.active || g->roof_building >= 0) return sr_game_site_context(g);
+  SrContext ctx = {SR_CTX_NONE, -1, -1, -1, 1e9f, -1};
   int b0 = sr_city_block_at(g->city, (int32_t)(g->player.pos.x * 100), (int32_t)(g->player.pos.z * 100));
   if (b0 < 0) return ctx;
   int64_t t = sr_game_time(g);
@@ -329,7 +364,7 @@ SrContext sr_game_context(SrGame *g) {
         float sx = (float)ox / 100.0f + 4.0f, sz = (float)oy / 100.0f + 4.0f;
         float d =
             sqrtf((sx - g->player.pos.x) * (sx - g->player.pos.x) + (sz - g->player.pos.z) * (sz - g->player.pos.z));
-        if (d < INTERACT_RANGE && d < ctx.distance) { ctx = (SrContext){SR_CTX_METRO, -1, s, -1, d}; }
+        if (d < INTERACT_RANGE && d < ctx.distance) { ctx = (SrContext){SR_CTX_METRO, -1, s, -1, d, -1}; }
       }
       const SrBlock *blk = &g->city->blocks[b];
       for (int i = 0; i < blk->building_count; i++) {
@@ -367,8 +402,9 @@ SrContext sr_game_context(SrGame *g) {
           }
           if (bi == g->player.home) k = SR_CTX_HOME;
           if (k != SR_CTX_NONE && k != SR_CTX_HOME && !sr_poi_open(g->city, bi, t)) k = SR_CTX_CLOSED;
+          if (k == SR_CTX_NONE && (g->city->buildings[bi].flags & SR_BF_MISSION)) k = SR_CTX_ENTER;
         }
-        if (k != SR_CTX_NONE) ctx = (SrContext){k, bi, -1, job, d};
+        if (k != SR_CTX_NONE) ctx = (SrContext){k, bi, -1, job, d, -1};
       }
     }
   }
@@ -514,12 +550,7 @@ int32_t sr_game_report(SrGame *g, int32_t id) {
 bool sr_game_use_quick(SrGame *g, int slot) {
   SrPlayer *p = &g->player;
   if (slot < 0 || slot > 3 || p->quick[slot] == 255) return false;
-  int idx = sr_inv_find(&p->inv, SR_IK_GADGET, p->quick[slot]);
-  if (idx < 0) return false;
-  const SrGadgetDef *d = sr_gadget_def(p->quick[slot]);
-  if (d->category == SR_GC_CONSUMABLE && d->damage < 0) p->health = SR_MIN(p->max_health, p->health - d->damage);
-  sr_inv_remove_at(&p->inv, idx, 1);
-  return true;
+  return sr_game_use_gadget(g, p->quick[slot]);
 }
 
 void sr_game_fire(SrGame *g) {
@@ -535,6 +566,11 @@ void sr_game_fire(SrGame *g) {
   SrWeaponStats s = sr_weapon_stats(g->seed, w);
   sr_inv_remove_at(&p->inv, ammo, 1);
   if (p->equipped > ammo && sr_inv_find(&p->inv, SR_IK_AMMO, -1) < 0) p->equipped--;
+  if (g->site.active) {
+    if (sr_game_has_cyber(g, 4) || g->buff_focus > 0) s.spread *= 0.5f; /* smartlink, focus */
+    sr_site_shoot(&g->site, &g->deltas, p->pos, p->yaw, p->pitch, &s);
+    return;
+  }
   float radius = s.noise * 1.5f;
   int reacted = sr_crowd_gunfire(&g->crowd, g->city, p->pos, radius, &g->events, sr_game_time(g));
   const SrWorldEvent *ev = sr_events_recent(&g->events, 0);
@@ -553,6 +589,13 @@ void sr_game_fire(SrGame *g) {
 
 void sr_game_flatline(SrGame *g) {
   SrPlayer *p = &g->player;
+  if (sr_game_has_cyber(g, 13) && !(g->cyber_offline & 0x80000000u)) { /* Second Heart, once a day */
+    g->cyber_offline |= 0x80000000u;
+    p->health = p->max_health * 0.4f;
+    sr_game_toast(g, "Your second heart kicks in.");
+    return;
+  }
+  if (g->site.active) sr_game_leave(g);
   SrFlatline f = sr_flatline(p->medevac, p->cred, g->seed, sr_game_time(g), g->hardcore);
   if (f.delete_save) {
     g->screen = SR_SCREEN_DEAD;
@@ -575,8 +618,11 @@ void sr_game_flatline(SrGame *g) {
 SrResult sr_game_interact(SrGame *g) {
   SrContext c = sr_game_context(g);
   g->ctx = c;
+  if (c.kind >= SR_CTX_EXIT && c.kind != SR_CTX_ENTER) return sr_game_site_interact(g, &c);
   switch (c.kind) {
     case SR_CTX_FOOD: return sr_game_eat_at(g, c.building);
+    case SR_CTX_SHOP: sr_game_shop_open(g, c.building); return SR_OK;
+    case SR_CTX_ENTER: return sr_game_enter(g, c.building, g->player.crouched ? SR_ENTRY_SERVICE : SR_ENTRY_FRONT);
     case SR_CTX_HOME:
       if (g->player.evicted) {
         if (sr_player_pay_debt(&g->player, sr_game_time(g)) == SR_OK) {
@@ -586,7 +632,7 @@ SrResult sr_game_interact(SrGame *g) {
         sr_game_toast(g, "Locked. You owe the landlord.");
         return SR_ERR_DENIED;
       }
-      return sr_game_sleep(g, 8, SR_SLEEP_HOME);
+      return sr_game_enter(g, c.building, SR_ENTRY_FRONT);
     case SR_CTX_CAPSULE: return sr_game_sleep(g, 8, SR_SLEEP_CAPSULE);
     case SR_CTX_FIXER: {
       int ids[4];
@@ -605,6 +651,8 @@ SrResult sr_game_interact(SrGame *g) {
     }
     case SR_CTX_JOB_TARGET: {
       SrJob *j = sr_jobs_get(&g->jobs, c.job);
+      if (sr_job_is_site((SrJobType)j->type)) /* site jobs are played inside */
+        return sr_game_enter(g, c.building, g->player.crouched ? SR_ENTRY_SERVICE : SR_ENTRY_FRONT);
       SrApproach best = SR_AP_HAMMER;
       for (int a = 0; a < SR_AP_COUNT; a++)
         if (j->approaches & (1u << a)) {

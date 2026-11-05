@@ -161,6 +161,7 @@ void sr_crowd_update(SrCrowd *cr, const SrCity *c, float dt, float rain) {
         float step = speed * dt;
         if (step > len) step = len;
         a->pos = sr_v3_add(a->pos, sr_v3_scale(a->dir, step));
+        a->walk += step;
       }
     }
   }

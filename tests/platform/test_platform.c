@@ -73,6 +73,7 @@ static void reference_scene(SrApp *a) {
   sr_app_start_game(a, 0x5EEDC0DEull);
   SrGame *g = a->game;
   g->crowd_enabled = false;
+  sr_game_leave(g); /* new games start in the apartment */
   /* stand on the intersection at the home block's corner and look down the street (+x) */
   int32_t ox, oy;
   sr_city_block_origin(g->city->buildings[g->player.home].block, g->city->grid, &ox, &oy);
@@ -146,6 +147,57 @@ static void test_render_city(void) {
   SR_CHECK(changed && diff_share(rgb, changed, w * h, 12) == 0.0); /* CRT is post: internal unchanged */
   free(changed);
   free(rgb);
+}
+
+static double image_mean(const uint8_t *rgb, int n) {
+  long sum = 0;
+  for (int i = 0; i < n * 3; i++) sum += rgb[i];
+  return (double)sum / (n * 3);
+}
+
+static void save_shot(const char *name, const uint8_t *rgb, int w, int h) {
+  const char *out_dir = getenv("SR_RENDER_OUT");
+  if (!out_dir) return;
+  char o[512];
+  snprintf(o, sizeof o, "%s/%s.ppm", out_dir, name);
+  write_ppm(o, rgb, w, h);
+}
+
+static void test_render_interiors(void) {
+  SR_SPEC("retro-rendering", "Neon through fog");
+  sr_app_start_game(&g_app, 0x5EEDC0DEull);
+  SrGame *g = g_app.game;
+  g->settings.dynamic_res = false;
+  g_app.fixed_frame_dt = 0.0001;
+  /* the apartment: lit, furnished, not a flat image */
+  SR_CHECK(sr_game_inside(g));
+  int w, h;
+  uint8_t *home = render_internal(&g_app, &w, &h);
+  SR_CHECK(home && image_mean(home, w * h) > 12.0);
+  if (home) save_shot("interior_home", home, w, h);
+  /* a mission site with guards; thermal optics make the guards glow through walls */
+  int site = -1;
+  for (int b = 0; b < g->city->building_count && site < 0; b++)
+    if (g->city->buildings[b].flags & SR_BF_MISSION) site = b;
+  sr_game_leave(g);
+  SR_CHECK_EQ(sr_game_enter(g, site, SR_ENTRY_FRONT), SR_OK);
+  uint8_t *in = render_internal(&g_app, &w, &h);
+  SR_CHECK(in && image_mean(in, w * h) > 8.0);
+  if (in) save_shot("interior_site", in, w, h);
+  g->thermal = true;
+  uint8_t *th = render_internal(&g_app, &w, &h);
+  g->thermal = false;
+  SR_CHECK(th != NULL);
+  if (in && th) {
+    long hot = 0; /* thermal signatures: saturated orange pixels */
+    for (int i = 0; i < w * h; i++) hot += th[i * 3] > 200 && th[i * 3 + 2] < 90 && th[i * 3 + 1] < 200;
+    printf("  thermal pixels: %ld\n", hot);
+    SR_CHECK(hot > 0);
+    save_shot("interior_thermal", th, w, h);
+  }
+  free(home);
+  free(in);
+  free(th);
 }
 
 static void test_retro_toggles(void) {
@@ -585,6 +637,7 @@ void suite_platform(void) {
   SR_RUN(test_app_init);
   SR_RUN(test_render_city);
   SR_RUN(test_retro_toggles);
+  SR_RUN(test_render_interiors);
   SR_RUN(test_letterbox_window);
   SR_RUN(test_focus_and_autosave);
   SR_RUN(test_settings_persist);

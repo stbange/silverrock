@@ -308,61 +308,77 @@ static SrColor palette16(int i, int sat) {
   return c;
 }
 
-void sr_build_character(const SrAppearance *a, SrVec3 p, SrVec3 dir, bool umbrella, SrMesh *m) {
+float sr_walk_swing(float walk) { return sinf(walk * 2.4f) * 0.55f; }
+
+void sr_build_character_walk(const SrAppearance *a, SrVec3 p, SrVec3 dir, float walk, bool umbrella, SrMesh *m) {
   static const SrColor skin[8] = {{250, 210, 180, 255}, {230, 180, 140, 255}, {200, 150, 110, 255}, {170, 120, 80, 255},
                                   {140, 95, 60, 255},   {110, 70, 45, 255},   {80, 52, 35, 255},    {60, 40, 28, 255}};
   static const SrColor hair[12] = {{20, 18, 16, 255},   {70, 45, 25, 255},    {160, 120, 60, 255}, {220, 210, 170, 255},
                                    {150, 40, 30, 255},  {200, 200, 200, 255}, {255, 40, 160, 255}, {40, 255, 200, 255},
                                    {120, 60, 255, 255}, {255, 230, 40, 255},  {40, 120, 255, 255}, {255, 90, 20, 255}};
-  (void)dir;
+  float yaw = (fabsf(dir.x) + fabsf(dir.z)) > 1e-4f ? atan2f(dir.x, dir.z) : 0.0f;
   float bw = 0.22f + 0.04f * a->body; /* body type changes the silhouette width */
   float tall = 1.55f + 0.08f * (float)(a->body % 3);
   SrColor outfit = palette16(a->outfit_color, a->outfit % 4 != 0);
   SrColor legs = shade(outfit, 60);
-  float x = p.x, z = p.z;
-  sr_mesh_box(m, sr_v3(x - bw, 0, z - 0.12f), sr_v3(x + bw, tall * 0.48f, z + 0.12f), legs, SR_LAYER_WHITE, 0, 0);
-  sr_mesh_box(m, sr_v3(x - bw - 0.04f, tall * 0.48f, z - 0.15f), sr_v3(x + bw + 0.04f, tall * 0.82f, z + 0.15f), outfit,
-              SR_LAYER_WHITE, 0, 0);
+  SrColor sk = skin[a->skin & 7];
+  float hip = tall * 0.48f, shoulder = tall * 0.8f;
+  float sw = walk >= 0 ? sr_walk_swing(walk) : 0.0f;
+  SrVec3 o = sr_v3(p.x, p.y, p.z);
+  /* legs swing around the hips, arms around the shoulders, opposite phase */
+  sr_mesh_part(m, o, yaw, sr_v3(0, hip, 0), sw, sr_v3(-bw, 0, -0.12f), sr_v3(-0.02f, hip, 0.12f), legs, SR_LAYER_WHITE,
+               0);
+  sr_mesh_part(m, o, yaw, sr_v3(0, hip, 0), -sw, sr_v3(0.02f, 0, -0.12f), sr_v3(bw, hip, 0.12f), legs, SR_LAYER_WHITE,
+               0);
+  sr_mesh_part(m, o, yaw, sr_v3(0, 0, 0), 0, sr_v3(-bw - 0.04f, hip, -0.15f), sr_v3(bw + 0.04f, tall * 0.82f, 0.15f),
+               outfit, SR_LAYER_WHITE, 0);
+  sr_mesh_part(m, o, yaw, sr_v3(0, shoulder, 0), -sw * 0.8f, sr_v3(-bw - 0.15f, tall * 0.5f, -0.07f),
+               sr_v3(-bw - 0.05f, shoulder, 0.07f), outfit, SR_LAYER_WHITE, 0);
+  sr_mesh_part(m, o, yaw, sr_v3(0, shoulder, 0), sw * 0.8f, sr_v3(bw + 0.05f, tall * 0.5f, -0.07f),
+               sr_v3(bw + 0.15f, shoulder, 0.07f), outfit, SR_LAYER_WHITE, 0);
   float hs = 0.12f + 0.01f * (a->head % 3);
-  sr_mesh_box(m, sr_v3(x - hs, tall * 0.84f, z - hs), sr_v3(x + hs, tall * 0.84f + 2 * hs, z + hs), skin[a->skin & 7],
-              SR_LAYER_WHITE, 0, 0);
-  float top = tall * 0.84f + 2 * hs;
+  float hy = tall * 0.84f;
+  sr_mesh_part(m, o, yaw, sr_v3(0, 0, 0), 0, sr_v3(-hs, hy, -hs), sr_v3(hs, hy + 2 * hs, hs), sk, SR_LAYER_WHITE, 0);
+  float top = hy + 2 * hs;
   int style = a->hair % 12;
+  SrColor hc = hair[a->hair_color % 12];
+  int hem = a->hair_color >= 6 ? 120 : 0;
   if (style < 4) { /* mohawk / crest */
-    sr_mesh_box(m, sr_v3(x - 0.03f, top, z - hs), sr_v3(x + 0.03f, top + 0.12f + 0.03f * style, z + hs),
-                hair[a->hair_color % 12], SR_LAYER_WHITE, 0, a->hair_color >= 6 ? 120 : 0);
+    sr_mesh_part(m, o, yaw, sr_v3(0, 0, 0), 0, sr_v3(-0.03f, top, -hs), sr_v3(0.03f, top + 0.12f + 0.03f * style, hs),
+                 hc, SR_LAYER_WHITE, hem);
   } else if (style < 9) { /* cap of hair */
-    sr_mesh_box(m, sr_v3(x - hs - 0.01f, top - 0.06f, z - hs - 0.01f),
-                sr_v3(x + hs + 0.01f, top + 0.03f, z + hs + 0.01f), hair[a->hair_color % 12], SR_LAYER_WHITE, 0,
-                a->hair_color >= 6 ? 120 : 0);
+    sr_mesh_part(m, o, yaw, sr_v3(0, 0, 0), 0, sr_v3(-hs - 0.01f, top - 0.06f, -hs - 0.01f),
+                 sr_v3(hs + 0.01f, top + 0.03f, hs + 0.01f), hc, SR_LAYER_WHITE, hem);
   }
-  if (a->cyber) { /* glowing optics */
-    sr_mesh_box(m, sr_v3(x - hs * 0.8f, tall * 0.84f + hs * 1.1f, z + hs),
-                sr_v3(x + hs * 0.8f, tall * 0.84f + hs * 1.35f, z + hs + 0.02f), (SrColor){255, 40, 40, 255},
-                SR_LAYER_WHITE, 0, 255);
-  }
+  if (a->cyber) /* glowing optics, on the face */
+    sr_mesh_part(m, o, yaw, sr_v3(0, 0, 0), 0, sr_v3(-hs * 0.8f, hy + hs * 1.1f, hs),
+                 sr_v3(hs * 0.8f, hy + hs * 1.35f, hs + 0.02f), (SrColor){255, 40, 40, 255}, SR_LAYER_WHITE, 255);
   if (a->marker) { /* faction marker: halo, shoulder plates or mask by marker id */
     SrColor mk = sr_corp_color(a->marker * 5);
     switch (a->marker % 3) {
       case 0:
-        sr_mesh_box(m, sr_v3(x - 0.2f, top + 0.15f, z - 0.2f), sr_v3(x + 0.2f, top + 0.18f, z + 0.2f), mk,
-                    SR_LAYER_WHITE, 0, 255);
+        sr_mesh_part(m, o, yaw, sr_v3(0, 0, 0), 0, sr_v3(-0.2f, top + 0.15f, -0.2f), sr_v3(0.2f, top + 0.18f, 0.2f), mk,
+                     SR_LAYER_WHITE, 255);
         break;
       case 1:
-        sr_mesh_box(m, sr_v3(x - bw - 0.12f, tall * 0.78f, z - 0.16f), sr_v3(x + bw + 0.12f, tall * 0.84f, z + 0.16f),
-                    mk, SR_LAYER_WHITE, 0, 60);
+        sr_mesh_part(m, o, yaw, sr_v3(0, 0, 0), 0, sr_v3(-bw - 0.12f, tall * 0.78f, -0.16f),
+                     sr_v3(bw + 0.12f, tall * 0.84f, 0.16f), mk, SR_LAYER_WHITE, 60);
         break;
       default:
-        sr_mesh_box(m, sr_v3(x - hs, tall * 0.84f, z + hs), sr_v3(x + hs, tall * 0.84f + hs, z + hs + 0.02f), mk,
-                    SR_LAYER_WHITE, 0, 80);
+        sr_mesh_part(m, o, yaw, sr_v3(0, 0, 0), 0, sr_v3(-hs, hy, hs), sr_v3(hs, hy + hs, hs + 0.02f), mk,
+                     SR_LAYER_WHITE, 80);
         break;
     }
   }
   if (umbrella) {
     SrColor uc = palette16(a->accessory + 3, 1);
-    sr_mesh_box(m, sr_v3(x - 0.55f, tall + 0.25f, z - 0.55f), sr_v3(x + 0.55f, tall + 0.3f, z + 0.55f), uc,
-                SR_LAYER_WHITE, 0, 30);
+    sr_mesh_part(m, o, yaw, sr_v3(0, 0, 0), 0, sr_v3(-0.55f, tall + 0.25f, -0.55f), sr_v3(0.55f, tall + 0.3f, 0.55f),
+                 uc, SR_LAYER_WHITE, 30);
   }
+}
+
+void sr_build_character(const SrAppearance *a, SrVec3 p, SrVec3 dir, bool umbrella, SrMesh *m) {
+  sr_build_character_walk(a, p, dir, -1.0f, umbrella, m);
 }
 
 void sr_build_characters(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *out) {
@@ -371,7 +387,7 @@ void sr_build_characters(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *
     const SrAgent *a = &cr->agents[i];
     float dx = a->pos.x - cam.x, dz = a->pos.z - cam.z;
     if (dx * dx + dz * dz > max_dist * max_dist) continue;
-    sr_build_character(&a->look, a->pos, a->dir, a->umbrella, out);
+    sr_build_character_walk(&a->look, a->pos, a->dir, a->speed > 0.05f ? a->walk : -1.0f, a->umbrella, out);
   }
   for (int i = 0; i < cr->vehicle_count; i++) {
     const SrVehicle *v = &cr->vehicles[i];
@@ -481,6 +497,9 @@ void sr_scene_free(SrSceneCache *s) {
   sr_mesh_free(&s->rain);
   sr_mesh_free(&s->skyline);
   sr_mesh_free(&s->landmarks);
+  for (int i = 0; i < SR_INT_MAX_ROOMS; i++) sr_mesh_free(&s->rooms[i]);
+  sr_mesh_free(&s->site_dyn);
+  sr_mesh_free(&s->guards);
 }
 
 static void add_draw(SrFrame *f, SrMesh *m, SrPass pass, SrVec3 at) {
@@ -489,6 +508,37 @@ static void add_draw(SrFrame *f, SrMesh *m, SrPass pass, SrVec3 at) {
   d->mesh = m;
   d->pass = pass;
   d->nlights = pass == SR_PASS_WORLD ? sr_select_lights(f->lights, f->nlights, at, d->lights) : 0;
+}
+
+/* Interior frame: room meshes (rebuilt when doors, devices or lights change), guards, effects. */
+static void build_site_frame(SrSceneCache *s, const SrGame *g, SrFrame *f) {
+  const SrSite *site = &g->site;
+  uint64_t key = sr_site_mesh_key(site, &g->deltas);
+  int rooms = site->in.w * site->in.h;
+  if (key != s->site_key) {
+    for (int r = 0; r < rooms; r++) sr_build_interior_room(site, r, &s->rooms[r]);
+    s->site_key = key;
+  }
+  float amb = site->lights_off ? 0.08f : 0.3f;
+  f->ambient[0] = amb;
+  f->ambient[1] = amb;
+  f->ambient[2] = amb * 1.1f;
+  f->fog[0] = f->fog[1] = f->fog[2] = 0.02f;
+  f->sky[0] = f->sky[1] = f->sky[2] = 0.0f;
+  f->fog_start = 12.0f;
+  f->fog_end = 45.0f;
+  f->wetness = 0;
+  f->nlights = sr_site_collect_lights(site, f->lights, SR_MAX_FRAME_LIGHTS);
+  for (int r = 0; r < rooms; r++) add_draw(f, &s->rooms[r], SR_PASS_WORLD, sr_site_room_center(site, r));
+  sr_build_site_dynamic(site, &g->deltas, (float)g->steps / 60.0f, &s->site_dyn);
+  add_draw(f, &s->site_dyn, SR_PASS_WORLD, g->player.pos);
+  sr_build_guards(site, &s->guards);
+  if (g->thermal) { /* warm bodies glow through smoke and darkness */
+    sr_mesh_thermal(&s->guards, 0);
+    add_draw(f, &s->guards, SR_PASS_XRAY, g->player.pos);
+  } else {
+    add_draw(f, &s->guards, SR_PASS_WORLD, g->player.pos);
+  }
 }
 
 void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) {
@@ -528,6 +578,10 @@ void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) 
   f->vertex_snap = g->settings.vertex_snap;
   f->affine = g->settings.affine;
   f->crt = g->settings.crt;
+  if (g->site.active) {
+    build_site_frame(s, g, f);
+    return;
+  }
   f->nlights = sr_collect_lights(c, p->pos, 120.0f, f->lights, SR_MAX_FRAME_LIGHTS);
   /* city chunks around the camera, nearest first, limited build budget */
   int ccx = (int)(p->pos.x * 100.0f) / (SR_BLOCK_CM * SR_CHUNK_BLOCKS);
@@ -546,7 +600,8 @@ void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) 
     }
   }
   sr_build_characters(&g->crowd, p->pos, f->fog_end, &s->characters);
-  add_draw(f, &s->characters, SR_PASS_WORLD, p->pos);
+  if (g->thermal) sr_mesh_thermal(&s->characters, 0);
+  add_draw(f, &s->characters, g->thermal ? SR_PASS_XRAY : SR_PASS_WORLD, p->pos);
   if (w.rain > 0.05f) {
     sr_build_rain(p->pos, w.rain, s->frame_no, c, &s->rain);
     add_draw(f, &s->rain, SR_PASS_WORLD, p->pos);

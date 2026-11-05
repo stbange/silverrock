@@ -26,6 +26,7 @@ typedef struct SrAgent {
   SrVec3 pos, dir, target;
   float speed;
   int block;
+  float walk; /* metres walked, drives the walk cycle */
 } SrAgent;
 
 typedef struct SrCamera {

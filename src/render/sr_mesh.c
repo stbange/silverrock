@@ -2,6 +2,8 @@
 #include "core/sr_rng.h"
 #include "render/sr_render.h"
 
+#include <math.h>
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -83,6 +85,28 @@ void sr_mesh_box(SrMesh *m, SrVec3 lo, SrVec3 hi, SrColor col, int layer, float 
   SrColor roof = {(uint8_t)(col.r * 3 / 4), (uint8_t)(col.g * 3 / 4), (uint8_t)(col.b * 3 / 4), col.a};
   sr_mesh_quad(m, sr_v3(lo.x, hi.y, hi.z), sr_v3(hi.x, hi.y, hi.z), sr_v3(hi.x, hi.y, lo.z), sr_v3(lo.x, hi.y, lo.z), 0,
                0, 1, 1, roof, SR_LAYER_CONCRETE, em, 0);
+}
+
+/* Rotated box for rigid character parts: swing about the local x axis around `pivot`, then turn
+ * by `yaw` about the vertical axis through `origin`. Local +z faces forward. */
+void sr_mesh_part(SrMesh *m, SrVec3 origin, float yaw, SrVec3 pivot, float swing, SrVec3 lo, SrVec3 hi, SrColor col,
+                  int layer, int em) {
+  float cs = cosf(swing), ss = sinf(swing), cy = cosf(yaw), sy = sinf(yaw);
+  SrVec3 c[8];
+  for (int i = 0; i < 8; i++) {
+    float x = (i & 1) ? hi.x : lo.x, y = (i & 2) ? hi.y : lo.y, z = (i & 4) ? hi.z : lo.z;
+    float ry = (y - pivot.y) * cs - (z - pivot.z) * ss + pivot.y;
+    float rz = (y - pivot.y) * ss + (z - pivot.z) * cs + pivot.z;
+    c[i] = sr_v3(origin.x + x * cy + rz * sy, origin.y + ry, origin.z - x * sy + rz * cy);
+  }
+  /* front (+z), back, right (+x), left, top, bottom */
+  sr_mesh_quad(m, c[4], c[5], c[7], c[6], 0, 1, 1, 0, col, layer, em, 0);
+  sr_mesh_quad(m, c[1], c[0], c[2], c[3], 0, 1, 1, 0, col, layer, em, 0);
+  sr_mesh_quad(m, c[5], c[1], c[3], c[7], 0, 1, 1, 0, col, layer, em, 0);
+  sr_mesh_quad(m, c[0], c[4], c[6], c[2], 0, 1, 1, 0, col, layer, em, 0);
+  SrColor top = {(uint8_t)(col.r * 3 / 4), (uint8_t)(col.g * 3 / 4), (uint8_t)(col.b * 3 / 4), col.a};
+  sr_mesh_quad(m, c[6], c[7], c[3], c[2], 0, 1, 1, 0, top, layer, em, 0);
+  sr_mesh_quad(m, c[0], c[1], c[5], c[4], 0, 1, 1, 0, top, layer, em, 0);
 }
 
 uint64_t sr_mesh_digest(const SrMesh *m) {

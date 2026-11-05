@@ -6,6 +6,41 @@
 
 static int room_index(const SrInterior *in, int x, int y) { return y * in->w + x; }
 
+static void add_prop(SrInterior *in, SrPropType type, int room, int32_t x, int32_t z, int facing, int color,
+                     int variant) {
+  if (in->prop_count >= SR_INT_MAX_PROPS) return;
+  SrProp *p = &in->props[in->prop_count++];
+  p->type = (uint8_t)type;
+  p->room = (uint8_t)room;
+  p->x = (int16_t)x;
+  p->z = (int16_t)z;
+  p->facing = (uint8_t)facing;
+  p->color = (uint8_t)color;
+  p->variant = (uint8_t)variant;
+}
+
+/* Corner spot k (0..3) of a room, 110 cm from the walls: away from the door openings. */
+static void corner(const SrInterior *in, int room, int k, int32_t *x, int32_t *z) {
+  int rx = room % in->w, ry = room / in->w;
+  *x = rx * SR_INT_CELL_CM + ((k & 1) ? SR_INT_CELL_CM - 110 : 110);
+  *z = ry * SR_INT_CELL_CM + ((k & 2) ? SR_INT_CELL_CM - 110 : 110);
+}
+
+/* Exit props: one per entry, on the outer wall or ceiling the entry uses. */
+static void add_exits(SrInterior *in) {
+  for (int e = 0; e < in->entry_count; e++) {
+    int room = in->entries[e].room, rx = room % in->w, ry = room / in->w;
+    int32_t x0 = rx * SR_INT_CELL_CM, z0 = ry * SR_INT_CELL_CM;
+    switch (in->entries[e].type) {
+      case SR_ENTRY_FRONT: add_prop(in, SR_PROP_EXIT, room, x0 + 300, z0 + SR_INT_CELL_CM - 40, 2, 0, e); break;
+      case SR_ENTRY_SERVICE: add_prop(in, SR_PROP_EXIT, room, x0 + SR_INT_CELL_CM - 40, z0 + 300, 1, 0, e); break;
+      case SR_ENTRY_ROOF: add_prop(in, SR_PROP_EXIT, room, x0 + 150, z0 + 150, 0, 0, e); break;
+      case SR_ENTRY_VENT: add_prop(in, SR_PROP_EXIT, room, x0 + 450, z0 + 40, 0, 0, e); break;
+      default: add_prop(in, SR_PROP_EXIT, room, x0 + 300, z0 + 40, 0, 0, e); break;
+    }
+  }
+}
+
 static void add_device(SrInterior *in, SrDeviceType type, int room, int dir, bool locked) {
   if (in->device_count >= SR_INT_MAX_DEVICES) return;
   SrDevice *d = &in->devices[in->device_count];
@@ -115,6 +150,113 @@ void sr_interior_generate(const SrCity *c, int building, SrInterior *in) {
   }
   add_device(in, SR_DEV_LIGHTS, 0, 0, false);
   if (b->flags & SR_BF_ELEVATOR) add_device(in, SR_DEV_ELEVATOR, in->entries[0].room, 0, false);
+  /* props from their own stream, so the room layout above stays as it was */
+  SrRng pr = sr_rng_stream(c->seed, "interior-props", (uint64_t)building, 0);
+  add_exits(in);
+  add_prop(in, SR_PROP_OBJECTIVE, in->target_room, in->target_room % in->w * SR_INT_CELL_CM + 300,
+           in->target_room / in->w * SR_INT_CELL_CM + 300, 2, 0, 0);
+  if (in->security_room >= 0) {
+    int32_t x, z;
+    corner(in, in->security_room, 1, &x, &z);
+    add_prop(in, SR_PROP_CONSOLE, in->security_room, x, z, 3, 0, 0);
+  }
+  for (int i = 0; i < n; i++) {
+    int32_t x, z;
+    int k = sr_rng_range(&pr, 0, 3);
+    corner(in, i, k, &x, &z);
+    int col = sr_rng_range(&pr, 0, 15);
+    switch (in->rooms[i]) {
+      case SR_ROOM_OFFICE: add_prop(in, SR_PROP_DESK, i, x, z, k, col, sr_rng_range(&pr, 0, 3)); break;
+      case SR_ROOM_LOBBY: add_prop(in, SR_PROP_PLANT, i, x, z, k, col, 0); break;
+      case SR_ROOM_TARGET: add_prop(in, SR_PROP_SERVER, i, x, z, k, col, 0); break;
+      case SR_ROOM_HALL:
+        if (sr_rng_chance(&pr, 500)) add_prop(in, SR_PROP_CRATE, i, x, z, k, col, sr_rng_range(&pr, 0, 3));
+        break;
+      default: break;
+    }
+  }
+}
+
+void sr_interior_apartment(const SrCity *c, int building, int tier, SrInterior *in) {
+  static const int8_t k_w[5] = {1, 2, 2, 3, 3}, k_h[5] = {1, 1, 2, 2, 3};
+  memset(in, 0, sizeof *in);
+  tier = SR_CLAMP(tier, 0, 4);
+  in->building = (uint32_t)building;
+  in->apartment = true;
+  in->tier = (uint8_t)tier;
+  in->w = k_w[tier];
+  in->h = k_h[tier];
+  in->target_room = -1;
+  in->security_room = -1;
+  int n = in->w * in->h;
+  for (int i = 0; i < n; i++) {
+    in->rooms[i] = SR_ROOM_HOME;
+    if (i % in->w + 1 < in->w) in->doors[i] |= 1; /* open plan: every neighbour connects */
+    if (i / in->w + 1 < in->h) in->doors[i] |= 2;
+  }
+  for (int i = 0; i < n; i++)
+    for (int dir = 0; dir < 2; dir++)
+      if (in->doors[i] & (1 << dir)) add_device(in, SR_DEV_DOOR, i, dir, false);
+  add_device(in, SR_DEV_LIGHTS, 0, 0, false);
+  int front = room_index(in, 0, in->h - 1);
+  in->entries[in->entry_count++] = (SrEntry){SR_ENTRY_FRONT, (uint8_t)front};
+  add_exits(in);
+  /* amenities: the bed in the far room, the rest spread over the corners */
+  SrRng r = sr_rng_stream(c->seed, "apartment", (uint64_t)building, (uint64_t)tier);
+  int far = room_index(in, in->w - 1, 0);
+  bool used[SR_INT_MAX_ROOMS][4];
+  memset(used, 0, sizeof used);
+  used[front][2] = used[front][3] = true; /* keep the front door clear */
+  static const SrPropType amen[4] = {SR_PROP_BED, SR_PROP_STASH, SR_PROP_TERMINAL, SR_PROP_WARDROBE};
+  for (int a = 0; a < 4; a++) {
+    int room = a == 0 ? far : sr_rng_range(&r, 0, n - 1);
+    int k = sr_rng_range(&r, 0, 3);
+    for (int tries = 0; tries < 16 && used[room][k]; tries++) {
+      k = (k + 1) & 3;
+      if (tries % 4 == 3) room = (room + 1) % n;
+    }
+    used[room][k] = true;
+    int32_t x, z;
+    corner(in, room, k, &x, &z);
+    add_prop(in, amen[a], room, x, z, k, sr_rng_range(&r, 0, 15), sr_rng_range(&r, 0, 3));
+  }
+  /* procedural decoration: posters on walls, plants, lamps, rugs, shelves */
+  int deco = 3 + tier * 2 + sr_rng_range(&r, 0, 3);
+  for (int d = 0; d < deco; d++) {
+    int room = sr_rng_range(&r, 0, n - 1);
+    int kind = sr_rng_range(&r, 0, 4);
+    int col = sr_rng_range(&r, 0, 15), var = sr_rng_range(&r, 0, 3);
+    int32_t x0 = room % in->w * SR_INT_CELL_CM, z0 = room / in->w * SR_INT_CELL_CM;
+    if (kind == 0) { /* poster on the north or west wall, clear of door openings */
+      bool north = sr_rng_chance(&r, 500);
+      int32_t along = sr_rng_chance(&r, 500) ? 120 : SR_INT_CELL_CM - 120;
+      add_prop(in, SR_PROP_POSTER, room, north ? x0 + along : x0 + 8, north ? z0 + 8 : z0 + along, north ? 2 : 1, col,
+               var);
+    } else if (kind == 4) {
+      add_prop(in, SR_PROP_RUG, room, x0 + 300, z0 + 300, 0, col, var);
+    } else {
+      int k = sr_rng_range(&r, 0, 3);
+      if (used[room][k]) continue;
+      used[room][k] = true;
+      int32_t x, z;
+      corner(in, room, k, &x, &z);
+      static const SrPropType kinds[3] = {SR_PROP_PLANT, SR_PROP_LAMP, SR_PROP_SHELF};
+      add_prop(in, kinds[kind - 1], room, x, z, k, col, var);
+    }
+  }
+}
+
+int sr_interior_find_prop(const SrInterior *in, SrPropType type) {
+  for (int i = 0; i < in->prop_count; i++)
+    if (in->props[i].type == type) return i;
+  return -1;
+}
+
+int sr_interior_room_at(const SrInterior *in, int32_t x, int32_t z) {
+  if (x < 0 || z < 0) return -1;
+  int rx = x / SR_INT_CELL_CM, ry = z / SR_INT_CELL_CM;
+  if (rx >= in->w || ry >= in->h) return -1;
+  return ry * in->w + rx;
 }
 
 static bool door_between(const SrInterior *in, int a, int b, bool through_locked) {
@@ -186,5 +328,6 @@ uint64_t sr_interior_digest(const SrInterior *in) {
     uint32_t v[3] = {in->devices[d].id, (uint32_t)in->devices[d].type, in->devices[d].locked};
     h = sr_hash_bytes(h, v, sizeof v);
   }
+  for (int p = 0; p < in->prop_count; p++) h = sr_hash_bytes(h, &in->props[p], sizeof(SrProp));
   return h;
 }

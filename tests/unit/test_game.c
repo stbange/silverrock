@@ -3,6 +3,7 @@
 #include "game/sr_script.h"
 #include "sr_test.h"
 
+#include <math.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -10,6 +11,16 @@ static SrGame *new_game(uint64_t seed) {
   SrGame *g = sr_game_create();
   sr_game_new(g, seed, NULL, SR_BG_STREET_KID, "Tester");
   return g;
+}
+
+/* Stands the player 1 m in front of the first prop of a type inside the current site, facing it. */
+static void face_prop(SrGame *g, SrPropType type) {
+  int pr = sr_interior_find_prop(&g->site.in, type);
+  SrVec3 at = sr_site_prop_pos(&g->site, pr);
+  SrVec3 c = sr_site_room_center(&g->site, g->site.in.props[pr].room);
+  SrVec3 dir = sr_v3_norm(sr_v3(c.x - at.x, 0, c.z - at.z));
+  g->player.pos = sr_v3(at.x + dir.x, SR_SITE_FLOOR_Y + 1.7f, at.z + dir.z);
+  g->player.yaw = atan2f(dir.x, dir.z);
 }
 
 static SrActionState idle(void) {
@@ -171,9 +182,13 @@ static void test_interactions(void) {
   SR_CHECK(sr_game_interact(g) != SR_OK);
   g->player.cred = 5000;
   SR_CHECK_EQ(sr_game_eat_at(g, g->player.home), SR_ERR_NOT_FOUND);
-  /* home: sleep 8 hours */
+  /* home: go inside, walk to the bed, sleep 8 hours */
   sr_game_teleport_building(g, g->player.home);
   SR_CHECK_EQ(sr_game_context(g).kind, SR_CTX_HOME);
+  SR_CHECK_EQ(sr_game_interact(g), SR_OK);
+  SR_CHECK(sr_game_inside(g));
+  face_prop(g, SR_PROP_BED);
+  SR_CHECK_EQ(sr_game_context(g).kind, SR_CTX_BED);
   int64_t t = sr_game_time(g);
   int saves = g->autosave_requests;
   g->player.fatigue = 90;
@@ -889,6 +904,7 @@ static void test_performance_targets(void) {
   sr_city_destroy(c);
   /* busiest street at peak: at least 150 citizens in view */
   SrGame *g = new_game(0x5EEDC0DEull);
+  sr_game_leave(g);
   int best = -1;
   for (int k = 0; k < g->city->district_count; k++)
     if (g->city->districts[k].type == SR_D_ENTERTAINMENT)

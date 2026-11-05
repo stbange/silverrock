@@ -99,8 +99,30 @@ bool sr_game_query(SrGame *g, const char *path, char *out, size_t cap) {
   Q("paused", "%s", g->clock.paused ? "true" : "false")
   Q("audio.muted", "%s", g->audio_muted ? "true" : "false")
   Q("context", "%d", (int)sr_game_context(g).kind)
+  Q("site.active", "%s", g->site.active ? "true" : "false")
+  Q("site.building", "%d", g->site.active ? g->site.building : -1)
+  Q("site.apartment", "%s", g->site.active && g->site.in.apartment ? "true" : "false")
+  Q("site.guards", "%d", g->site.guard_count)
+  Q("site.guards_up", "%d", sr_site_guards_up(&g->site))
+  Q("site.alarm", "%s", g->site.alarm ? "true" : "false")
+  Q("site.objective", "%s", g->site.objective_done ? "true" : "false")
+  Q("site.camera", "%s", g->site.camera_seen ? "true" : "false")
+  Q("site.digest", "%016llx", (unsigned long long)sr_interior_digest(&g->site.in))
+  Q("player.roof", "%d", g->roof_building)
+  Q("player.outfit", "%d", p->outfit)
+  Q("player.stash", "%d", p->stash.count)
+  Q("cyber.load", "%d", sr_game_cyber_load(g))
+  Q("cyber.capacity", "%d", sr_game_neural_capacity(g))
+  Q("cyber.glitches", "%d", g->glitches)
+  Q("cyber.thermal", "%s", g->thermal ? "true" : "false")
+  Q("approach.building", "%d", g->approach_building)
+  if (strcmp(path, "job.target") == 0) {
+    const SrJob *j = sr_jobs_get(&g->jobs, g->active_job);
+    snprintf(out, cap, "%d", j ? j->target_building : -1);
+    return true;
+  }
   if (strcmp(path, "screen") == 0) {
-    static const char *const n[] = {"title", "play", "pause", "terminal", "dead", "create"};
+    static const char *const n[] = {"title", "play", "pause", "terminal", "dead", "create", "shop"};
     snprintf(out, cap, "%s", n[g->screen]);
     return true;
   }
@@ -179,6 +201,46 @@ static int bg_by_name(const char *n) {
   for (int i = 0; i < SR_BG_COUNT; i++)
     if (strcmp(n, names[i]) == 0) return i;
   return -1;
+}
+
+static int name_index(const char *n, const char *(*name_of)(int), int count) {
+  char want[48];
+  sr_str_normalize(n, want, sizeof want);
+  for (int i = 0; i < count; i++) {
+    char have[48];
+    sr_str_normalize(name_of(i), have, sizeof have);
+    if (strcmp(have, want) == 0) return i;
+  }
+  return -1;
+}
+
+static const char *gadget_name(int i) { return sr_gadget_def(i)->name; }
+static const char *cyber_name(int i) { return sr_cyber_def(i)->name; }
+
+static int prop_by_name(const char *n) {
+  static const char *const names[] = {"exit", "bed", "stash", "terminal", "wardrobe", "objective", "console"};
+  for (int i = 0; i < (int)SR_ARRAY_LEN(names); i++)
+    if (strcmp(n, names[i]) == 0) return i;
+  return -1;
+}
+
+static int entry_by_name(const char *n) {
+  static const char *const names[] = {"front", "service", "vent", "roof", "window"};
+  for (int i = 0; i < (int)SR_ARRAY_LEN(names); i++)
+    if (strcmp(n, names[i]) == 0) return i;
+  return -1;
+}
+
+/* Stands the player in front of a prop inside the current site, facing it. */
+static SrResult face_prop(SrGame *g, int type) {
+  int pr = sr_interior_find_prop(&g->site.in, (SrPropType)type);
+  if (!g->site.active || pr < 0) return SR_ERR_NOT_FOUND;
+  SrVec3 at = sr_site_prop_pos(&g->site, pr);
+  SrVec3 c = sr_site_room_center(&g->site, g->site.in.props[pr].room);
+  SrVec3 dir = sr_v3_norm(sr_v3(c.x - at.x, 0, c.z - at.z));
+  g->player.pos = sr_v3(at.x + dir.x, SR_SITE_FLOOR_Y + 1.7f, at.z + dir.z);
+  g->player.yaw = atan2f(dir.x, dir.z);
+  return SR_OK;
 }
 
 typedef struct ScriptState {
@@ -351,6 +413,44 @@ static SrResult command(ScriptState *st, char *line, char *out, size_t cap) {
       return SR_OK;
     }
   }
+  if (strcmp(cmd, "enter") == 0 && n >= 2) {
+    int b = strcmp(tok[1], "home") == 0 ? g->player.home : atoi(tok[1]);
+    if (strcmp(tok[1], "target") == 0) {
+      const SrJob *j = sr_jobs_get(&g->jobs, g->active_job);
+      b = j ? j->target_building : -1;
+    }
+    int via = n >= 3 ? entry_by_name(tok[2]) : SR_ENTRY_FRONT;
+    if (via < 0) return SR_ERR_INVALID;
+    return sr_game_enter(g, b, (SrEntryType)via);
+  }
+  if (strcmp(cmd, "leave") == 0) {
+    if (!sr_game_inside(g)) return SR_ERR_INVALID;
+    sr_game_leave(g);
+    return SR_OK;
+  }
+  if (strcmp(cmd, "face") == 0 && n >= 2) {
+    int t = prop_by_name(tok[1]);
+    return t < 0 ? SR_ERR_INVALID : face_prop(g, t);
+  }
+  if (strcmp(cmd, "give") == 0 && n >= 3) {
+    bool cyber = strcmp(tok[1], "cyber") == 0;
+    int idx = cyber ? name_index(tok[2], cyber_name, sr_cyber_count()) : name_index(tok[2], gadget_name, SR_GD_COUNT);
+    if (idx < 0) return SR_ERR_INVALID;
+    SrItem it = sr_item_simple(cyber ? SR_IK_CYBER : SR_IK_GADGET, idx, n >= 4 ? atoi(tok[3]) : 1);
+    return sr_inv_add(&g->player.inv, it) ? SR_OK : SR_ERR_NOMEM;
+  }
+  if (strcmp(cmd, "install") == 0 && n >= 2) {
+    int idx = name_index(tok[1], cyber_name, sr_cyber_count());
+    if (idx < 0 || !sr_inv_add(&g->player.inv, sr_item_simple(SR_IK_CYBER, idx, 1))) return SR_ERR_INVALID;
+    return sr_game_install_cyber(g, sr_inv_find(&g->player.inv, SR_IK_CYBER, idx)) ? SR_OK : SR_ERR_DENIED;
+  }
+  if (strcmp(cmd, "use") == 0 && n >= 2) {
+    int idx = name_index(tok[1], gadget_name, SR_GD_COUNT);
+    if (idx < 0) return SR_ERR_INVALID;
+    return sr_game_use_gadget(g, idx) ? SR_OK : SR_ERR_DENIED;
+  }
+  if (strcmp(cmd, "ability") == 0) return sr_game_ability(g) ? SR_OK : SR_ERR_DENIED;
+  if (strcmp(cmd, "grapple") == 0) return sr_game_grapple(g);
   if (strcmp(cmd, "echo") == 0) return SR_OK;
   return SR_ERR_INVALID;
 }

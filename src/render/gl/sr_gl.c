@@ -451,12 +451,14 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
     pUniform3f(b->u_fog, f->fog[0], f->fog[1], f->fog[2]);
     for (int i = 0; i < f->ndraws; i++) {
       const SrDraw *d = &f->draws[i];
-      if (d->pass == SR_PASS_NOFOG)
-        pUniform2f(b->u_fogr, 1e6f, 2e6f);
-      else
+      if (d->pass == SR_PASS_WORLD)
         pUniform2f(b->u_fogr, f->fog_start, f->fog_end);
+      else
+        pUniform2f(b->u_fogr, 1e6f, 2e6f);
+      if (d->pass == SR_PASS_XRAY) pDisable(GL_DEPTH_TEST);
       set_lights(b, f, d);
       draw_mesh(b, d->mesh);
+      if (d->pass == SR_PASS_XRAY) pEnable(GL_DEPTH_TEST);
     }
     pDisable(GL_DEPTH_TEST);
   }

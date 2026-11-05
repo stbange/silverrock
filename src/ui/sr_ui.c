@@ -72,8 +72,52 @@ const char *sr_ui_context_label(SrContextKind k) {
     case SR_CTX_CLINIC: return "CLINIC";
     case SR_CTX_LANDLORD: return "PAY LANDLORD";
     case SR_CTX_CLOSED: return "CLOSED";
+    case SR_CTX_EXIT: return "LEAVE";
+    case SR_CTX_BED: return "SLEEP";
+    case SR_CTX_STASH: return "STASH";
+    case SR_CTX_TERMINAL: return "TERMINAL";
+    case SR_CTX_WARDROBE: return "CHANGE OUTFIT";
+    case SR_CTX_OBJECTIVE: return "TAKE THE OBJECTIVE";
+    case SR_CTX_CONSOLE: return "HACK CONSOLE";
+    case SR_CTX_LOCKED: return "PICK THE LOCK";
+    case SR_CTX_TAKEDOWN: return "TAKEDOWN";
+    case SR_CTX_ENTER: return "GO INSIDE";
+    case SR_CTX_ROOF_HATCH: return "DROP IN";
+    case SR_CTX_CLIMB_DOWN: return "CLIMB DOWN";
     default: return "";
   }
+}
+
+int sr_ui_context_icon(const SrGame *g, const SrContext *c) {
+  if (c->kind == SR_CTX_NONE) return -1;
+  if (c->building >= 0 && c->kind != SR_CTX_EXIT && c->kind != SR_CTX_CLIMB_DOWN && c->kind < SR_CTX_EXIT) {
+    int poi = g->city->buildings[c->building].poi;
+    if (poi != SR_POI_NONE) return poi;
+  }
+  switch (c->kind) {
+    case SR_CTX_FOOD: return SR_POI_FOOD;
+    case SR_CTX_FIXER:
+    case SR_CTX_JOB_REPORT: return SR_POI_FIXER;
+    case SR_CTX_CAPSULE: return SR_POI_CAPSULE;
+    case SR_CTX_CLINIC: return SR_POI_CLINIC;
+    case SR_CTX_METRO:
+    case SR_CTX_TERMINAL:
+    case SR_CTX_CONSOLE: return SR_POI_MATRIX_BOOTH;
+    case SR_CTX_LOCKED:
+    case SR_CTX_LANDLORD: return SR_POI_POLICE;
+    case SR_CTX_TAKEDOWN: return SR_POI_GANG_HIDEOUT;
+    case SR_CTX_JOB_TARGET:
+    case SR_CTX_OBJECTIVE:
+    case SR_CTX_ENTER:
+    case SR_CTX_ROOF_HATCH: return SR_POI_CORP_FACILITY;
+    case SR_CTX_SHOP: return SR_POI_ELECTRONICS;
+    case SR_CTX_WARDROBE: return SR_POI_CLOTHING;
+    default: return SR_POI_HOME; /* home, bed, stash, exits, closed doors */
+  }
+}
+
+static void centered_text(SrUi *ui, float y, const char *txt, SrColor c, int s) {
+  sr_ui_text(ui, (float)ui->w / 2 - (float)sr_ui_text_width(txt, s) / 2, y, txt, c, s);
 }
 
 static void bar(SrUi *ui, float x, float y, float w, float h, float frac, SrColor c) {
@@ -124,13 +168,38 @@ static void hud(SrUi *ui, const SrGame *g) {
   sr_ui_rect(ui, cx - 1, m, 2, 9.0f * (float)s, k_white);
   /* crosshair */
   sr_ui_rect(ui, (float)ui->w / 2 - (float)s, (float)ui->h / 2 - (float)s, 2.0f * (float)s, 2.0f * (float)s, k_white);
-  /* context prompt */
+  /* context prompt with the interaction's icon */
   const char *label = sr_ui_context_label(g->ctx.kind);
   if (label[0]) {
     snprintf(buf, sizeof buf, "[E] %s", label);
-    float tw = (float)sr_ui_text_width(buf, s);
-    sr_ui_rect(ui, (float)ui->w / 2 - tw / 2 - 4, (float)ui->h * 0.62f - 4, tw + 8, 7.0f * (float)s + 8, k_panel);
-    sr_ui_text(ui, (float)ui->w / 2 - tw / 2, (float)ui->h * 0.62f, buf, k_amber, s);
+    float tw = (float)sr_ui_text_width(buf, s), ic = 9.0f * (float)s;
+    float x0 = (float)ui->w / 2 - (tw + ic + 4) / 2;
+    sr_ui_rect(ui, x0 - 4, (float)ui->h * 0.62f - 4 - (float)s, tw + ic + 12, ic + 8, k_panel);
+    sr_ui_icon(ui, x0, (float)ui->h * 0.62f - (float)s, ic, sr_ui_context_icon(g, &g->ctx), k_amber);
+    sr_ui_text(ui, x0 + ic + 4, (float)ui->h * 0.62f, buf, k_amber, s);
+  }
+  /* inside: guard awareness and camera contact */
+  if (g->site.active && !g->site.in.apartment) {
+    float aw = SR_MAX(g->site.awareness, g->site.cam_detect);
+    sr_ui_rect(ui, cx - 30.0f * (float)s, m + 12.0f * (float)s, 60.0f * (float)s, 3.0f * (float)s, k_panel);
+    sr_ui_rect(ui, cx - 30.0f * (float)s, m + 12.0f * (float)s, 60.0f * (float)s * aw, 3.0f * (float)s,
+               g->site.alarm ? k_red : k_amber);
+    if (g->site.alarm) centered_text(ui, m + 17.0f * (float)s, "ALARM", k_red, s);
+  }
+  /* cyberware and gadget states */
+  float sy = (float)ui->h - m - 18.0f * (float)s;
+  if (g->thermal) sr_ui_text(ui, (float)ui->w - m - (float)sr_ui_text_width("THERMAL", s), sy, "THERMAL", k_red, s);
+  if (g->buff_camo > 0)
+    sr_ui_text(ui, (float)ui->w - m - (float)sr_ui_text_width("CAMO", s), sy - 9.0f * (float)s, "CAMO", k_cyan, s);
+  if (g->buff_reflex > 0)
+    sr_ui_text(ui, (float)ui->w - m - (float)sr_ui_text_width("REFLEX", s), sy - 18.0f * (float)s, "REFLEX", k_amber,
+               s);
+  if (g->glitch_time > 0) { /* neural glitch: static bars over the view */
+    for (int i = 0; i < 12; i++) {
+      float y = (float)((g->steps * 37u + (uint64_t)i * 101u) % (uint64_t)ui->h);
+      sr_ui_rect(ui, 0, y, (float)ui->w, 2.0f * (float)s, (SrColor){(uint8_t)(i * 20), 255, 255, 90});
+    }
+    centered_text(ui, (float)ui->h * 0.4f, "NEURAL GLITCH", k_red, s);
   }
   /* active job objective */
   if (g->active_job >= 0) {
@@ -194,7 +263,7 @@ static void terminal(SrUi *ui, const SrGame *g) {
   sr_ui_text(ui, x, (float)ui->h - m - line, "[ESC] CLOSE", green, s);
 }
 
-static void touch_overlay(SrUi *ui, const SrInput *in) {
+static void touch_overlay(SrUi *ui, const SrGame *g, const SrInput *in) {
   const SrTouchLayout *l = &in->layout;
   float k = ui->px_per_css;
   for (int i = 0; i < SR_TOUCH_BUTTONS; i++) {
@@ -202,6 +271,11 @@ static void touch_overlay(SrUi *ui, const SrInput *in) {
     float sz = b->size * k;
     SrColor c = in->touch_down[b->action] ? (SrColor){80, 230, 255, 200} : (SrColor){20, 30, 50, 150};
     sr_ui_rect(ui, b->x * k - sz / 2, b->y * k - sz / 2, sz, sz, c);
+    int icon = b->action == SR_ACT_INTERACT ? sr_ui_context_icon(g, &g->ctx) : -1;
+    if (icon >= 0) { /* the interact button shows what it will do */
+      sr_ui_icon(ui, b->x * k - sz * 0.35f, b->y * k - sz * 0.35f, sz * 0.7f, icon, k_amber);
+      continue;
+    }
     char label[4] = {0};
     const char *n = sr_action_name(b->action);
     label[0] = (char)(n[0] - 32);
@@ -269,6 +343,36 @@ static void create_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
              k_amber, s);
 }
 
+static void shop_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
+  int s = ui->scale;
+  float m = 10.0f * (float)s, line = 11.0f * (float)s;
+  sr_ui_rect(ui, m, m, (float)ui->w - 2 * m, (float)ui->h - 2 * m, (SrColor){6, 8, 20, 235});
+  float x = m + 6.0f * (float)s, y = m + 6.0f * (float)s;
+  char buf[128];
+  const SrMenu *mn = &g->menu;
+  snprintf(buf, sizeof buf, "%s  //  %lld CRED", g->city->buildings[mn->building].name, (long long)g->player.cred);
+  sr_ui_text(ui, x, y, buf, k_cyan, s);
+  y += line * 1.5f;
+  for (int i = 0; i < mn->count; i++) {
+    char name[SR_NAME_LEN];
+    sr_item_name(g->city, &mn->items[i], name, sizeof name);
+    snprintf(buf, sizeof buf, "%s%s  %d", mn->jailbreak[i] >= 0 ? "JAILBREAK " : "", name, mn->price[i]);
+    if (i == mn->sel) sr_ui_rect(ui, x - 4, y - 2, (float)ui->w - 2 * x + 8, line, (SrColor){40, 60, 110, 200});
+    sr_ui_text(ui, x, y, buf, i == mn->sel ? k_amber : k_white, s);
+    y += line;
+  }
+  bool touch = in && in->scheme == SR_SCHEME_TOUCH;
+  sr_ui_text(ui, x, (float)ui->h - m - line,
+             touch ? "TAP A ROW TO BUY  //  TAP HERE TO LEAVE" : "W/S SELECT  E BUY  ESC LEAVE", k_amber, s);
+}
+
+int sr_ui_shop_row_at(const SrUi *ui, float y) {
+  float m = 10.0f * (float)ui->scale, line = 11.0f * (float)ui->scale;
+  float top = m + 6.0f * (float)ui->scale + line * 1.5f - 2;
+  if (y < top) return -1;
+  return (int)((y - top) / line);
+}
+
 void sr_ui_build(SrUi *ui, const SrGame *g, const SrInput *in, bool portrait) {
   int s = ui->scale;
   if (portrait && in && in->scheme == SR_SCHEME_TOUCH) {
@@ -295,6 +399,7 @@ void sr_ui_build(SrUi *ui, const SrGame *g, const SrInput *in, bool portrait) {
                in && in->scheme == SR_SCHEME_TOUCH ? "TAP TO RESUME" : "PRESS ESC TO RESUME", k_white, s);
       break;
     case SR_SCREEN_TERMINAL: terminal(ui, g); break;
+    case SR_SCREEN_SHOP: shop_screen(ui, g, in); break;
     case SR_SCREEN_CREATE: create_screen(ui, g, in); break;
     case SR_SCREEN_DEAD:
       sr_ui_rect(ui, 0, 0, (float)ui->w, (float)ui->h, (SrColor){30, 0, 0, 240});
@@ -302,5 +407,5 @@ void sr_ui_build(SrUi *ui, const SrGame *g, const SrInput *in, bool portrait) {
       centered(ui, (float)ui->h * 0.4f + 22.0f * (float)s, "Hardcore: your save is gone.", k_white, s);
       break;
   }
-  if (in && in->scheme == SR_SCHEME_TOUCH && g->screen == SR_SCREEN_PLAY) touch_overlay(ui, in);
+  if (in && in->scheme == SR_SCHEME_TOUCH && g->screen == SR_SCREEN_PLAY) touch_overlay(ui, g, in);
 }

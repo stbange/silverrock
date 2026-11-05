@@ -289,7 +289,9 @@ SrResult sr_save_write(const SrGame *g, SrWriter *w, uint32_t version, int64_t c
   sr_put_u64(w, g->steps);
   end(s);
   s = begin(w, SR_SEC_PLAYER, version >= 2 ? 2 : 1);
-  put_player(w, &g->player, version);
+  SrPlayer outside = g->player; /* inside a building or on a roof: saved standing at its front door */
+  outside.pos = sr_game_outside_pos(g);
+  put_player(w, &outside, version);
   end(s);
   s = begin(w, SR_SEC_NPCS, 1);
   int base = 0;
@@ -517,6 +519,21 @@ SrResult sr_save_read(SrGame *g, const void *data, size_t len) {
   }
   g->started = true;
   g->screen = SR_SCREEN_PLAY;
+  g->site.active = false;
+  g->roof_building = -1;
+  g->floor_y = 0;
+  g->approach_building = -1;
+  if (g->player.pos.y < SR_SITE_FLOOR_Y * 0.5f) { /* saved at home: reopen the apartment */
+    SrVec3 pos = g->player.pos;
+    float yaw = g->player.yaw, pitch = g->player.pitch;
+    if (sr_game_enter(g, g->player.home, SR_ENTRY_FRONT) == SR_OK) {
+      g->player.pos = pos;
+      g->player.yaw = yaw;
+      g->player.pitch = pitch;
+    } else {
+      sr_game_teleport_building(g, g->player.home);
+    }
+  }
   return SR_OK;
 }
 

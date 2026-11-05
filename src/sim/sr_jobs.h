@@ -93,6 +93,11 @@ SrResult sr_job_buy_intel(SrJob *j, SrPlayer *p, int64_t t);
 SrResult sr_job_negotiate(SrJob *j, const SrPlayer *p, uint64_t seed);
 /* Simulates executing the objective with an approach at the target site. */
 SrMissionResult sr_job_execute(const SrCity *c, SrJob *j, SrPlayer *p, SrApproach a, uint64_t seed);
+/* Books a mission outcome (simulated or played in 3D): kill and alarm counts, objective state, job
+ * items. Damage is not applied here. */
+void sr_job_apply_result(SrJob *j, SrPlayer *p, const SrMissionResult *r);
+/* Whether a job type takes place inside a site interior. */
+bool sr_job_is_site(SrJobType t);
 /* Reports back: pays remaining (+bonus), applies constraints; returns amount paid. */
 int32_t sr_job_complete(SrJob *j, SrPlayer *p, int64_t t, SrEventLog *log, const SrCity *c);
 /* Fails jobs past their deadline. Returns how many failed. */

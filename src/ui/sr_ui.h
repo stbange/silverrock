@@ -27,5 +27,9 @@ void sr_ui_icon(SrUi *ui, float x, float y, float size, int poi, SrColor c);
 /* Full UI for the current game state. portrait = device in portrait orientation. */
 void sr_ui_build(SrUi *ui, const SrGame *g, const SrInput *in, bool portrait);
 const char *sr_ui_context_label(SrContextKind k);
+/* Icon (an SrPoi icon layer index) for an interaction, -1 when there is nothing to do. */
+int sr_ui_context_icon(const SrGame *g, const SrContext *c);
+/* Shop row under a screen y coordinate, -1 above the list. */
+int sr_ui_shop_row_at(const SrUi *ui, float y);
 
 #endif

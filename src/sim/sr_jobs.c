@@ -410,6 +410,14 @@ SrMissionResult sr_job_execute(const SrCity *c, SrJob *j, SrPlayer *p, SrApproac
   sr_progress_use_skill(&p->prog, used, res.success ? SR_USE_SUCCESS : SR_USE_HOSTILE, 10 + 5 * j->tier);
   p->health -= res.damage;
   if (p->health < 1.0f) p->health = 1.0f; /* the game layer handles flatlining from combat */
+  sr_job_apply_result(j, p, &res);
+  return res;
+}
+
+bool sr_job_is_site(SrJobType t) { return site_job(t); }
+
+void sr_job_apply_result(SrJob *j, SrPlayer *p, const SrMissionResult *r) {
+  SrMissionResult res = *r;
   p->kills += res.kills;
   p->knockouts += res.knockouts;
   j->kills += res.kills;
@@ -430,7 +438,6 @@ SrMissionResult sr_job_execute(const SrCity *c, SrJob *j, SrPlayer *p, SrApproac
         }
     }
   }
-  return res;
 }
 
 static void remove_job_items(SrPlayer *p, int32_t id) {
