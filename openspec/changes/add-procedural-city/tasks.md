@@ -23,7 +23,7 @@
 - [x] 4.1 Implement blocks, lots and the building shape grammar per district style and wealth; verify unit tests for grammar rules and no overlapping footprints
 - [x] 4.2 Implement landmark grammars for headquarters, City Hall and the Pall Control Spire; verify "Unique headquarters silhouettes"
 - [x] 4.3 Implement place-of-interest distribution and the starter neighbourhood; verify "Service availability" and "Starter services nearby"
-- [ ] 4.4 Implement the player's studio apartment template with procedural decoration; verify a scenario script that starts a new game inside the apartment
+- [x] 4.4 Implement the player's studio apartment template with procedural decoration; verify a scenario script that starts a new game inside the apartment
 
 ## 5. Faction roster
 
@@ -35,18 +35,18 @@
 ## 6. Names
 
 - [x] 6.1 Implement morpheme-based name generators, business and corp templates, and the normalised blocklist check; verify "Blocklisted name never appears" and "Unique district names"
-- [ ] 6.2 Add fuzz and property tests for the name generators; verify they run in the nightly job
+- [x] 6.2 Add fuzz and property tests for the name generators; verify they run in the nightly job
 
 ## 7. Interiors
 
 - [x] 7.1 Implement typed room-graph interiors (office, lab, warehouse, club, clinic, apartment block, data centre); verify unit tests per type
 - [x] 7.2 Implement the two-route and security-chain checks; verify "Two routes into mission sites"
-- [ ] 7.3 Implement interior generation on approach and delta persistence; verify "Stable interiors"
+- [x] 7.3 Implement interior generation on approach and delta persistence; verify "Stable interiors"
 
 ## 8. Streaming and navigation
 
 - [x] 8.1 Implement chunk detail tasks with per-frame budgets, the LRU cache and deltas keyed by stable IDs; verify "Returning to an area" and "Generation budget respected"
-- [ ] 8.2 Implement per-chunk navigation graphs and hierarchical path search; verify unit tests and the connectivity invariants on 50 seeds
+- [x] 8.2 Implement per-chunk navigation graphs and hierarchical path search; verify unit tests and the connectivity invariants on 50 seeds
 - [x] 8.3 Measure macro generation time on reference hardware with a progress screen; verify "Macro generation time"
 
 ## 9. World environment
@@ -60,7 +60,7 @@
 
 - [x] 10.1 Implement internal resolution presets, integer scaling and the UI resolution; verify "Default internal resolution", "Integer scaling" and "Text on a phone"
 - [x] 10.2 Implement retro effect toggles with golden images per toggle; verify "Independent toggles"
-- [ ] 10.3 Implement the light grid, per-object light selection, emissive pass and bloom; verify "Neon through fog"
+- [x] 10.3 Implement the light grid, per-object light selection, emissive pass and bloom; verify "Neon through fog"
 - [x] 10.4 Implement district palettes, fog tint and border blending; verify "Palettes differ"
 - [x] 10.5 Implement landmark logo pass and skyline impostor; verify "Logo beyond fog" and "No void at the horizon"
 - [x] 10.6 Implement rain particles with cover masks and wet-street reflections; verify "No rain under cover"
@@ -70,13 +70,13 @@
 ## 11. Integration checks
 
 - [ ] 11.1 Run the exit demo — wake up in the apartment and walk across the city at night in the rain — on all targets including a phone; record results in `tests/manual-verification.md`
-- [ ] 11.2 Review screenshots from 50 random seeds for district readability and landmark visibility; log findings and fixes
+- [x] 11.2 Review screenshots from 50 random seeds for district readability and landmark visibility; log findings and fixes
 - [x] 11.3 Confirm every scenario of this change is covered in the traceability report
 
 ## Implementation notes (2026-11-05)
 
 - Chunks are 4 x 4 blocks (384 m) rather than 64 m; streaming budget is two chunk builds per frame with an LRU cache.
-- Open: 4.4 (walkable apartment interior: the player starts on the sidewalk in front of the home), 6.2 (nightly fuzzing of name generators; property tests cover 200 seeds), 7.3 (interiors exist as data used by missions but cannot be entered in 3D yet), 8.2 (per-chunk navigation graphs; block-level paths are used), 10.3 (bloom: neon glow is done in the shader instead), 11.1 (real-phone run), 11.2 (screenshot review of 50 seeds).
+- Open: 11.1 (exit demo on real hardware and a phone). Done since the last status: walkable apartment and mission interiors with delta persistence, per-chunk navigation graphs with hierarchical search (50-seed connectivity in CI), light grid and bloom, name-generator fuzzing, 50-seed screenshot review in docs/reviews/.
 
 ## Workflow follow-up
 

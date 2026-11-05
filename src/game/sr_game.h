@@ -7,6 +7,7 @@
 #include "game/sr_site.h"
 #include "game/sr_storage.h"
 #include "input/sr_input.h"
+#include "sim/sr_air.h"
 #include "sim/sr_combat.h"
 #include "sim/sr_crowd.h"
 #include "sim/sr_jobs.h"
@@ -93,6 +94,7 @@ typedef struct SrGame {
   SrCity *city;
   SrPopulation *pop;
   SrCrowd crowd;
+  SrAirTraffic air;
   SrClock clock;
   SrPlayer player;
   SrJobBoard jobs;

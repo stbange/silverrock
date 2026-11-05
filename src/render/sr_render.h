@@ -134,6 +134,8 @@ int sr_build_crowd_lod(const SrCrowd *cr, SrVec3 cam, float near_m, float far_m,
 
 /* Characters, rain, skyline, landmarks */
 void sr_build_characters(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *out);
+/* Aerodynes on their sky lanes near the camera (time in real seconds). */
+void sr_build_aerodynes(const SrAirTraffic *air, double t, SrVec3 cam, float radius, SrMesh *out);
 /* Appends the vehicles within range to a mesh. */
 void sr_build_vehicles(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *out);
 void sr_build_character(const SrAppearance *a, SrVec3 pos, SrVec3 dir, bool umbrella, SrMesh *out);
@@ -206,7 +208,7 @@ typedef struct SrSceneCache {
   SrChunkCache chunks;
   SrMesh characters, rain, skyline, landmarks;
   SrMesh rooms[SR_INT_MAX_ROOMS], site_dyn, guards;
-  SrMesh inst_body;
+  SrMesh inst_body, air;
   float inst[SR_MAX_AGENTS * SR_INST_FLOATS];
   uint64_t site_key;
   bool skyline_built;

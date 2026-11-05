@@ -5,10 +5,10 @@
 - [x] 1.1 Implement item tuples, weapon archetype tables and stat computation from manufacturer, rarity and seed; verify "Archetype coverage", "Same item seed, same weapon", "Manufacturer style is consistent" and "Rarity stat ranges"
 - [x] 1.2 Implement weapon mods and ammunition types; verify "Suppressor reduces noise" and "Gel rounds are non-lethal"
 - [x] 1.3 Implement inventory, carry weight, quick slots and the gadget wheel; verify "Overburdened" and "Quick slot use"
-- [ ] 1.4 Implement gadgets (throwables, deployables, tools, consumables); verify "Grapple line to a rooftop" and "Holo-decoy distracts"
+- [x] 1.4 Implement gadgets (throwables, deployables, tools, consumables); verify "Grapple line to a rooftop" and "Holo-decoy distracts"
 - [x] 1.5 Implement salvage, blueprints and workbench crafting; verify "Crafting a gadget"
 - [x] 1.6 Implement vendors, black-market rules and fences; verify "Stolen goods refused by a shop"
-- [ ] 1.7 Implement cyberware slots, ripperdocs, neural capacity, glitches, malfunctions and jailbreaks; verify "Cyberware ability works", "Over capacity causes glitches" and "Jailbreak removes the backdoor"
+- [x] 1.7 Implement cyberware slots, ripperdocs, neural capacity, glitches, malfunctions and jailbreaks; verify "Cyberware ability works", "Over capacity causes glitches" and "Jailbreak removes the backdoor"
 
 ## 2. Combat
 
@@ -56,14 +56,14 @@
 ## 8. Integration checks
 
 - [x] 8.1 Run the gig-worker autoplayer for four weeks on 50 seeds; verify "Starter economy is sustainable"
-- [ ] 8.2 Add the nightly balance report (200 seeds, all strategies) with threshold bands; verify the report is produced and gated
+- [x] 8.2 Add the nightly balance report (200 seeds, all strategies) with threshold bands; verify the report is produced and gated
 - [ ] 8.3 Play the exit demo on all targets including touch on a phone; record results in `tests/manual-verification.md`
 - [x] 8.4 Confirm every scenario of this change is covered in the traceability report
 
 ## Implementation notes (2026-11-05)
 
 - Missions are resolved by the mission simulation (approach, skills, site interior, guards, cameras), not yet played room by room in 3D. Shooting in the street works (crowd panic, witness reports, police Heat).
-- Open: 1.4 and 1.7 (gadget and cyberware effects in play; definitions and rules exist), 8.2 (balance report exists in the nightly workflow but is not gated by bands yet), 8.3 (manual playthrough on all targets).
+- Open: 8.3 (manual playthrough on all targets including a phone). Done since the last status: gadgets and cyberware in play, missions played room by room inside 3D interiors (guards, cameras, alarms, takedowns, objective), balance report gated by bands in the nightly run.
 
 ## Workflow follow-up
 

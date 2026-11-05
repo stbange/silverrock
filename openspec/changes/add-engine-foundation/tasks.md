@@ -4,7 +4,7 @@
 
 - [x] 1.1 Add the CMake project with presets `linux-gcc-debug`, `linux-clang-asan`, `linux-coverage`, `windows-msvc`, `web-debug` and `web-release`; verify every preset configures and builds an empty executable
 - [x] 1.2 Vendor and pin SDL3, glad 2, stb and Unity under `third_party/`; verify a clean clone builds offline from the pinned sources on all presets
-- [ ] 1.3 Enable warnings-as-errors for first-party code on GCC, Clang and MSVC, and add clang-format and clang-tidy configurations; verify a deliberately misformatted fixture fails the lint step
+- [x] 1.3 Enable warnings-as-errors for first-party code on GCC, Clang and MSVC, and add clang-format and clang-tidy configurations; verify a deliberately misformatted fixture fails the lint step
 - [x] 1.4 Add the layer dependency check script; verify it fails on a fixture with a forbidden include (quality-gates: Forbidden include)
 
 ## 2. Test framework and coverage
@@ -73,7 +73,7 @@
 ## Implementation notes (2026-11-05)
 
 - Unit tests use a small in-house C harness (`tests/sr_test.h`) instead of Unity: it compiles to WebAssembly unchanged and carries the `SR_SPEC` traceability tags. GL entry points are loaded by an in-house X-macro loader instead of glad; stb is not needed (golden images are PPM).
-- Open: 1.3 (clang-format/clang-tidy configs), 8.1/8.3/8.4 (workflows are written; first green CI run and Pages deployment still to be confirmed), 9.1 (manual walk on Windows and real phones).
+- Open: 8.1/8.3/8.4 need the branch merged to main (green CI on main, GitHub Pages deployment, a scheduled nightly run; the nightly also runs on pushes that change it). 9.1 needs real Windows hardware and phones.
 - Coverage on the unit and platform suites: 98.8 % lines, all directories above 96 %, exclusions 0.58 % (2026-11-05, Linux GCC).
 
 ## Workflow follow-up

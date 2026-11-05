@@ -68,6 +68,7 @@ SrResult sr_game_build_world(SrGame *g, uint64_t seed, const SrCityOptions *opt)
     SrResult r = sr_city_generate(g->city, seed, &o);
     if (r != SR_OK) return r; /* GCOVR_EXCL_LINE reason: generation always succeeds */
     sr_population_generate(g->pop, g->city);
+    sr_air_build(&g->air, g->city);
   }
   g->seed = seed;
   g->opt = o;

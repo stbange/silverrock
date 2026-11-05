@@ -302,6 +302,7 @@ static void test_peak_crowd_render(void) {
   sr_app_start_game(&g_app, 0x5EEDC0DEull);
   SrGame *g = g_app.game;
   sr_game_leave(g);
+  g->crowd_enabled = true; /* earlier tests switch the crowd off */
   g->settings.dynamic_res = false;
   int best = -1;
   for (int k = 0; k < g->city->district_count; k++)

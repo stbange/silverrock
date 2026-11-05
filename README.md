@@ -10,10 +10,11 @@ agenda.
 
 ![Night street in a generated city](docs/screenshots/street.png)
 
-**Status:** milestones M0–M3 implemented (2026-11-05). You can create a character, walk a generated city at night
-among citizens and traffic, eat, sleep, pay (or miss) rent, ride the metro, take jobs from fixers, and level up.
-Not yet: walking inside buildings, room-by-room missions in 3D, gadget and cyberware effects in play, the Matrix (M4)
-and the corporate-chess story (M5). Task-level status lives in each change's `tasks.md`.
+**Status:** milestones M0–M3 implemented (2026-11-05). You wake up in your apartment, walk a generated city at night
+among citizens, traffic and aerodynes, eat, sleep, pay (or miss) rent, move to a better place, ride the metro, buy
+gadgets and cyberware, take jobs from fixers and play site jobs inside the building: sneak past guards and cameras,
+use gadgets, hack the security console, take the objective and get out. Not yet: the Matrix (M4) and the
+corporate-chess story (M5). Manual checks on Windows hardware and real phones are still open.
 
 ## Build and play
 
@@ -29,8 +30,10 @@ cmake --preset linux-gcc-debug && cmake --build --preset linux-gcc-debug
 ./build/linux-gcc-debug/silverrock
 ```
 
-Controls: WASD move, mouse look, E interact (eat, sleep, talk to fixers, do and report jobs, ride the metro),
-T terminal, 1–4 quick slots, Shift sprint, C crouch, Space jump, Esc pause, F11 fullscreen. Gamepads and touch work too.
+Controls: WASD move, mouse look, left click fire, E interact (enter buildings, eat, sleep, shop, talk to fixers,
+do and report jobs, take down guards from behind, ride the metro), Q active cyberware, T terminal (E in the home
+terminal lists apartments), 1–4 quick slots (gadgets), Shift sprint, C crouch (crawl through vents, enter by the
+service door), Space jump, Esc pause, F11 fullscreen. Gamepads and touch work too.
 
 Web build (needs the Emscripten SDK):
 

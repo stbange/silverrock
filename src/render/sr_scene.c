@@ -517,6 +517,29 @@ int sr_build_crowd_lod(const SrCrowd *cr, SrVec3 cam, float near_m, float far_m,
   return n;
 }
 
+void sr_build_aerodynes(const SrAirTraffic *air, double t, SrVec3 cam, float radius, SrMesh *out) {
+  sr_mesh_clear(out);
+  SrAerodyne v[SR_AIR_MAX_LANES * SR_AIR_PER_LANE];
+  int n = sr_air_near(air, t, cam, radius, v, (int)SR_ARRAY_LEN(v));
+  bool blink = fmod(t, 1.0) < 0.5;
+  for (int i = 0; i < n; i++) {
+    SrVec3 p = v[i].pos;
+    float yaw = atan2f(v[i].dir.x, v[i].dir.z);
+    SrColor body = shade(sr_corp_color(v[i].color), 50);
+    SrVec3 o = sr_v3(0, 0, 0);
+    sr_mesh_part(out, p, yaw, o, 0, sr_v3(-1.3f, 0, -2.6f), sr_v3(1.3f, 0.9f, 2.6f), body, SR_LAYER_METAL, 0);
+    sr_mesh_part(out, p, yaw, o, 0, sr_v3(-0.9f, 0.9f, -1.0f), sr_v3(0.9f, 1.5f, 1.2f), (SrColor){40, 60, 80, 255},
+                 SR_LAYER_WIN_GLASS, 40);
+    sr_mesh_part(out, p, yaw, o, 0, sr_v3(-1.1f, 0.3f, 2.6f), sr_v3(1.1f, 0.6f, 2.7f), (SrColor){255, 250, 220, 255},
+                 SR_LAYER_WHITE, 255);
+    sr_mesh_part(out, p, yaw, o, 0, sr_v3(-1.1f, 0.3f, -2.7f), sr_v3(1.1f, 0.6f, -2.6f), (SrColor){255, 40, 40, 255},
+                 SR_LAYER_WHITE, 255);
+    if (blink) /* navigation beacon underneath */
+      sr_mesh_part(out, p, yaw, o, 0, sr_v3(-0.2f, -0.25f, -0.2f), sr_v3(0.2f, 0, 0.2f), (SrColor){40, 220, 255, 255},
+                   SR_LAYER_WHITE, 255);
+  }
+}
+
 void sr_build_vehicles(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *out) {
   for (int i = 0; i < cr->vehicle_count; i++) {
     const SrVehicle *v = &cr->vehicles[i];
@@ -642,6 +665,7 @@ void sr_scene_free(SrSceneCache *s) {
   sr_mesh_free(&s->site_dyn);
   sr_mesh_free(&s->guards);
   sr_mesh_free(&s->inst_body);
+  sr_mesh_free(&s->air);
 }
 
 static void add_draw(SrFrame *f, SrMesh *m, SrPass pass, SrVec3 at) {
@@ -760,6 +784,8 @@ void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) 
     sr_build_rain(p->pos, w.rain, s->frame_no, c, &s->rain);
     add_draw(f, &s->rain, SR_PASS_WORLD, p->pos);
   }
+  sr_build_aerodynes(&g->air, (double)g->steps / 60.0, p->pos, 600.0f, &s->air);
+  add_draw(f, &s->air, SR_PASS_WORLD, p->pos);
   if (!s->skyline_built) {
     sr_build_skyline(c, &s->skyline);
     s->skyline_built = true;

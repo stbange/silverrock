@@ -3,7 +3,7 @@
 ## 1. Appearance and characters
 
 - [x] 1.1 Implement the part-based appearance generator with role, class and faction markers; verify "Unique appearances in a crowd" and "Faction members show their marker"
-- [ ] 1.2 Implement rigid-part character meshes, procedural walk cycles and instanced crowd rendering; verify golden images and "Peak crowd on desktop"
+- [x] 1.2 Implement rigid-part character meshes, procedural walk cycles and instanced crowd rendering; verify golden images and "Peak crowd on desktop"
 
 ## 2. Notable and ambient citizens
 
@@ -27,7 +27,7 @@
 ## 5. Services and traffic
 
 - [x] 5.1 Implement staffed services with opening hours; verify "Closed shop"
-- [ ] 5.2 Implement ground traffic, crossings and aerodyne lanes; verify "Vehicles stop at crossings"
+- [x] 5.2 Implement ground traffic, crossings and aerodyne lanes; verify "Vehicles stop at crossings"
 - [x] 5.3 Implement metro timetables and trains; verify "Metro timetable"
 
 ## 6. Character creation and start
@@ -44,7 +44,7 @@
 
 - [x] 8.1 Implement cred, vendors, district price indices and the transaction log; verify "Buying food", "Insufficient funds" and "District price differences"
 - [x] 8.2 Implement weekly rent, reminders, late fees, eviction and debt repayment; verify "Rent paid automatically", "Missed payment", "Rent reminders", "Two missed payments lead to eviction" and "Paying the debt restores access"
-- [ ] 8.3 Implement housing tiers, moving and apartment amenities (bed, stash, terminal, wardrobe); verify "Moving to a better apartment" and "Stash keeps items"
+- [x] 8.3 Implement housing tiers, moving and apartment amenities (bed, stash, terminal, wardrobe); verify "Moving to a better apartment" and "Stash keeps items"
 - [x] 8.4 Implement metro and cab travel with fares and travel time; verify "Metro ride" and "Cab costs more than metro"
 
 ## 9. Persistence
@@ -63,7 +63,7 @@
 
 ## Implementation notes (2026-11-05)
 
-- Open: 1.2 (walk cycles: characters are rigid-part figures that glide), 5.2 (aerodyne sky lanes; ground traffic stops at crossings), 8.3 (wardrobe amenity), 10.2 (real-phone run).
+- Open: 10.2 (exit demo on real hardware and a phone). Done since the last status: walk cycles and instanced crowd rendering, aerodyne sky lanes, wardrobe, moving home from the home terminal.
 
 ## Workflow follow-up
 
