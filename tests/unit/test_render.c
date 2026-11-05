@@ -37,7 +37,8 @@ static void test_textures_and_font(void) {
   for (int y = 0; y < 7; y++)
     for (int x = 0; x < 5; x++) on += px[((size_t)(cy + y) * SR_TEX_SIZE + (size_t)(cx + x)) * 4 + 3] > 0;
   SR_CHECK(on > 10);
-  sr_font_cell((char)200, &cx, &cy); /* out of range falls back to '?' */
+  volatile unsigned char high = 200u;
+  sr_font_cell((char)high, &cx, &cy); /* out of range falls back to '?' */
   int qx, qy;
   sr_font_cell('?', &qx, &qy);
   SR_CHECK(cx == qx && cy == qy);

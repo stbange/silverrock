@@ -74,7 +74,8 @@ def main():
             report = json.load(f)
     else:
         out = subprocess.run(
-            ["gcovr", "-r", args.root, "--filter", "src/", "--json", "-", args.build],
+            ["gcovr", "-r", args.root, "--filter", "src/",
+             "--gcov-ignore-parse-errors=suspicious_hits.warn", "--json", "-", args.build],
             check=True, capture_output=True, text=True).stdout
         report = json.loads(out)
 
@@ -84,8 +85,11 @@ def main():
         name = fentry["file"]
         if "third_party" in name:
             continue
-        lines = [l for l in fentry["lines"] if not l.get("gcovr/noncode")]
+        lines = [l for l in fentry["lines"]
+                 if not l.get("gcovr/noncode") and not l.get("gcovr/excluded")]
         n = len(lines)
+        if n == 0:
+            continue  # fully excluded file (e.g. the entry point)
         c = sum(1 for l in lines if l["count"] > 0)
         d = os.path.dirname(name)
         per_dir[d][0] += c
