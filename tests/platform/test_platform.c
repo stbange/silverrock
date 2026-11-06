@@ -275,6 +275,170 @@ static void test_seed_screenshots(void) {
   if (index) fclose(index);
 }
 
+/* Gameplay screenshots: SR_GAMEPLAY_SHOTS=dir renders the full window (HUD and screens included)
+ * at moments across the game, for the README and reviews. Not a check; skipped otherwise. */
+static const char *g_shot_dir;
+
+static void window_shot(const char *name, int frames_before) {
+  for (int i = 0; i < frames_before; i++) {
+    g_app.game->toast_time = 0; /* no leftover messages over the view */
+    sr_app_iterate(&g_app);
+  }
+  int w = g_app.win_w, h = g_app.win_h;
+  uint8_t *rgb = (uint8_t *)malloc((size_t)w * h * 3);
+  if (sr_glb_read_window(&g_app.gfx, rgb, 0, 0, w, h)) {
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s.ppm", g_shot_dir, name);
+    write_ppm(path, rgb, w, h);
+  }
+  free(rgb);
+}
+
+/* Stands on the intersection at the corner of a district's central block, looking down the street. */
+static void street_view(SrGame *g, int district, float yaw, float pitch, int hour) {
+  const SrCity *c = g->city;
+  int blk = sr_city_block_at(c, c->districts[district].cx, c->districts[district].cy);
+  int32_t ox, oy;
+  sr_city_block_origin(blk, c->grid, &ox, &oy);
+  g->player.pos = sr_v3((float)ox / 100.0f + 8.0f, 1.7f, (float)oy / 100.0f + 8.0f);
+  g->player.yaw = yaw;
+  g->player.pitch = pitch;
+  if (hour >= 0) sr_clock_set_seconds(&g->clock, (sr_game_time(g) / 86400 + 1) * 86400 + (int64_t)hour * 3600);
+  g->last_minute = sr_game_time(g) / 60;
+  sr_crowd_init(&g->crowd); /* citizens appear around the new spot */
+}
+
+static void test_gameplay_screenshots(void) {
+  g_shot_dir = getenv("SR_GAMEPLAY_SHOTS");
+  if (!g_shot_dir) return;
+  const uint64_t seed = 0x5EEDC0DEull;
+  sr_app_start_game(&g_app, seed);
+  SrGame *g = g_app.game;
+  g->settings.dynamic_res = false;
+  g_app.fixed_frame_dt = 1.0 / 60.0;
+  /* 01 waking up at home */
+  window_shot("01_apartment", 40);
+  /* ten days of the corporate game go by: news, prices, gang wars */
+  g->chess.story.offer_open = true;
+  sr_game_accept_retainer(g);
+  sr_game_skip(g, 10 * 86400, false);
+  g->player.health = g->player.max_health;
+  g->player.satiety = 80;
+  g->player.fatigue = 10;
+  g->player.cred = 4200;
+  g->player.prog.street_cred = 32;
+  sr_game_leave(g);
+  g->crowd_enabled = true;
+  const SrCity *c = g->city;
+  int home_d = c->blocks[c->buildings[g->player.home].block].district;
+  /* 02 the street at night, the district billboard rotating headlines */
+  sr_news_publish(&g->chess, c, c->factions.media_first, 0, home_d, -1, SR_NEWS_STORY, false,
+                  "Curfew talk as gang war spills into the market", sr_game_time(g));
+  int fun = home_d;
+  for (int d = 0; d < c->district_count; d++)
+    if (c->districts[d].type == SR_D_ENTERTAINMENT) fun = d;
+  sr_news_publish(&g->chess, c, c->factions.media_first, 0, fun, -1, SR_NEWS_STORY, false,
+                  "Curfew talk as gang war spills into the market", sr_game_time(g));
+  street_view(g, fun, -SR_PI / 2, 0.06f, 22);
+  window_shot("02_street_night", 120);
+  street_view(g, home_d, -1.35f, 0.12f, 23);
+  window_shot("03_home_district", 120);
+  /* 03 the home district; 04 the megacorp towers of the Spire */
+  int spire = 0;
+  for (int d = 0; d < c->district_count; d++)
+    if (c->districts[d].type == SR_D_SPIRE) spire = d;
+  street_view(g, spire, -SR_PI / 2, 0.32f, 1);
+  window_shot("04_spire_towers", 90);
+  /* 05 rain on a market street */
+  int64_t t = sr_game_time(g);
+  for (int k = 0; k < 400; k++)
+    if (sr_weather_at(g->seed, t + (int64_t)k * 1800).rain > 0.6f) {
+      sr_clock_set_seconds(&g->clock, t + (int64_t)k * 1800);
+      break;
+    }
+  int market = home_d;
+  for (int d = 0; d < c->district_count; d++)
+    if (c->districts[d].type == SR_D_COMMERCIAL) market = d;
+  street_view(g, market, -SR_PI / 2, 0.05f, -1);
+  window_shot("05_rain", 120);
+  /* 06 a gun shop */
+  int shop = -1;
+  for (int b = 0; b < c->building_count && shop < 0; b++)
+    if (c->buildings[b].poi == SR_POI_GUNSHOP) shop = b;
+  sr_game_teleport_building(g, shop);
+  sr_game_shop_open(g, shop);
+  window_shot("06_gun_shop", 20);
+  sr_game_shop_close(g);
+  /* 07-11 the terminal: messages, news, market, the Board, the story */
+  sr_chess_reveal_faction(&g->chess, g->chess.story.patron);
+  sr_chess_reveal_faction(&g->chess, (g->chess.story.patron + 1) % c->factions.corp_count);
+  sr_game_trade(g, 1, 20);
+  g->screen = SR_SCREEN_TERMINAL;
+  static const char *const tabs[SR_TAB_COUNT] = {"07_terminal_home", "08_terminal_news", "09_terminal_market",
+                                                 "10_terminal_board", "11_terminal_story"};
+  for (int tab = 0; tab < SR_TAB_COUNT; tab++) {
+    g->term_tab = tab;
+    g->term_sel = tab == SR_TAB_MARKET ? 1 : 0;
+    if (tab == SR_TAB_STORY)
+      g->chess.story.rival_offer = (int8_t)((g->chess.story.patron + 2) % c->factions.corp_count);
+    window_shot(tabs[tab], 4);
+  }
+  g->screen = SR_SCREEN_PLAY;
+  /* 12 inside a mission site */
+  int site = -1;
+  for (int b = 0; b < c->building_count && site < 0; b++)
+    if (c->buildings[b].flags & SR_BF_MISSION) site = b;
+  /* a site with guards on duty; face the nearest one in sight */
+  for (int b = 0; b < c->building_count; b++) {
+    if (!(c->buildings[b].flags & SR_BF_MISSION) || sr_game_enter(g, b, SR_ENTRY_FRONT) != SR_OK) continue;
+    int best = -1;
+    float bd = 1e9f;
+    for (int k = 0; k < g->site.guard_count; k++) {
+      SrVec3 gp = g->site.guards[k].e.pos;
+      gp.y = g->player.pos.y;
+      float dx = gp.x - g->player.pos.x, dz = gp.z - g->player.pos.z;
+      if (dx * dx + dz * dz < bd && sr_site_los(&g->site, g->player.pos, gp)) bd = dx * dx + dz * dz, best = k;
+    }
+    if (best >= 0) {
+      SrVec3 gp = g->site.guards[best].e.pos;
+      g->player.yaw = atan2f(-(gp.x - g->player.pos.x), -(gp.z - g->player.pos.z));
+      site = b;
+      break;
+    }
+    sr_game_leave(g);
+  }
+  g->player.pitch = -0.05f;
+  window_shot("12_mission_site", 40);
+  sr_game_leave(g);
+  /* 13-15 the Matrix: the grid, a host, a breach */
+  sr_inv_add(&g->player.inv, sr_item_simple(SR_IK_DECK, 2, 1));
+  sr_game_teleport_building(g, g->player.home);
+  if (sr_game_jack_in_via(g, SR_ACCESS_RIG, -1) == SR_OK) {
+    g->dive.pitch = -0.25f;
+    window_shot("13_matrix_grid", 30);
+    sr_game_jack_out(g, false);
+  }
+  if (sr_game_jack_in_via(g, SR_ACCESS_PORT, site) == SR_OK) {
+    g->dive.pos = sr_v3(0, 7, 30);
+    g->dive.yaw = 0;
+    g->dive.pitch = 0.18f;
+    window_shot("14_matrix_host", 30);
+    for (int n = 0; n < g->dive.host.node_count && g->dive.breach_node < 0; n++) sr_game_breach_start(g, n);
+    window_shot("15_breach", 10);
+    sr_game_jack_out(g, false);
+  }
+  /* 16 touch controls */
+  g_app.input.scheme = SR_SCHEME_TOUCH;
+  street_view(g, fun, -SR_PI / 2, 0.06f, 22);
+  window_shot("16_touch_controls", 90);
+  g_app.input.scheme = SR_SCHEME_KBM;
+  /* 17 the Sunrise ending: the only daylight in the game */
+  g->pall_removed = true;
+  street_view(g, spire, -SR_PI / 2, 0.3f, 10);
+  window_shot("17_sunrise_ending", 90);
+  g->pall_removed = false;
+}
+
 static void test_many_games_keep_rendering(void) {
   /* every new game builds new meshes; the backend must keep drawing after many games */
   double first = 0;
@@ -868,6 +1032,7 @@ void suite_platform(void) {
   SR_RUN(test_peak_crowd_render);
   SR_RUN(test_many_games_keep_rendering);
   SR_RUN(test_seed_screenshots);
+  SR_RUN(test_gameplay_screenshots);
   SR_RUN(test_letterbox_window);
   SR_RUN(test_focus_and_autosave);
   SR_RUN(test_settings_persist);
