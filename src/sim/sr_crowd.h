@@ -66,6 +66,8 @@ void sr_crowd_refresh(SrCrowd *cr, const SrCity *c, const SrPopulation *pop, con
                       int max_agents);
 void sr_crowd_update(SrCrowd *cr, const SrCity *c, float dt, float rain);
 /* Gunfire at pos: agents within radius react within this tick; witnesses may report. */
+/* District blackout: citizens there stop, gawk or hurry for shelter; logs a world event. */
+int sr_crowd_blackout(SrCrowd *cr, const SrCity *c, int district, SrEventLog *log, int64_t t);
 int sr_crowd_gunfire(SrCrowd *cr, const SrCity *c, SrVec3 pos, float radius, SrEventLog *log, int64_t t);
 int sr_crowd_find(const SrCrowd *cr, uint64_t key);
 float sr_crowd_exposed_share(const SrCrowd *cr); /* outdoor, no cover, no umbrella */

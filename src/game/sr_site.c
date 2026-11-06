@@ -1,5 +1,7 @@
 #include "game/sr_site.h"
 
+#include "game/sr_net.h"
+
 #include "core/sr_rng.h"
 
 #include <math.h>
@@ -69,7 +71,7 @@ static int door_device(const SrInterior *in, int room, int dir) {
 bool sr_site_door_open(const SrSite *s, int room, int dir) {
   if (!(s->in.doors[room] & (1 << dir))) return false;
   int d = door_device(&s->in, room, dir);
-  return d < 0 || !s->in.devices[d].locked;
+  return d < 0 || !s->in.devices[d].locked || s->authorised; /* forged credentials open locks */
 }
 
 /* Wall test at a local point for a body of radius r. Openings: unlocked doors, and vents when
@@ -150,6 +152,7 @@ float sr_site_light(const SrSite *s, int room) {
 bool sr_site_restricted(const SrSite *s, int room, bool has_fake_id) {
   if (s->in.apartment || room < 0) return false;
   if (s->hostile || s->alarm) return true;
+  if (s->authorised) return false; /* forged credentials, until suspicion rises */
   SrRoomType t = (SrRoomType)s->in.rooms[room];
   if (t == SR_ROOM_LOBBY) return false;
   if (t == SR_ROOM_TARGET || t == SR_ROOM_SECURITY || t == SR_ROOM_SERVER) return true;
@@ -584,6 +587,7 @@ static void raise_alarm(SrSite *s, SrSiteCtx *ctx, SrVec3 where) {
   if (effect_active(s, SR_FX_JAMMER) || !alarm_device_live(s, ctx->deltas)) return;
   if (!s->alarm) {
     s->alarm = true;
+    s->reinforce_at = s->time + 45.0f; /* the security company sends more people */
     for (int i = 0; i < s->guard_count; i++) {
       SrGuard *g = &s->guards[i];
       g->e.heightened = true;
@@ -686,13 +690,59 @@ static void update_guard(SrSite *s, SrSiteCtx *ctx, SrGuard *g, float dt) {
   }
 }
 
+static bool device_bit(const SrSite *s, const SrDeltas *d, int dev, int bit) {
+  int v = sr_deltas_get(d, s->in.devices[dev].id);
+  return v > 0 && (v & bit);
+}
+
+/* A camera switched off (not looped) shows up on the monitors: a guard goes to look at it. */
+static void camera_checks(SrSite *s, SrSiteCtx *ctx, float dt) {
+  for (int i = 0; i < s->in.device_count; i++) {
+    const SrDevice *dv = &s->in.devices[i];
+    if (dv->type != SR_DEV_CAMERA || s->checked[i] || !device_bit(s, ctx->deltas, i, SR_DV_DISABLED)) continue;
+    s->check_t[i] += dt;
+    if (s->check_t[i] < SR_CAMERA_CHECK_S) continue;
+    s->checked[i] = true;
+    int best = -1;
+    float bd = 1e9f;
+    SrVec3 cp = sr_site_camera_pos(s, i);
+    for (int k = 0; k < s->guard_count; k++) {
+      const SrGuard *g = &s->guards[k];
+      if (!guard_up(g)) continue;
+      float d = sr_v3_len(sr_v3_sub(g->e.pos, cp));
+      if (d < bd) bd = d, best = k;
+    }
+    if (best >= 0) {
+      SrGuard *g = &s->guards[best];
+      g->e.investigate = sr_v3(cp.x, SR_SITE_FLOOR_Y + 1.6f, cp.z + 0.6f);
+      if (g->e.alert == SR_ALERT_UNAWARE) g->e.alert = SR_ALERT_SUSPICIOUS;
+      g->e.search_timer = 30.0f;
+      g->e.awareness = SR_MAX(g->e.awareness, 0.3f);
+    }
+  }
+}
+
+void sr_site_false_alarm(SrSite *s, int room) {
+  SrVec3 c = sr_site_room_center(s, room);
+  for (int i = 0; i < s->guard_count; i++) {
+    SrGuard *g = &s->guards[i];
+    if (!guard_up(g) || g->e.alert == SR_ALERT_COMBAT) continue;
+    g->e.investigate = c;
+    g->e.alert = SR_ALERT_SEARCHING;
+    g->e.awareness = SR_MAX(g->e.awareness, 0.3f);
+    g->e.search_timer = 40.0f;
+  }
+}
+
 static void update_cameras(SrSite *s, SrSiteCtx *ctx, float dt) {
+  camera_checks(s, ctx, dt);
   if (effect_active(s, SR_FX_LOOP)) return;
   int proom = sr_site_room_at(s, ctx->player.x, ctx->player.z);
   bool seen = false;
   for (int i = 0; i < s->in.device_count; i++) {
     const SrDevice *dv = &s->in.devices[i];
     if (dv->type != SR_DEV_CAMERA || dv->room != proom || sr_site_device_disabled(s, ctx->deltas, i)) continue;
+    if (device_bit(s, ctx->deltas, i, SR_DV_LOOPED)) continue; /* looped: shows an empty corridor */
     if (!sr_site_restricted(s, proom, ctx->has_fake_id) || ctx->camo) continue;
     SrVec3 cp = sr_site_camera_pos(s, i);
     if (!sr_site_los(s, cp, ctx->player)) continue;
@@ -712,13 +762,25 @@ static void update_cameras(SrSite *s, SrSiteCtx *ctx, float dt) {
   } else {
     s->cam_detect = SR_MAX(0.0f, s->cam_detect - dt * 0.3f);
   }
-  /* turrets fire once the alarm is up */
+  /* turrets fire once the alarm is up; with switched friend-or-foe they fire at the guards */
   s->turret_cd -= dt;
   for (int i = 0; i < s->in.device_count; i++) {
     const SrDevice *dv = &s->in.devices[i];
-    if (dv->type != SR_DEV_TURRET || !s->alarm || dv->room != proom || sr_site_device_disabled(s, ctx->deltas, i))
-      continue;
+    if (dv->type != SR_DEV_TURRET || sr_site_device_disabled(s, ctx->deltas, i)) continue;
     SrVec3 tp = sr_site_camera_pos(s, i);
+    if (device_bit(s, ctx->deltas, i, SR_DV_FOF)) {
+      for (int k = 0; k < s->guard_count && s->turret_cd <= 0; k++) {
+        SrGuard *g = &s->guards[k];
+        if (!guard_up(g) || sr_site_room_at(s, g->e.pos.x, g->e.pos.z) != dv->room || !sr_site_los(s, tp, g->e.pos))
+          continue;
+        s->turret_cd = 0.6f;
+        s->shots_fired++;
+        g->e.health -= 20.0f;
+        if (g->e.health <= 0) guard_down(s, ctx->deltas, g, true);
+      }
+      continue;
+    }
+    if (!s->alarm || dv->room != proom) continue;
     if (s->turret_cd > 0 || !sr_site_los(s, tp, ctx->player)) continue;
     s->turret_cd = 0.6f;
     s->shots_fired++;
@@ -773,6 +835,32 @@ void sr_site_update(SrSite *s, SrSiteCtx *ctx, float dt) {
   }
   update_cameras(s, ctx, dt);
   s->damage += ctx->player_damage;
+  /* reinforcements called by the alarm walk in through the front */
+  if (s->reinforce_at > 0 && s->time >= s->reinforce_at) {
+    s->reinforce_at = 0;
+    if (s->guard_count < SR_SITE_MAX_GUARDS) {
+      SrGuard *g = &s->guards[s->guard_count];
+      memset(g, 0, sizeof *g);
+      g->id = sr_site_guard_id((int)s->building, 12 + s->guard_count % 4);
+      sr_enemy_init(&g->e, sr_site_room_center(s, s->in.entries[0].room), -1, 100.0f);
+      g->route[0] = s->in.entries[0].room;
+      g->route_n = 1;
+      g->decoy = -1;
+      g->e.alert = SR_ALERT_SEARCHING;
+      g->e.investigate = ctx->player;
+      g->e.search_timer = 60.0f;
+      s->guard_count++;
+    }
+  }
+  /* the elevator travels to the floor its controller asks for */
+  for (int i = 0; i < s->in.device_count; i++) {
+    if (s->in.devices[i].type != SR_DEV_ELEVATOR) continue;
+    int target = sr_deltas_get(ctx->deltas, sr_net_elevator_id(s->in.devices[i].id));
+    s->elevator_target = target < 0 ? 0 : target;
+    float d = (float)s->elevator_target - s->elevator_floor;
+    float step = SR_MIN(fabsf(d), 0.5f * dt);
+    s->elevator_floor += d > 0 ? step : -step;
+  }
 }
 
 SrMissionResult sr_site_result(const SrSite *s, int64_t now) {

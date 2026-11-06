@@ -666,6 +666,8 @@ void sr_scene_free(SrSceneCache *s) {
   sr_mesh_free(&s->guards);
   sr_mesh_free(&s->inst_body);
   sr_mesh_free(&s->air);
+  sr_mesh_free(&s->grid);
+  sr_mesh_free(&s->host);
 }
 
 static void add_draw(SrFrame *f, SrMesh *m, SrPass pass, SrVec3 at) {
@@ -674,6 +676,38 @@ static void add_draw(SrFrame *f, SrMesh *m, SrPass pass, SrVec3 at) {
   d->mesh = m;
   d->pass = pass;
   d->nlights = pass == SR_PASS_WORLD ? sr_select_lights(f->lights, f->nlights, at, d->lights) : 0;
+}
+
+/* Matrix frame: black void, the grid or the current host, from the persona's eyes. */
+static void build_matrix_frame(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) {
+  const SrDive *d = &g->dive;
+  f->eye = d->pos;
+  f->view = sr_m4_fps_view(d->pos, d->yaw, d->pitch);
+  f->proj = sr_m4_perspective(80.0f * SR_PI / 180.0f, aspect > 0 ? aspect : 16.0f / 9.0f, 0.05f, 600.0f);
+  f->fog[0] = 0.0f;
+  f->fog[1] = 0.01f;
+  f->fog[2] = 0.04f;
+  f->sky[0] = 0.0f;
+  f->sky[1] = 0.01f;
+  f->sky[2] = 0.04f;
+  f->ambient[0] = f->ambient[1] = f->ambient[2] = 1.0f;
+  f->nlights = 0;
+  f->wetness = 0;
+  f->daylight = false;
+  if (d->in_host) {
+    f->fog_start = 18.0f;
+    f->fog_end = 70.0f;
+    sr_build_host(g, (float)g->steps / 60.0f, &s->host);
+    add_draw(f, &s->host, SR_PASS_WORLD, d->pos);
+  } else {
+    f->fog_start = 25.0f;
+    f->fog_end = 110.0f;
+    if (s->grid_seed != g->city->seed + 1 || s->grid.nv == 0) {
+      sr_build_grid(g->city, &s->grid);
+      s->grid_seed = g->city->seed + 1;
+    }
+    add_draw(f, &s->grid, SR_PASS_WORLD, d->pos);
+  }
 }
 
 /* Interior frame: room meshes (rebuilt when doors, devices or lights change), guards, effects. */
@@ -707,7 +741,7 @@ static void build_site_frame(SrSceneCache *s, const SrGame *g, SrFrame *f) {
   }
 }
 
-void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) {
+static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f, bool matrix) {
   memset(f, 0, sizeof *f);
   s->frame_no++;
   s->chunks.built_this_frame = 0;
@@ -745,6 +779,22 @@ void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) 
   f->affine = g->settings.affine;
   f->crt = g->settings.crt;
   f->bloom = g->settings.bloom;
+  if (matrix && g->dive.active) {
+    const SrDive *d = &g->dive;
+    if (d->feed_device >= 0 && g->site.active && g->site.building == d->building &&
+        d->feed_device < g->site.in.device_count) { /* a camera feed: the room through the lens */
+      SrVec3 cp = sr_site_camera_pos(&g->site, d->feed_device);
+      SrVec3 rc = sr_site_room_center(&g->site, g->site.in.devices[d->feed_device].room);
+      float yaw = atan2f(-(rc.x - cp.x), -(rc.z - cp.z));
+      f->eye = cp;
+      f->view = sr_m4_fps_view(cp, yaw, -0.45f);
+      f->crt = true;
+      build_site_frame(s, g, f);
+      return;
+    }
+    build_matrix_frame(s, g, aspect, f);
+    return;
+  }
   if (g->site.active) {
     build_site_frame(s, g, f);
     return;
@@ -752,6 +802,17 @@ void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) 
   if (s->light_grid.city_seed != c->seed || s->light_grid.blocks != c->grid * c->grid || !s->light_grid.lights)
     sr_light_grid_build(&s->light_grid, c);
   f->nlights = sr_light_grid_query(&s->light_grid, c, p->pos, 120.0f, f->lights, SR_MAX_FRAME_LIGHTS);
+  if (g->net.blackout_district >= 0 && sr_game_blackout_at(g, g->net.blackout_district)) { /* lights out */
+    int k = 0;
+    for (int i = 0; i < f->nlights; i++) {
+      SrVec3 lp = f->lights[i].pos;
+      if (sr_city_district_at(c, (int32_t)(lp.x * 100), (int32_t)(lp.z * 100)) != g->net.blackout_district)
+        f->lights[k++] = f->lights[i];
+    }
+    f->nlights = k;
+    if (district == g->net.blackout_district)
+      for (int j = 0; j < 3; j++) f->ambient[j] *= 0.45f;
+  }
   /* city chunks around the camera, nearest first, limited build budget */
   int ccx = (int)(p->pos.x * 100.0f) / (SR_BLOCK_CM * SR_CHUNK_BLOCKS);
   int ccy = (int)(p->pos.z * 100.0f) / (SR_BLOCK_CM * SR_CHUNK_BLOCKS);
@@ -793,6 +854,15 @@ void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) 
   add_draw(f, &s->skyline, SR_PASS_NOFOG, p->pos);
   sr_build_landmarks(c, (float)(g->steps) / 60.0f, &s->landmarks);
   add_draw(f, &s->landmarks, SR_PASS_NOFOG, p->pos);
+}
+
+void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) { scene_build(s, g, aspect, f, true); }
+
+void sr_scene_build_body(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) {
+  scene_build(s, g, aspect, f, false);
+  f->bloom = false;
+  f->internal_w = 160;
+  f->internal_h = 90;
 }
 
 float sr_fog_factor(float z, float start, float end, float emissive) {

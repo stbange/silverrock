@@ -144,6 +144,11 @@ void sr_build_character_walk(const SrAppearance *a, SrVec3 pos, SrVec3 dir, floa
 /* Leg swing angle for a walked distance (radians). */
 float sr_walk_swing(float walk);
 
+/* The Matrix (sr_matrix_mesh.c) */
+void sr_mesh_wire_box(SrMesh *m, SrVec3 lo, SrVec3 hi, SrColor c);
+void sr_build_grid(const SrCity *c, SrMesh *out);
+void sr_build_host(const SrGame *g, float time_s, SrMesh *out);
+
 /* Interiors (sr_interior_mesh.c) */
 void sr_build_interior_room(const SrSite *s, int room, SrMesh *out);
 uint64_t sr_site_mesh_key(const SrSite *s, const SrDeltas *d);
@@ -187,6 +192,9 @@ typedef struct SrFrame {
   const SrMesh *inst_mesh;
   const float *inst;
   int inst_count;
+  /* meat-cam during a dive: a second, small frame of the body's surroundings */
+  const struct SrFrame *inset;
+  bool inset_fresh; /* rebuilt this frame (it is refreshed a few times a second) */
 } SrFrame;
 
 /* Light grid: every city light (street lamps, neon signs) precomputed and binned per block, so
@@ -209,6 +217,8 @@ typedef struct SrSceneCache {
   SrMesh characters, rain, skyline, landmarks;
   SrMesh rooms[SR_INT_MAX_ROOMS], site_dyn, guards;
   SrMesh inst_body, air;
+  SrMesh grid, host;
+  uint64_t grid_seed;
   float inst[SR_MAX_AGENTS * SR_INST_FLOATS];
   uint64_t site_key;
   bool skyline_built;
@@ -218,6 +228,8 @@ typedef struct SrSceneCache {
 
 void sr_scene_init(SrSceneCache *s, bool mobile);
 void sr_scene_free(SrSceneCache *s);
+/* The body's surroundings in meatspace, even during a dive (meat-cam). */
+void sr_scene_build_body(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f);
 /* Fills the frame for the game's current state. */
 void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f);
 /* City lights near the camera (neon signs, landmark logos). */

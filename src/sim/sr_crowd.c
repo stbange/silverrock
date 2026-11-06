@@ -3,6 +3,7 @@
 #include "core/sr_rng.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 void sr_crowd_init(SrCrowd *cr) {
@@ -165,6 +166,29 @@ void sr_crowd_update(SrCrowd *cr, const SrCity *c, float dt, float rain) {
       }
     }
   }
+}
+
+int sr_crowd_blackout(SrCrowd *cr, const SrCity *c, int district, SrEventLog *log, int64_t t) {
+  int reacted = 0;
+  for (int i = 0; i < cr->count; i++) {
+    SrAgent *a = &cr->agents[i];
+    if (sr_city_district_at(c, (int32_t)(a->pos.x * 100.0f), (int32_t)(a->pos.z * 100.0f)) != district) continue;
+    /* the brave gawk at the dark towers, the rest hurry for shelter */
+    a->state = a->bravery > 160 ? SR_AG_GAWK : SR_AG_SHELTER;
+    a->timer = 8.0f + (float)(a->key % 10);
+    reacted++;
+  }
+  SrWorldEvent e;
+  memset(&e, 0, sizeof e);
+  e.type = SR_EV_BLACKOUT;
+  e.time = t;
+  e.district = (int8_t)district;
+  e.building = -1;
+  e.victim_faction = e.blamed_faction = -1;
+  e.significant = true;
+  snprintf(e.text, sizeof e.text, "Blackout in %s", c->districts[district].name);
+  sr_events_add(log, &e);
+  return reacted;
 }
 
 int sr_crowd_gunfire(SrCrowd *cr, const SrCity *c, SrVec3 pos, float radius, SrEventLog *log, int64_t t) {

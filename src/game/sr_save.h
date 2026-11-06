@@ -7,7 +7,7 @@
 #include "core/sr_mem.h"
 #include "game/sr_game.h"
 
-#define SR_SAVE_VERSION   2u
+#define SR_SAVE_VERSION   3u
 #define SR_AUTOSAVE_SLOTS 3
 #define SR_MANUAL_SLOTS   3
 
@@ -20,7 +20,8 @@ typedef enum SrSection {
   SR_SEC_HEAT = 5,
   SR_SEC_EVENTS = 6,
   SR_SEC_DELTAS = 7,
-  SR_SEC_META = 8
+  SR_SEC_META = 8,
+  SR_SEC_MATRIX = 9 /* v3: Matrix state; v2 saves load with an empty network state */
 } SrSection;
 
 typedef struct SrSaveInfo {

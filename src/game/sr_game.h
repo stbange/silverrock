@@ -4,6 +4,7 @@
 #define SR_GAME_H
 
 #include "game/sr_settings.h"
+#include "game/sr_net.h"
 #include "game/sr_site.h"
 #include "game/sr_storage.h"
 #include "input/sr_input.h"
@@ -50,6 +51,10 @@ typedef enum SrContextKind {
   SR_CTX_ENTER, /* a site that can be entered without a job */
   SR_CTX_ROOF_HATCH,
   SR_CTX_CLIMB_DOWN,
+  /* the Matrix */
+  SR_CTX_NODE,  /* a host node within reach (prop = node index) */
+  SR_CTX_HOST,  /* a host construct on the grid (building) */
+  SR_CTX_QUICK, /* Netsight quick action on an owned device (prop = device index) */
   SR_CTX_COUNT
 } SrContextKind;
 
@@ -78,7 +83,10 @@ typedef enum SrScreen {
 typedef struct SrMenu {
   int32_t building;
   bool ripperdoc;
-  bool housing; /* rows are apartments for rent (item type = housing tier) */
+  bool housing;   /* rows are apartments for rent (item type = housing tier) */
+  bool node_menu; /* rows are Matrix node actions */
+  int16_t node;
+  uint8_t action[SR_MENU_MAX];
   int count;
   int sel;
   SrItem items[SR_MENU_MAX];
@@ -142,6 +150,9 @@ typedef struct SrGame {
   float speed; /* measured player speed, m/s */
   SrMenu menu;
   int menu_axis;
+  /* the Matrix */
+  SrNet net;
+  SrDive dive;
   /* character creation */
   uint64_t create_seed;
   uint64_t create_look;
@@ -220,6 +231,39 @@ SrContext sr_game_site_context(SrGame *g);
 SrResult sr_game_site_interact(SrGame *g, const SrContext *c);
 /* Movement collision for the current place (street, roof or interior). */
 bool sr_game_blocked_here(const SrGame *g, float x, float z);
+
+/* The Matrix (sr_game_matrix.c). */
+int sr_game_deck_grade(const SrGame *g);
+SrPersona sr_game_persona(const SrGame *g);
+bool sr_game_diving(const SrGame *g);
+/* Jacks in from where the player is: home rig, booth, a port or spike in a site, or wireless. */
+SrResult sr_game_jack_in(SrGame *g);
+SrResult sr_game_jack_in_via(SrGame *g, SrAccess access, int building);
+void sr_game_jack_out(SrGame *g, bool emergency);
+/* From the grid into a host construct, in front of its gateway. */
+SrResult sr_game_dive_enter_host(SrGame *g, int building);
+int sr_game_node_near(const SrGame *g);
+int sr_game_host_near(const SrGame *g);
+bool sr_game_node_locked(const SrGame *g, int node);
+int sr_game_node_actions(const SrGame *g, int node, SrNodeAction *out);
+SrResult sr_game_node_act(SrGame *g, int node, SrNodeAction a);
+SrResult sr_game_breach_start(SrGame *g, int node);
+bool sr_game_program(SrGame *g, int slot);
+void sr_game_dive_step(SrGame *g, const SrActionState *a, float dt);
+void sr_game_net_tick(SrGame *g);
+void sr_game_net_reset(SrGame *g);
+bool sr_game_owns_device(const SrGame *g, uint32_t device);
+bool sr_game_has_backdoor(const SrGame *g, int building);
+bool sr_game_has_creds(const SrGame *g, int building);
+int sr_game_host_alert(const SrGame *g, int building);
+SrVec3 sr_game_device_pos(const SrGame *g, int device);
+int sr_game_device_ahead(const SrGame *g);
+SrNodeAction sr_game_quick_action(const SrGame *g, int device);
+SrResult sr_game_quick(SrGame *g, int device);
+void sr_game_netsight(SrGame *g);
+void sr_game_node_menu(SrGame *g, int node);
+/* Lights of a district are out (blackout). */
+bool sr_game_blackout_at(const SrGame *g, int district);
 
 /* Character creation: background choice and a randomisable appearance. */
 void sr_game_begin_create(SrGame *g, uint64_t seed);

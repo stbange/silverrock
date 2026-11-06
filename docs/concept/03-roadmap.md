@@ -26,12 +26,11 @@ flowchart LR
   M3 --> M4["M4 The Matrix"] --> M5["M5 Corporate Chess"] --> M6["M6 Content & Polish"] --> M7["M7 1.0"]
 ```
 
-### Status (2026-11-05)
+### Status (2026-11-06)
 
-M0–M3 are implemented: 130 of 150 tasks done across the four changes, 78 unit tests plus platform, scenario,
-browser and gate self-tests, 98.8 % line coverage. Open items per change are listed at the end of each `tasks.md`;
-the largest are walkable interiors with room-by-room missions in 3D, gadget and cyberware effects in play, and
-manual checks on Windows hardware and real phones.
+M0–M4 are implemented. Open items are the manual checks on Windows hardware and real phones (one exit demo per
+milestone) and M5. Unit, platform, scenario, browser and gate tests all pass in CI; line coverage is 98.6 %. The
+web build is deployed to GitHub Pages from the default branch.
 
 ## 2. First playable slice
 

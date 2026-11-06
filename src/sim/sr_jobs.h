@@ -5,7 +5,7 @@
 
 #include "sim/sr_heat.h"
 #include "sim/sr_player.h"
-#include "world/sr_interior.h"
+#include "world/sr_host.h"
 
 #define SR_MAX_JOBS 64
 
@@ -77,6 +77,15 @@ int sr_max_tier_for_cred(int32_t street_cred);
 
 /* Generates one job of a type bound to the world; returns false if no binding exists. */
 bool sr_job_generate(const SrCity *c, SrJobType type, uint64_t key, int64_t t, SrJob *out);
+/* Matrix approach planner: what a netrunner has to do in the target's host to clear the way. */
+typedef struct SrMatrixPlan {
+  bool feasible; /* networked, complete security chain, the target reachable once doors open */
+  int security;  /* host security 1..10 */
+  int cameras, doors, turrets;
+  int steps; /* node actions in the plan (plus breaching the gateway and erasing logs) */
+} SrMatrixPlan;
+SrMatrixPlan sr_job_matrix_plan(const SrCity *c, const SrJob *j);
+
 /* Approach bitmask the job's site allows (validated against the interior). */
 uint8_t sr_job_validate_approaches(const SrCity *c, const SrJob *j);
 /* Fixer offers for a day (1..4 jobs within unlocked tiers); adds them to the board. */

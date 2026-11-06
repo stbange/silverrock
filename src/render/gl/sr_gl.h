@@ -25,6 +25,8 @@ typedef struct SrGlBackend {
   unsigned generation;
   unsigned prog_world, prog_post, prog_blur;
   unsigned bloom_fbo[2], bloom_tex[2];
+  unsigned inset_fbo, inset_color, inset_depth;
+  int inset_w, inset_h;
   int bloom_w, bloom_h;
   unsigned tex_array;
   unsigned fbo, fbo_color, fbo_depth;

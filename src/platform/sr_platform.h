@@ -24,8 +24,10 @@ typedef struct SrApp {
   SrInput input;
   SrLoop loop;
   SrSceneCache scene;
+  SrSceneCache body_scene; /* meat-cam: the body's surroundings during a dive */
   SrUi ui;
   SrFrame frame;
+  SrFrame body_frame;
   SrDynRes dynres;
   SrFileStore files;
   SrStorage storage;

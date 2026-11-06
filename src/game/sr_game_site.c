@@ -468,6 +468,11 @@ SrResult sr_game_shop_buy(SrGame *g, int row) {
   if (row < 0 || row >= m->count) return SR_ERR_INVALID;
   m->sel = row;
   int64_t t = sr_game_time(g);
+  if (m->node_menu) {
+    SrResult r = sr_game_node_act(g, m->node, (SrNodeAction)m->action[row]);
+    sr_game_shop_close(g);
+    return r;
+  }
   if (m->housing) {
     SrResult r = sr_game_move_home(g, m->items[row].type);
     if (r == SR_OK) sr_game_shop_close(g);
@@ -587,6 +592,7 @@ void sr_game_site_step(SrGame *g, float dt) {
   SrSiteCtx ctx;
   memset(&ctx, 0, sizeof ctx);
   ctx.deltas = &g->deltas;
+  g->site.authorised = sr_game_has_creds(g, g->site.building) && !g->site.hostile && !g->site.alarm;
   ctx.player = p->pos;
   ctx.player_speed = g->speed * (sr_game_has_cyber(g, 9) ? 0.5f : 1.0f); /* Silent Steps */
   ctx.crouched = p->crouched;

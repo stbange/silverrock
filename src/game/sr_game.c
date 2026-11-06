@@ -99,6 +99,7 @@ SrResult sr_game_new(SrGame *g, uint64_t seed, const SrCityOptions *opt, SrBackg
   g->active_job = -1;
   g->on_ground = true;
   memset(&g->site, 0, sizeof g->site);
+  sr_game_net_reset(g);
   g->approach_building = -1;
   g->buff_camo = g->buff_reflex = g->buff_mask = g->buff_focus = g->buff_pain = 0;
   g->thermal = false;
@@ -290,7 +291,12 @@ void sr_game_step(SrGame *g, const SrActionState *a) {
       g->clock.paused = true;
       return;
     }
-    if (g->glitch_time <= 0) { /* a glitch freezes the body for a moment */
+    if (g->dive.active) { /* the persona moves; the body sits still */
+      g->speed = 0;
+      sr_game_dive_step(g, a, dt);
+    } else if (g->glitch_time <= 0) { /* a glitch freezes the body for a moment */
+      if (a->pressed[SR_ACT_JACKIN]) sr_game_jack_in(g);
+      if (a->pressed[SR_ACT_NETSIGHT]) sr_game_netsight(g);
       move_player(g, a, dt);
       if (a->pressed[SR_ACT_INTERACT]) sr_game_interact(g);
       if (a->pressed[SR_ACT_FIRE]) sr_game_fire(g);
@@ -306,6 +312,7 @@ void sr_game_step(SrGame *g, const SrActionState *a) {
   g->cam.pos = g->player.pos;
   g->cam.forward = sr_dir_from_yaw_pitch(g->player.yaw, 0);
   sr_game_site_step(g, dt);
+  sr_game_net_tick(g);
   if (g->crowd_enabled && !g->site.active) {
     if (g->steps % 30 == 1) sr_crowd_refresh(&g->crowd, g->city, g->pop, &g->cam, t, g->max_agents);
     SrWeatherState w = sr_weather_at(g->seed, t);
@@ -351,6 +358,21 @@ static float dist_to_building(const SrGame *g, int b) {
 }
 
 SrContext sr_game_context(SrGame *g) {
+  if (g->dive.active) {
+    SrContext dc = {SR_CTX_NONE, g->dive.building, -1, -1, 1e9f, -1};
+    int node = sr_game_node_near(g);
+    int host = sr_game_host_near(g);
+    if (node >= 0)
+      dc.kind = SR_CTX_NODE, dc.prop = node;
+    else if (host >= 0)
+      dc.kind = SR_CTX_HOST, dc.building = host;
+    return dc;
+  }
+  if (g->site.active && g->net.netsight) {
+    int dev = sr_game_device_ahead(g);
+    if (dev >= 0 && sr_game_quick_action(g, dev) != SR_NA_NONE)
+      return (SrContext){SR_CTX_QUICK, g->site.building, -1, -1, 1, dev};
+  }
   if (g->site.active || g->roof_building >= 0) return sr_game_site_context(g);
   SrContext ctx = {SR_CTX_NONE, -1, -1, -1, 1e9f, -1};
   int b0 = sr_city_block_at(g->city, (int32_t)(g->player.pos.x * 100), (int32_t)(g->player.pos.z * 100));
@@ -623,6 +645,13 @@ void sr_game_flatline(SrGame *g) {
 SrResult sr_game_interact(SrGame *g) {
   SrContext c = sr_game_context(g);
   g->ctx = c;
+  if (c.kind == SR_CTX_NODE) {
+    if (sr_game_node_locked(g, c.prop)) return sr_game_breach_start(g, c.prop);
+    sr_game_node_menu(g, c.prop);
+    return SR_OK;
+  }
+  if (c.kind == SR_CTX_HOST) return sr_game_dive_enter_host(g, c.building);
+  if (c.kind == SR_CTX_QUICK) return sr_game_quick(g, c.prop);
   if (c.kind >= SR_CTX_EXIT && c.kind != SR_CTX_ENTER) return sr_game_site_interact(g, &c);
   switch (c.kind) {
     case SR_CTX_FOOD: return sr_game_eat_at(g, c.building);

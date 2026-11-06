@@ -335,6 +335,64 @@ static void test_peak_crowd_render(void) {
   free(f);
 }
 
+static void test_render_matrix(void) {
+  sr_app_start_game(&g_app, 0x5EEDC0DEull);
+  SrGame *g = g_app.game;
+  g->settings.dynamic_res = false;
+  g_app.fixed_frame_dt = 1.0 / 60.0;
+  sr_inv_add(&g->player.inv, sr_item_simple(SR_IK_DECK, 2, 1));
+  SR_CHECK_EQ(sr_game_jack_in(g), SR_OK); /* home rig: the grid */
+  for (int i = 0; i < 3; i++) sr_app_iterate(&g_app);
+  int w, h;
+  uint8_t *grid = render_internal(&g_app, &w, &h);
+  SR_CHECK(grid && image_mean(grid, w * h) > 2.0);
+  if (grid) save_shot("matrix_grid", grid, w, h);
+  sr_game_jack_out(g, false);
+  sr_game_leave(g);
+  int site = -1;
+  for (int b = 0; b < g->city->building_count && site < 0; b++)
+    if (g->city->buildings[b].flags & SR_BF_MISSION) site = b;
+  SR_CHECK_EQ(sr_game_jack_in_via(g, SR_ACCESS_PORT, site), SR_OK);
+  g->dive.pos = sr_v3(0, 7, 30); /* outside the tower, looking at it */
+  g->dive.yaw = 0;
+  g->dive.pitch = 0.18f;
+  uint8_t *host = render_internal(&g_app, &w, &h);
+  SR_CHECK(host && image_mean(host, w * h) > 2.0);
+  if (host) save_shot("matrix_host", host, w, h);
+  /* golden image of the host view (llvmpipe), like the city reference */
+  char path[512];
+  snprintf(path, sizeof path, "%s/matrix_reference.ppm", SR_GOLDEN_DIR);
+  const char *update = getenv("SR_UPDATE_GOLDENS");
+  int gw, gh;
+  uint8_t *golden = read_ppm(path, &gw, &gh);
+  if (update && update[0] == '1' && host) {
+    write_ppm(path, host, w, h);
+  } else if (golden && host && gw == w && gh == h) {
+    double share = diff_share(host, golden, w * h, 12);
+    printf("  matrix visual diff vs golden: %.4f%%\n", share * 100);
+    SR_CHECK(share < 0.01);
+  }
+  free(golden);
+  /* frame budget on the benchmark dive: CPU side of a host frame */
+  SrFrame *bench = (SrFrame *)malloc(sizeof(SrFrame));
+  uint64_t t0 = SDL_GetTicksNS();
+  for (int i = 0; i < 20; i++) sr_scene_build(&g_app.scene, g, 16.0f / 9.0f, bench);
+  double ms = (double)(SDL_GetTicksNS() - t0) / 2e7;
+  printf("  host frame build %.2f ms, %d draw calls\n", ms, g_app.gfx.draw_calls);
+  SR_CHECK(ms < 8.0);
+  free(bench);
+  /* the meat-cam shows the body's surroundings at the top of the window */
+  sr_app_iterate(&g_app);
+  SR_CHECK(g_app.frame.inset != NULL);
+  SR_CHECK(g_app.gfx.inset_w == 160 && g_app.gfx.inset_h == 90);
+  uint8_t cam[64 * 16 * 3];
+  sr_glb_read_window(&g_app.gfx, cam, g_app.win_w / 2 - 32, g_app.win_h - g_app.win_h / 12 - 30, 64, 16);
+  SR_CHECK(image_mean(cam, 64 * 16) > 1.0);
+  sr_game_jack_out(g, false);
+  free(grid);
+  free(host);
+}
+
 static void test_shop_taps(void) {
   sr_app_start_game(&g_app, 0x5EEDC0DEull);
   SrGame *g = g_app.game;
@@ -806,6 +864,7 @@ void suite_platform(void) {
   SR_RUN(test_render_interiors);
   SR_RUN(test_shop_taps);
   SR_RUN(test_bloom);
+  SR_RUN(test_render_matrix);
   SR_RUN(test_peak_crowd_render);
   SR_RUN(test_many_games_keep_rendering);
   SR_RUN(test_seed_screenshots);

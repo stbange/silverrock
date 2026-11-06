@@ -131,6 +131,7 @@ static const char *k_world_vs =
     "out vec4 v_color;\n"
     "out vec3 v_uvw;\n"
     "flat out float v_layer;\n"
+    "flat out float v_wire;\n"
     "out float v_fogz;\n"
     "out float v_em;\n"
     "void main() {\n"
@@ -164,6 +165,7 @@ static const char *k_world_vs =
     "  float w = u_affine == 1 ? clip.w : 1.0;\n"
     "  v_uvw = vec3(a_uv * w, w);\n"
     "  v_layer = a_extra.x;\n"
+    "  v_wire = a_extra.z;\n"
     "  v_fogz = -(u_view * vec4(p, 1.0)).z;\n"
     "}\n";
 
@@ -173,10 +175,21 @@ static const char *k_world_fs = "uniform highp sampler2DArray u_tex;\n"
                                 "in vec4 v_color;\n"
                                 "in vec3 v_uvw;\n"
                                 "flat in float v_layer;\n"
+                                "flat in float v_wire;\n"
                                 "in float v_fogz;\n"
                                 "in float v_em;\n"
                                 "out vec4 o_color;\n"
                                 "void main() {\n"
+                                "  if (v_wire > 1.5) {\n" /* Matrix wireframe: quad edges glow, faces stay dim */
+                                "    vec2 q = v_uvw.xy / v_uvw.z;\n"
+                                "    float e = min(min(q.x, 1.0 - q.x), min(q.y, 1.0 - q.y));\n"
+                                "    float line = 1.0 - smoothstep(0.015, 0.06, e);\n"
+                                "    if (v_wire > 2.5 && line < 0.05) discard;\n" /* hollow: edges only */
+                                "    vec3 wc = v_color.rgb * (0.1 + 1.5 * line);\n"
+                                "    float wf = clamp((v_fogz - u_fogr.x) / (u_fogr.y - u_fogr.x), 0.0, 1.0);\n"
+                                "    o_color = vec4(mix(wc, u_fog, wf), 1.0);\n"
+                                "    return;\n"
+                                "  }\n"
                                 "  vec4 t = texture(u_tex, vec3(v_uvw.xy / v_uvw.z, v_layer));\n"
                                 "  if (t.a < 0.5) discard;\n"
                                 "  vec4 c = t * v_color;\n"
@@ -493,6 +506,11 @@ void sr_glb_shutdown(SrGlBackend *b) {
       pDeleteTextures(1, &b->bloom_tex[i]);
     }
   pDeleteProgram(b->prog_blur);
+  if (b->inset_fbo) {
+    pDeleteFramebuffers(1, &b->inset_fbo);
+    pDeleteTextures(1, &b->inset_color);
+    pDeleteRenderbuffers(1, &b->inset_depth);
+  }
   if (b->inst_vao) {
     pDeleteVertexArrays(1, &b->inst_vao);
     pDeleteBuffers(1, &b->inst_vbo);
@@ -593,6 +611,75 @@ static void set_lights(SrGlBackend *b, const SrFrame *f, const SrDraw *d) {
   pUniform1i(b->u_nl, d->nlights);
 }
 
+/* The 3D pass of a frame into a framebuffer at its internal resolution. */
+static void scene_pass(SrGlBackend *b, const SrFrame *f, unsigned fbo, int iw, int ih) {
+  pBindFramebuffer(GL_FRAMEBUFFER, fbo);
+  pViewport(0, 0, iw, ih);
+  pClearColor(f->sky[0], f->sky[1], f->sky[2], 1.0f);
+  pClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  pEnable(GL_DEPTH_TEST);
+  pDepthFunc(GL_LEQUAL);
+  pEnable(GL_BLEND);
+  pBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  pUseProgram(b->prog_world);
+  pBindTexture(GL_TEXTURE_2D_ARRAY, b->tex_array);
+  pUniform1i(b->u_tex, 0);
+  SrMat4 mvp = sr_m4_mul(f->proj, f->view);
+  pUniformMatrix4fv(b->u_mvp, 1, GL_FALSE, mvp.m);
+  pUniformMatrix4fv(b->u_view, 1, GL_FALSE, f->view.m);
+  pUniform1i(b->u_inst, 0);
+  pUniform3f(b->u_amb, f->ambient[0], f->ambient[1], f->ambient[2]);
+  pUniform1f(b->u_wet, f->wetness);
+  pUniform2f(b->u_snap, f->vertex_snap ? (float)iw * 0.5f : 0.0f, f->vertex_snap ? (float)ih * 0.5f : 0.0f);
+  pUniform1i(b->u_affine, f->affine ? 1 : 0);
+  pUniform3f(b->u_fog, f->fog[0], f->fog[1], f->fog[2]);
+  for (int i = 0; i < f->ndraws; i++) {
+    const SrDraw *d = &f->draws[i];
+    if (d->pass == SR_PASS_WORLD)
+      pUniform2f(b->u_fogr, f->fog_start, f->fog_end);
+    else
+      pUniform2f(b->u_fogr, 1e6f, 2e6f);
+    if (d->pass == SR_PASS_XRAY) pDisable(GL_DEPTH_TEST);
+    set_lights(b, f, d);
+    draw_mesh(b, d->mesh);
+    if (d->pass == SR_PASS_XRAY) pEnable(GL_DEPTH_TEST);
+  }
+  if (f->inst_count > 0 && f->inst_mesh) {
+    SrDraw crowd = {0};
+    crowd.nlights = sr_select_lights(f->lights, f->nlights, f->eye, crowd.lights);
+    pUniform2f(b->u_fogr, f->fog_start, f->fog_end);
+    set_lights(b, f, &crowd);
+    draw_instances(b, f);
+  }
+}
+
+/* Small target for the meat-cam (the body's surroundings during a dive). */
+static void ensure_inset(SrGlBackend *b, int w, int h) {
+  if (b->inset_fbo && b->inset_w == w && b->inset_h == h) return;
+  if (b->inset_fbo) {
+    pDeleteFramebuffers(1, &b->inset_fbo);
+    pDeleteTextures(1, &b->inset_color);
+    pDeleteRenderbuffers(1, &b->inset_depth);
+  }
+  pGenTextures(1, &b->inset_color);
+  pBindTexture(GL_TEXTURE_2D, b->inset_color);
+  pTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+  pTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  pTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  pTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  pTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  pGenRenderbuffers(1, &b->inset_depth);
+  pBindRenderbuffer(GL_RENDERBUFFER, b->inset_depth);
+  pRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
+  pGenFramebuffers(1, &b->inset_fbo);
+  pBindFramebuffer(GL_FRAMEBUFFER, b->inset_fbo);
+  pFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, b->inset_color, 0);
+  pFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, b->inset_depth);
+  pBindFramebuffer(GL_FRAMEBUFFER, 0);
+  b->inset_w = w;
+  b->inset_h = h;
+}
+
 void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, bool integer_scale) {
   if (!b->ready) return;
   b->frame++;
@@ -602,45 +689,7 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
   ensure_fbo(b, iw, ih);
   pActiveTexture(GL_TEXTURE0);
   if (f) {
-    /* 3D pass at internal resolution */
-    pBindFramebuffer(GL_FRAMEBUFFER, b->fbo);
-    pViewport(0, 0, iw, ih);
-    pClearColor(f->sky[0], f->sky[1], f->sky[2], 1.0f);
-    pClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    pEnable(GL_DEPTH_TEST);
-    pDepthFunc(GL_LEQUAL);
-    pEnable(GL_BLEND);
-    pBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    pUseProgram(b->prog_world);
-    pBindTexture(GL_TEXTURE_2D_ARRAY, b->tex_array);
-    pUniform1i(b->u_tex, 0);
-    SrMat4 mvp = sr_m4_mul(f->proj, f->view);
-    pUniformMatrix4fv(b->u_mvp, 1, GL_FALSE, mvp.m);
-    pUniformMatrix4fv(b->u_view, 1, GL_FALSE, f->view.m);
-    pUniform1i(b->u_inst, 0);
-    pUniform3f(b->u_amb, f->ambient[0], f->ambient[1], f->ambient[2]);
-    pUniform1f(b->u_wet, f->wetness);
-    pUniform2f(b->u_snap, f->vertex_snap ? (float)iw * 0.5f : 0.0f, f->vertex_snap ? (float)ih * 0.5f : 0.0f);
-    pUniform1i(b->u_affine, f->affine ? 1 : 0);
-    pUniform3f(b->u_fog, f->fog[0], f->fog[1], f->fog[2]);
-    for (int i = 0; i < f->ndraws; i++) {
-      const SrDraw *d = &f->draws[i];
-      if (d->pass == SR_PASS_WORLD)
-        pUniform2f(b->u_fogr, f->fog_start, f->fog_end);
-      else
-        pUniform2f(b->u_fogr, 1e6f, 2e6f);
-      if (d->pass == SR_PASS_XRAY) pDisable(GL_DEPTH_TEST);
-      set_lights(b, f, d);
-      draw_mesh(b, d->mesh);
-      if (d->pass == SR_PASS_XRAY) pEnable(GL_DEPTH_TEST);
-    }
-    if (f->inst_count > 0 && f->inst_mesh) {
-      SrDraw crowd = {0};
-      crowd.nlights = sr_select_lights(f->lights, f->nlights, f->eye, crowd.lights);
-      pUniform2f(b->u_fogr, f->fog_start, f->fog_end);
-      set_lights(b, f, &crowd);
-      draw_instances(b, f);
-    }
+    scene_pass(b, f, b->fbo, iw, ih);
     pDisable(GL_DEPTH_TEST);
     pDisable(GL_BLEND);
     if (f->bloom) render_bloom(b, iw, ih);
@@ -667,6 +716,31 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
     pBindTexture(GL_TEXTURE_2D, f->bloom ? b->bloom_tex[0] : b->fbo_color);
     pActiveTexture(GL_TEXTURE0);
     pBindTexture(GL_TEXTURE_2D, b->fbo_color);
+    pBindVertexArray(b->quad_vao);
+    pDrawArrays(GL_TRIANGLES, 0, 6);
+    b->draw_calls++;
+  }
+  /* meat-cam: the body's surroundings in a small grainy view at the top of the screen */
+  if (f && f->inset) {
+    const SrFrame *in = f->inset;
+    int w = in->internal_w > 0 ? in->internal_w : 160, h = in->internal_h > 0 ? in->internal_h : 90;
+    if (f->inset_fresh || !b->inset_fbo || b->inset_w != w || b->inset_h != h) {
+      ensure_inset(b, w, h);
+      scene_pass(b, in, b->inset_fbo, w, h);
+      pDisable(GL_DEPTH_TEST);
+    }
+    pBindFramebuffer(GL_FRAMEBUFFER, 0);
+    int vw = ww / 4, vh = vw * h / w;
+    pViewport(ww / 2 - vw / 2, wh - vh - wh / 12, vw, vh);
+    pUseProgram(b->prog_post);
+    pActiveTexture(GL_TEXTURE0);
+    pBindTexture(GL_TEXTURE_2D, b->inset_color);
+    pUniform1i(b->p_tex, 0);
+    pUniform1i(b->p_dither, 0);
+    pUniform1i(b->p_quant, 1);
+    pUniform1i(b->p_crt, 1);
+    pUniform2f(b->p_res, (float)w, (float)h);
+    pUniform1f(b->p_bloom_k, 0.0f);
     pBindVertexArray(b->quad_vao);
     pDrawArrays(GL_TRIANGLES, 0, 6);
     b->draw_calls++;

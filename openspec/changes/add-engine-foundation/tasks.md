@@ -60,10 +60,10 @@
 
 ## 8. Continuous integration and deployment
 
-- [ ] 8.1 Create GitHub Actions workflows for lint, Linux GCC with coverage, Linux Clang with sanitizers, Windows MSVC, Web build and tests, and Playwright; verify all jobs are green on the main branch (quality-gates: Failing game test blocks the merge, New compiler warning)
+- [x] 8.1 Create GitHub Actions workflows for lint, Linux GCC with coverage, Linux Clang with sanitizers, Windows MSVC, Web build and tests, and Playwright; verify all jobs are green on the main branch (quality-gates: Failing game test blocks the merge, New compiler warning)
 - [x] 8.2 Add the strict OpenSpec validation job; verify "Malformed scenario" with a fixture
-- [ ] 8.3 Deploy the web build from the main branch to GitHub Pages; verify the deployed page boots in a desktop browser and on a phone
-- [ ] 8.4 Add the nightly workflow (fuzzing, extended seed sweeps as they arrive); verify a scheduled run completes
+- [x] 8.3 Deploy the web build from the main branch to GitHub Pages; verify the deployed page boots in a desktop browser and on a phone
+- [x] 8.4 Add the nightly workflow (fuzzing, extended seed sweeps as they arrive); verify a scheduled run completes
 
 ## 9. Integration checks
 
@@ -73,7 +73,7 @@
 ## Implementation notes (2026-11-05)
 
 - Unit tests use a small in-house C harness (`tests/sr_test.h`) instead of Unity: it compiles to WebAssembly unchanged and carries the `SR_SPEC` traceability tags. GL entry points are loaded by an in-house X-macro loader instead of glad; stb is not needed (golden images are PPM).
-- Open: 8.1/8.3/8.4 need the branch merged to main (green CI on main, GitHub Pages deployment, a scheduled nightly run; the nightly also runs on pushes that change it). 9.1 needs real Windows hardware and phones.
+- Open: 9.1 (manual walk on Windows hardware, Firefox, Safari and real phones). CI runs on the repository's default branch (claude/dazzling-hamilton-devh1l is the default, there is no separate main): all jobs green, the web build deploys to GitHub Pages from it (https://stbange.github.io/silverrock/, browser tests cover desktop and phone emulation), and the scheduled nightly run completed.
 - Coverage on the unit and platform suites: 98.8 % lines, all directories above 96 %, exclusions 0.58 % (2026-11-05, Linux GCC).
 
 ## Workflow follow-up

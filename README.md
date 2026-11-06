@@ -10,11 +10,13 @@ agenda.
 
 ![Night street in a generated city](docs/screenshots/street.png)
 
-**Status:** milestones M0–M3 implemented (2026-11-05). You wake up in your apartment, walk a generated city at night
+**Status:** milestones M0–M4 implemented (2026-11-06). You wake up in your apartment, walk a generated city at night
 among citizens, traffic and aerodynes, eat, sleep, pay (or miss) rent, move to a better place, ride the metro, buy
-gadgets and cyberware, take jobs from fixers and play site jobs inside the building: sneak past guards and cameras,
-use gadgets, hack the security console, take the objective and get out. Not yet: the Matrix (M4) and the
-corporate-chess story (M5). Manual checks on Windows hardware and real phones are still open.
+gadgets and cyberware, take jobs from fixers and play site jobs inside the building. With a cyberdeck you can jack in
+(home rig, public booth, a building's port, wireless or a data spike): fly the Matrix grid, breach hosts, dodge or
+fight ICE, steal paydata, plant backdoors, and loop cameras, unlock doors, turn turrets, kill the lights or black out
+a district in the real world. Not yet: the corporate-chess story (M5). Manual checks on Windows hardware and real
+phones are still open.
 
 ## Build and play
 
@@ -30,7 +32,7 @@ cmake --preset linux-gcc-debug && cmake --build --preset linux-gcc-debug
 ./build/linux-gcc-debug/silverrock
 ```
 
-Controls: WASD move, mouse look, left click fire, E interact (enter buildings, eat, sleep, shop, talk to fixers,
+Controls: WASD move, mouse look, left click fire, J jack in/out, V Netsight, E interact (enter buildings, eat, sleep, shop, talk to fixers,
 do and report jobs, take down guards from behind, ride the metro), Q active cyberware, T terminal (E in the home
 terminal lists apartments), 1–4 quick slots (gadgets), Shift sprint, C crouch (crawl through vents, enter by the
 service door), Space jump, Esc pause, F11 fullscreen. Gamepads and touch work too.
@@ -47,7 +49,7 @@ Then serve `build/web/` with any static web server and open `silverrock.html`.
 
 | Suite | Command |
 |---|---|
-| Unit tests (78 tests) | `./build/linux-gcc-debug/sr_tests` |
+| Unit tests (122 tests) | `./build/linux-gcc-debug/sr_tests` |
 | Platform and GL tests (needs a display or Xvfb) | `xvfb-run -a ./build/linux-gcc-debug/sr_platform_tests` |
 | Headless game scenarios | `ctest --test-dir build/linux-gcc-debug -R game_` |
 | World sweep / balance report | `./build/linux-gcc-debug/sr_headless --sweep 2000` / `--balance 20` |

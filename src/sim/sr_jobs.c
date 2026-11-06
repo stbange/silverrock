@@ -147,6 +147,29 @@ bool sr_job_generate(const SrCity *c, SrJobType type, uint64_t key, int64_t t, S
   return true;
 }
 
+SrMatrixPlan sr_job_matrix_plan(const SrCity *c, const SrJob *j) {
+  SrMatrixPlan p;
+  memset(&p, 0, sizeof p);
+  const SrBuilding *b = &c->buildings[j->target_building];
+  if (!(b->flags & SR_BF_NETWORKED)) return p;
+  SrInterior in;
+  sr_interior_generate(c, j->target_building, &in);
+  SrHost h;
+  sr_host_generate(c, j->target_building, &in, &h);
+  p.security = h.security;
+  for (int d = 0; d < in.device_count; d++) {
+    if (sr_host_device_node(&h, d) < 0) return p; /* every device must have its controller node */
+    p.cameras += in.devices[d].type == SR_DEV_CAMERA;
+    p.doors += in.devices[d].type == SR_DEV_DOOR && in.devices[d].locked;
+    p.turrets += in.devices[d].type == SR_DEV_TURRET;
+  }
+  p.steps = 2 + p.cameras + p.doors + p.turrets; /* gateway breach and log erasure included */
+  p.feasible =
+      !site_job((SrJobType)j->type) || (sr_interior_security_chain_ok(&in) &&
+                                        sr_interior_reachable(&in, in.entries[0].room, in.target_room, false, true));
+  return p;
+}
+
 uint8_t sr_job_validate_approaches(const SrCity *c, const SrJob *j) {
   if (!site_job((SrJobType)j->type)) {
     /* street jobs: sneak past, talk your way through, or push through */
@@ -162,9 +185,7 @@ uint8_t sr_job_validate_approaches(const SrCity *c, const SrJob *j) {
   }
   const SrBuilding *b = &c->buildings[j->target_building];
   if (b->owner >= 0 || b->poi < SR_POI_FIRST_SPECIAL) m |= 1u << SR_AP_FACE; /* uniforms, IDs */
-  if ((b->flags & SR_BF_NETWORKED) && sr_interior_security_chain_ok(&in) &&
-      sr_interior_reachable(&in, in.entries[0].room, in.target_room, false, true))
-    m |= 1u << SR_AP_RUNNER;
+  if (sr_job_matrix_plan(c, j).feasible) m |= 1u << SR_AP_RUNNER;
   if (sr_interior_reachable(&in, in.entries[0].room, in.target_room, false, true) && in.guards <= 4 + 3 * (j->tier + 1))
     m |= 1u << SR_AP_HAMMER;
   return m;
@@ -374,6 +395,10 @@ SrMissionResult sr_job_execute(const SrCity *c, SrJob *j, SrPlayer *p, SrApproac
       int deck = sr_inv_find(&p->inv, SR_IK_DECK, -1);
       skill = deck < 0 ? -100 : sk[SR_SK_NETRUNNING] * 4 + at[SR_ATTR_MIND] * 3 + p->inv.items[deck].type * 10;
       used = SR_SK_NETRUNNING;
+      if (site_job((SrJobType)j->type)) { /* the plan replaces guards and cameras with host security */
+        SrMatrixPlan plan = sr_job_matrix_plan(c, j);
+        difficulty = j->tier * 12 + plan.security * 6 + plan.steps * 2;
+      }
       break;
     }
     default:

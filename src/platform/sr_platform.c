@@ -275,6 +275,8 @@ bool sr_app_init(SrApp *a, int argc, char **argv) {
   sr_input_init(&a->input, coarse_pointer());
   sr_app_load_settings(a);
   sr_scene_init(&a->scene, a->input.coarse_pointer);
+  sr_scene_free(&a->body_scene);
+  sr_scene_init(&a->body_scene, true);
   sr_ui_init(&a->ui);
   if (a->headless) return true;
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS)) {
@@ -292,7 +294,10 @@ void sr_app_start_game(SrApp *a, uint64_t seed) {
   sr_game_new(a->game, seed, NULL, SR_BG_STREET_KID, "Runner");
   a->game->max_agents = a->input.coarse_pointer ? 120 : 400;
   sr_scene_free(&a->scene);
+  sr_scene_free(&a->body_scene);
   sr_scene_init(&a->scene, a->input.coarse_pointer);
+  sr_scene_free(&a->body_scene);
+  sr_scene_init(&a->body_scene, true);
 }
 
 static void autosave_if_needed(SrApp *a) {
@@ -308,6 +313,8 @@ static void start_created(SrApp *a) {
   a->game->max_agents = a->input.coarse_pointer ? 120 : 400;
   sr_scene_free(&a->scene);
   sr_scene_init(&a->scene, a->input.coarse_pointer);
+  sr_scene_free(&a->body_scene);
+  sr_scene_init(&a->body_scene, true);
 }
 
 /* Creation screen by pointer: left half cycles the background, right half re-rolls the look,
@@ -511,6 +518,14 @@ void sr_app_iterate(SrApp *a) {
     a->frame.internal_w = iw;
     a->frame.internal_h = ih;
     f = &a->frame;
+    /* meat-cam: the body's surroundings, refreshed 5 times a second (2 on phones) */
+    a->frame.inset = NULL;
+    if (g->dive.active) {
+      int every = a->input.coarse_pointer ? 30 : 12;
+      a->frame.inset_fresh = a->frames % every == 0 || a->body_frame.internal_w == 0;
+      if (a->frame.inset_fresh) sr_scene_build_body(&a->body_scene, g, 16.0f / 9.0f, &a->body_frame);
+      a->frame.inset = &a->body_frame;
+    }
   }
   a->ui.px_per_css = a->css_w > 0 ? (float)a->win_w / a->css_w : 1.0f;
   sr_ui_begin(&a->ui, a->win_w, a->win_h, ui_scale(a));
@@ -523,6 +538,7 @@ void sr_app_quit(SrApp *a) {
   if (a->game && a->game->started) sr_autosave(a->game, &a->storage);
   if (a->game) sr_app_save_settings(a);
   sr_scene_free(&a->scene);
+  sr_scene_free(&a->body_scene);
   sr_ui_free(&a->ui);
   if (a->window) {
     sr_glb_shutdown(&a->gfx);

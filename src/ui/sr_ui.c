@@ -84,6 +84,9 @@ const char *sr_ui_context_label(SrContextKind k) {
     case SR_CTX_ENTER: return "GO INSIDE";
     case SR_CTX_ROOF_HATCH: return "DROP IN";
     case SR_CTX_CLIMB_DOWN: return "CLIMB DOWN";
+    case SR_CTX_NODE: return "ACCESS NODE";
+    case SR_CTX_HOST: return "ENTER HOST";
+    case SR_CTX_QUICK: return "QUICK HACK";
     default: return "";
   }
 }
@@ -102,7 +105,10 @@ int sr_ui_context_icon(const SrGame *g, const SrContext *c) {
     case SR_CTX_CLINIC: return SR_POI_CLINIC;
     case SR_CTX_METRO:
     case SR_CTX_TERMINAL:
-    case SR_CTX_CONSOLE: return SR_POI_MATRIX_BOOTH;
+    case SR_CTX_CONSOLE:
+    case SR_CTX_NODE:
+    case SR_CTX_HOST:
+    case SR_CTX_QUICK: return SR_POI_MATRIX_BOOTH;
     case SR_CTX_LOCKED:
     case SR_CTX_LANDLORD: return SR_POI_POLICE;
     case SR_CTX_TAKEDOWN: return SR_POI_GANG_HIDEOUT;
@@ -143,6 +149,8 @@ static void text_fit(SrUi *ui, float x, float y, const char *t, SrColor c, int s
   if (max_chars >= 0 && max_chars < (int)sizeof buf) buf[max_chars] = '\0';
   sr_ui_text(ui, x, y, buf, c, fs);
 }
+
+static void netsight_overlay(SrUi *ui, const SrGame *g);
 
 static void hud(SrUi *ui, const SrGame *g, const SrInput *in) {
   const SrPlayer *p = &g->player;
@@ -229,6 +237,7 @@ static void hud(SrUi *ui, const SrGame *g, const SrInput *in) {
     sr_ui_icon(ui, x0, (float)ui->h * 0.62f - (float)s, ic, sr_ui_context_icon(g, &g->ctx), k_amber);
     sr_ui_text(ui, x0 + ic + 4, (float)ui->h * 0.62f, buf, k_amber, s);
   }
+  if (g->net.netsight && g->site.active) netsight_overlay(ui, g);
   /* inside: guard awareness and camera contact */
   if (g->site.active && !g->site.in.apartment) {
     float aw = SR_MAX(g->site.awareness, g->site.cam_detect);
@@ -272,6 +281,131 @@ static void hud(SrUi *ui, const SrGame *g, const SrInput *in) {
     sr_ui_rect(ui, mid - tw / 2 - 4, ty - 4, tw + 8, 7.0f * (float)ts + 8, k_panel);
     text_fit(ui, mid - tw / 2, ty, g->toast, k_white, ts, area - 8);
   }
+}
+
+static void centered(SrUi *ui, float y, const char *txt, SrColor c, int s);
+
+/* Screen position of a world point for the player's view (same camera as the scene). */
+static bool project(const SrUi *ui, const SrGame *g, SrVec3 p, float *sx, float *sy) {
+  SrMat4 view = sr_m4_fps_view(g->player.pos, g->player.yaw, g->player.pitch);
+  SrMat4 proj = sr_m4_perspective(70.0f * SR_PI / 180.0f, (float)ui->w / (float)SR_MAX(1, ui->h), 0.1f, 4000.0f);
+  SrMat4 vp = sr_m4_mul(proj, view);
+  float x = vp.m[0] * p.x + vp.m[4] * p.y + vp.m[8] * p.z + vp.m[12];
+  float y = vp.m[1] * p.x + vp.m[5] * p.y + vp.m[9] * p.z + vp.m[13];
+  float w = vp.m[3] * p.x + vp.m[7] * p.y + vp.m[11] * p.z + vp.m[15];
+  if (w < 0.1f) return false;
+  *sx = (x / w * 0.5f + 0.5f) * (float)ui->w;
+  *sy = (0.5f - y / w * 0.5f) * (float)ui->h;
+  return *sx >= 0 && *sy >= 0 && *sx <= (float)ui->w && *sy <= (float)ui->h;
+}
+
+/* Netsight: every networked device in view, with its type; owned devices in green. */
+static void netsight_overlay(SrUi *ui, const SrGame *g) {
+  static const char *const names[] = {"DOOR", "CAM", "TURRET", "ALARM", "LIGHTS", "LIFT"};
+  int s = ui->scale;
+  for (int i = 0; i < g->site.in.device_count; i++) {
+    float x, y;
+    SrVec3 p = sr_game_device_pos(g, i);
+    if (sr_v3_len(sr_v3_sub(p, g->player.pos)) > 30.0f || !project(ui, g, p, &x, &y)) continue;
+    bool own = sr_game_owns_device(g, g->site.in.devices[i].id);
+    SrColor c = own ? (SrColor){80, 255, 140, 230} : (SrColor){80, 200, 255, 200};
+    sr_ui_rect(ui, x - 3.0f * (float)s, y - 3.0f * (float)s, 6.0f * (float)s, 6.0f * (float)s, c);
+    sr_ui_text(ui, x + 5.0f * (float)s, y - 3.0f * (float)s, names[g->site.in.devices[i].type], c, s);
+  }
+}
+
+/* Breach puzzle: concentric rings with their gaps; the lock mark sits at the top. */
+static void breach_overlay(SrUi *ui, const SrBreach *b) {
+  int s = ui->scale;
+  float cx = (float)ui->w / 2, cy = (float)ui->h / 2;
+  float base = (float)SR_MIN(ui->w, ui->h) * 0.08f, step = (float)SR_MIN(ui->w, ui->h) * 0.055f;
+  sr_ui_rect(ui, cx - base - step * (float)b->rings - 10, cy - base - step * (float)b->rings - 10,
+             2 * (base + step * (float)b->rings) + 20, 2 * (base + step * (float)b->rings) + 20,
+             (SrColor){0, 4, 12, 200});
+  sr_ui_rect(ui, cx - (float)s, cy - base - step * (float)b->rings - 8, 2.0f * (float)s, step * (float)b->rings + 8,
+             (SrColor){80, 255, 140, 200}); /* the lock mark */
+  for (int r = 0; r < b->rings; r++) {
+    float rad = base + step * (float)r;
+    SrColor c = b->locked[r]  ? (SrColor){80, 255, 140, 255}
+                : r == b->sel ? (SrColor){255, 200, 60, 255}
+                              : (SrColor){60, 160, 255, 220};
+    for (int k = 0; k < 48; k++) {
+      float a = (float)k / 48.0f * 2.0f * SR_PI;
+      bool gap = fabsf(sr_wrap_angle(a - b->angle[r])) < SR_BREACH_TOLERANCE * 1.2f;
+      for (int q = 0; q < b->decoys[r] && !gap; q++)
+        gap = fabsf(sr_wrap_angle(a - b->angle[r] + b->decoy_at[r][q])) < SR_BREACH_TOLERANCE * 1.2f;
+      if (gap) continue;
+      float x = cx + sinf(a) * rad, y = cy - cosf(a) * rad;
+      sr_ui_rect(ui, x - 1.5f * (float)s, y - 1.5f * (float)s, 3.0f * (float)s, 3.0f * (float)s, c);
+    }
+    /* the true gap carries a small amber tick on its edge; decoys do not */
+    float a = b->angle[r] + SR_BREACH_TOLERANCE * 1.5f;
+    sr_ui_rect(ui, cx + sinf(a) * rad - (float)s, cy - cosf(a) * rad - (float)s, 2.0f * (float)s, 2.0f * (float)s,
+               (SrColor){255, 150, 40, 255});
+  }
+  float bw = 2 * (base + step * (float)b->rings);
+  sr_ui_rect(ui, cx - bw / 2, cy + base + step * (float)b->rings + 6, bw * b->time_left / b->time_limit,
+             3.0f * (float)s, (SrColor){255, 80, 80, 255});
+}
+
+static void matrix_hud(SrUi *ui, const SrGame *g, const SrInput *in) {
+  const SrDive *d = &g->dive;
+  int s = ui->scale;
+  float m = 6.0f * (float)s, line = 10.0f * (float)s;
+  bool touch = in && in->scheme == SR_SCHEME_TOUCH;
+  float k = ui->px_per_css;
+  float rx = touch ? sr_touch_buttons_left(&in->layout) * k - m : (float)ui->w - m;
+  SrColor cyan = {80, 230, 255, 255}, red = {255, 70, 70, 255}, amber = {255, 190, 70, 255};
+  char buf[128];
+  sr_ui_rect(ui, m / 2, m / 2, (float)ui->w * 0.34f, line * 5.4f, (SrColor){0, 6, 16, 150});
+  if (d->in_host)
+    snprintf(buf, sizeof buf, "HOST %s  SEC %d", g->city->buildings[d->building].name, d->host.security);
+  else
+    snprintf(buf, sizeof buf, "THE GRID");
+  sr_ui_text(ui, m, m, buf, cyan, s);
+  float bw = 60.0f * (float)s;
+  sr_ui_rect(ui, m, m + line, bw, 4.0f * (float)s, (SrColor){10, 20, 40, 220});
+  sr_ui_rect(ui, m, m + line, bw * d->persona.integrity / SR_MAX(1.0f, d->persona.max_integrity), 4.0f * (float)s,
+             cyan);
+  for (int i = 0; i < 3; i++) /* host alert */
+    sr_ui_rect(ui, m + bw + 6 + (float)i * 6.0f * (float)s, m + line, 4.0f * (float)s, 4.0f * (float)s,
+               i < d->alert ? red : (SrColor){40, 40, 60, 220});
+  if (d->trace > 0) {
+    snprintf(buf, sizeof buf, "TRACE %d%%", (int)(d->trace * 100));
+    sr_ui_text(ui, m, m + line * 2, buf, red, s);
+  }
+  if (d->download_node >= 0) {
+    snprintf(buf, sizeof buf, "DOWNLOAD %d%%", (int)(100 * (1 - d->download_left / SR_MAX(0.01f, d->download_total))));
+    sr_ui_text(ui, m, m + line * 3, buf, amber, s);
+  }
+  if (d->body_alert && (g->steps / 15) % 2)
+    centered(ui, m + line * 4.5f, "BODY ALERT - JACK OUT", red, s);
+  else
+    sr_ui_text(ui, m, m + line * 4, g->site.active ? "BODY: QUIET" : "BODY: SAFE", (SrColor){120, 200, 140, 255}, s);
+  /* programs on the quick slots */
+  const SrLoadout *l = &g->net.programs;
+  for (int i = 0; i < l->count && i < 4; i++) {
+    float y = (float)ui->h - m - (float)(4 - i) * line;
+    snprintf(buf, sizeof buf, "%d %s", i + 1, sr_program_def(l->prog[i])->name);
+    sr_ui_text(ui, m, y, buf, l->cooldown[i] > 0 ? (SrColor){90, 100, 130, 255} : cyan, s);
+    if (l->cooldown[i] > 0)
+      sr_ui_rect(ui, m, y + 8.0f * (float)s, 40.0f * (float)s * l->cooldown[i] / sr_program_def(l->prog[i])->cooldown,
+                 2.0f * (float)s, amber);
+  }
+  sr_ui_rect(ui, (float)ui->w / 2 - (float)s, (float)ui->h / 2 - (float)s, 2.0f * (float)s, 2.0f * (float)s, cyan);
+  const char *label = sr_ui_context_label(g->ctx.kind);
+  if (label[0] && d->breach_node < 0) {
+    if (g->ctx.kind == SR_CTX_NODE && g->ctx.prop >= 0 && g->ctx.prop < d->host.node_count)
+      snprintf(buf, sizeof buf, "%s: %s%s", label, sr_node_type_name((SrNodeType)d->host.nodes[g->ctx.prop].type),
+               sr_game_node_locked(g, g->ctx.prop) ? " [BREACH]" : "");
+    else
+      snprintf(buf, sizeof buf, "%s", label);
+    centered(ui, (float)ui->h * 0.62f, buf, amber, s);
+  }
+  if (d->feed_device >= 0) centered(ui, m, "CAMERA FEED  //  MOVE TO RETURN", red, s);
+  if (d->breach_node >= 0) breach_overlay(ui, &d->breach);
+  (void)rx;
+  if (g->toast_time > 0) centered(ui, (float)ui->h * 0.3f, g->toast, (SrColor){235, 240, 255, 255}, s);
 }
 
 static void centered(SrUi *ui, float y, const char *txt, SrColor c, int s) {
@@ -405,16 +539,25 @@ static void shop_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
   float x = m + 6.0f * (float)s, y = m + 6.0f * (float)s;
   char buf[128];
   const SrMenu *mn = &g->menu;
-  snprintf(buf, sizeof buf, "%s  //  %lld CRED", g->city->buildings[mn->building].name, (long long)g->player.cred);
+  if (mn->node_menu)
+    snprintf(buf, sizeof buf, "%s // %s", g->city->buildings[mn->building].name,
+             sr_node_type_name((SrNodeType)g->dive.host.nodes[mn->node].type));
+  else
+    snprintf(buf, sizeof buf, "%s  //  %lld CRED", g->city->buildings[mn->building].name, (long long)g->player.cred);
   sr_ui_text(ui, x, y, buf, k_cyan, s);
   y += line * 1.5f;
   for (int i = 0; i < mn->count; i++) {
     char name[SR_NAME_LEN];
-    if (mn->housing)
+    if (mn->node_menu)
+      snprintf(name, sizeof name, "%s", sr_node_action_name((SrNodeAction)mn->action[i]));
+    else if (mn->housing)
       snprintf(name, sizeof name, "%s, rent/week", sr_housing_def(mn->items[i].type)->name);
     else
       sr_item_name(g->city, &mn->items[i], name, sizeof name);
-    snprintf(buf, sizeof buf, "%s%s  %d", mn->jailbreak[i] >= 0 ? "JAILBREAK " : "", name, mn->price[i]);
+    if (mn->node_menu)
+      snprintf(buf, sizeof buf, "%s", name);
+    else
+      snprintf(buf, sizeof buf, "%s%s  %d", mn->jailbreak[i] >= 0 ? "JAILBREAK " : "", name, mn->price[i]);
     if (i == mn->sel) sr_ui_rect(ui, x - 4, y - 2, (float)ui->w - 2 * x + 8, line, (SrColor){40, 60, 110, 200});
     text_fit(ui, x, y, buf, i == mn->sel ? k_amber : k_white, s, (float)ui->w - 2 * x);
     y += line;
@@ -449,7 +592,12 @@ void sr_ui_build(SrUi *ui, const SrGame *g, const SrInput *in, bool portrait) {
       centered(ui, (float)ui->h * 0.7f, in && in->scheme == SR_SCHEME_TOUCH ? "TAP TO START" : "PRESS ENTER TO START",
                k_amber, s);
       break;
-    case SR_SCREEN_PLAY: hud(ui, g, in); break;
+    case SR_SCREEN_PLAY:
+      if (g->dive.active)
+        matrix_hud(ui, g, in);
+      else
+        hud(ui, g, in);
+      break;
     case SR_SCREEN_PAUSE:
       hud(ui, g, in);
       sr_ui_rect(ui, 0, 0, (float)ui->w, (float)ui->h, (SrColor){0, 0, 0, 160});

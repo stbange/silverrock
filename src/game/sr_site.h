@@ -88,6 +88,12 @@ typedef struct SrSite {
   bool alarm, objective_done, camera_seen, witnessed, hostile;
   bool lights_off;
   float turret_cd;
+  bool authorised;      /* forged credentials: the staff treats the player as one of them */
+  float reinforce_at;   /* site time when called reinforcements arrive, 0 none */
+  float elevator_floor; /* current floor of the elevator (moves towards its target) */
+  int elevator_target;
+  float check_t[SR_INT_MAX_DEVICES]; /* disabled cameras: time until a guard comes to check */
+  bool checked[SR_INT_MAX_DEVICES];
   int kills, knockouts;
   float damage; /* taken inside */
   int64_t entered_at;
@@ -140,6 +146,8 @@ bool sr_site_takedown(SrSite *s, SrDeltas *d, SrVec3 eye, float yaw, bool lethal
 /* Hitscan shot: true if a guard was hit. */
 bool sr_site_shoot(SrSite *s, SrDeltas *d, SrVec3 eye, float yaw, float pitch, const SrWeaponStats *w);
 void sr_site_noise(SrSite *s, SrVec3 pos, float radius);
+/* A false alarm in a room: every guard on site goes to look. */
+void sr_site_false_alarm(SrSite *s, int room);
 int sr_site_guards_up(const SrSite *s);
 
 /* Gadgets used inside: returns true if the gadget had an effect (and is used up). */

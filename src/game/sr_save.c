@@ -351,6 +351,50 @@ SrResult sr_save_write(const SrGame *g, SrWriter *w, uint32_t version, int64_t c
     sr_put_str(w, e->text);
   }
   end(s);
+  if (version >= 3) {
+    const SrNet *n = &g->net;
+    s = begin(w, SR_SEC_MATRIX, 1);
+    sr_put_u8(w, (uint8_t)n->token_count);
+    for (int i = 0; i < n->token_count; i++) {
+      sr_put_u32(w, n->tokens[i].device);
+      sr_put_i32(w, n->tokens[i].building);
+      sr_put_i64(w, n->tokens[i].expires);
+    }
+    sr_put_u8(w, (uint8_t)n->backdoor_count);
+    for (int i = 0; i < n->backdoor_count; i++) {
+      sr_put_i32(w, n->backdoors[i].building);
+      sr_put_i64(w, n->backdoors[i].discover_at);
+    }
+    sr_put_u8(w, (uint8_t)n->cred_count);
+    for (int i = 0; i < n->cred_count; i++) {
+      sr_put_i32(w, n->creds[i].building);
+      sr_put_i64(w, n->creds[i].expires);
+    }
+    sr_put_u8(w, (uint8_t)n->tamper_count);
+    for (int i = 0; i < n->tamper_count; i++) {
+      sr_put_u32(w, n->tamper[i].device);
+      sr_put_i32(w, n->tamper[i].building);
+      sr_put_u8(w, n->tamper[i].before);
+      sr_put_u8(w, n->tamper[i].logs_erased);
+      sr_put_i64(w, n->tamper[i].detect_at);
+    }
+    sr_put_u8(w, (uint8_t)n->alert_count);
+    for (int i = 0; i < n->alert_count; i++) {
+      sr_put_i32(w, n->alerts[i].building);
+      sr_put_u8(w, n->alerts[i].level);
+      sr_put_i64(w, n->alerts[i].until);
+    }
+    sr_put_u8(w, (uint8_t)n->blackout_district);
+    sr_put_i64(w, n->blackout_until);
+    sr_put_u8(w, (uint8_t)n->programs.count);
+    sr_put_bytes(w, n->programs.prog, SR_LOADOUT_MAX);
+    sr_put_u8(w, n->dispatch);
+    sr_put_f32(w, n->dispatch_pos.x);
+    sr_put_f32(w, n->dispatch_pos.y);
+    sr_put_f32(w, n->dispatch_pos.z);
+    sr_put_i64(w, n->dispatch_at);
+    end(s);
+  }
   s = begin(w, SR_SEC_DELTAS, 1);
   sr_put_u16(w, (uint16_t)g->deltas.count);
   for (int i = 0; i < g->deltas.count; i++) {
@@ -413,6 +457,7 @@ SrResult sr_save_read(SrGame *g, const void *data, size_t len) {
   sr_heat_init(&g->heat);
   sr_events_init(&g->events);
   memset(&g->deltas, 0, sizeof g->deltas);
+  sr_game_net_reset(g); /* v2 saves have no network section: start clean */
   sr_crowd_init(&g->crowd);
   for (;;) {
     uint32_t type = sr_get_u32(&r);
@@ -503,6 +548,56 @@ SrResult sr_save_read(SrGame *g, const void *data, size_t len) {
           sr_get_str(&s, e.text, sizeof e.text);
           sr_events_add(&g->events, &e);
         }
+        break;
+      }
+      case SR_SEC_MATRIX: {
+        SrNet *n = &g->net;
+#define COUNT(field, max)                                                                                              \
+  field = sr_get_u8(&s);                                                                                               \
+  if (field > (max)) return SR_ERR_CORRUPT;
+        COUNT(n->token_count, SR_NET_MAX_TOKENS)
+        for (int i = 0; i < n->token_count; i++) {
+          n->tokens[i].device = sr_get_u32(&s);
+          n->tokens[i].building = sr_get_i32(&s);
+          n->tokens[i].expires = sr_get_i64(&s);
+        }
+        COUNT(n->backdoor_count, SR_NET_MAX_BACKDOORS)
+        for (int i = 0; i < n->backdoor_count; i++) {
+          n->backdoors[i].building = sr_get_i32(&s);
+          n->backdoors[i].discover_at = sr_get_i64(&s);
+        }
+        COUNT(n->cred_count, SR_NET_MAX_CREDS)
+        for (int i = 0; i < n->cred_count; i++) {
+          n->creds[i].building = sr_get_i32(&s);
+          n->creds[i].expires = sr_get_i64(&s);
+        }
+        COUNT(n->tamper_count, SR_NET_MAX_TAMPER)
+        for (int i = 0; i < n->tamper_count; i++) {
+          n->tamper[i].device = sr_get_u32(&s);
+          n->tamper[i].building = sr_get_i32(&s);
+          n->tamper[i].before = sr_get_u8(&s);
+          n->tamper[i].logs_erased = sr_get_u8(&s) != 0;
+          n->tamper[i].detect_at = sr_get_i64(&s);
+        }
+        COUNT(n->alert_count, SR_NET_MAX_ALERTS)
+        for (int i = 0; i < n->alert_count; i++) {
+          n->alerts[i].building = sr_get_i32(&s);
+          n->alerts[i].level = sr_get_u8(&s);
+          n->alerts[i].until = sr_get_i64(&s);
+        }
+#undef COUNT
+        n->blackout_district = (int8_t)sr_get_u8(&s);
+        n->blackout_until = sr_get_i64(&s);
+        n->programs.count = sr_get_u8(&s);
+        sr_get_bytes(&s, n->programs.prog, SR_LOADOUT_MAX);
+        if (n->programs.count > SR_LOADOUT_MAX) return SR_ERR_CORRUPT;
+        for (int i = 0; i < n->programs.count; i++)
+          if (n->programs.prog[i] >= SR_PRG_COUNT) return SR_ERR_CORRUPT;
+        n->dispatch = sr_get_u8(&s) != 0;
+        n->dispatch_pos.x = sr_get_f32(&s);
+        n->dispatch_pos.y = sr_get_f32(&s);
+        n->dispatch_pos.z = sr_get_f32(&s);
+        n->dispatch_at = sr_get_i64(&s);
         break;
       }
       case SR_SEC_DELTAS: {

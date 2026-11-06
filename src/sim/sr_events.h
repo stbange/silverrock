@@ -16,7 +16,8 @@ typedef enum SrEventType {
   SR_EV_THEFT,
   SR_EV_KILLING,
   SR_EV_RENT_MISSED,
-  SR_EV_EVICTION
+  SR_EV_EVICTION,
+  SR_EV_BLACKOUT
 } SrEventType;
 
 typedef struct SrWorldEvent {
