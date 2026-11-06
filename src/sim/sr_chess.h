@@ -68,7 +68,7 @@ typedef struct SrFactionSim {
   int64_t cooldown_until;
   bool dissolved;
   int64_t reborn_at;
-  uint8_t generation; /* gangs: how often the slot was refilled */
+  uint8_t generation;     /* gangs: how often the slot was refilled */
   char name[SR_NAME_LEN]; /* gangs: name of the current generation (kept for loading) */
   uint16_t ops_by_type[SR_OP_COUNT];
 } SrFactionSim;
