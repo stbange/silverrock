@@ -247,7 +247,9 @@ static bool create_gl(SrApp *a) {
   return sr_glb_init(&a->gfx, a->gles);
 }
 
-static SrApp *g_web_app; /* the web exports need a handle; platform layer only */
+static SrApp *g_web_app;        /* the web exports need a handle; platform layer only */
+static float g_pending_safe[4]; /* web: safe area reported before the app existed */
+static bool g_has_pending_safe;
 
 bool sr_app_init(SrApp *a, int argc, char **argv) {
   memset(a, 0, sizeof *a);
@@ -273,6 +275,9 @@ bool sr_app_init(SrApp *a, int argc, char **argv) {
   if (owner) sr_log_set_sink(log_sink, a);
   a->game = sr_game_create();
   sr_input_init(&a->input, coarse_pointer());
+  if (g_has_pending_safe) /* GCOVR_EXCL_LINE reason: only the web page reports a safe area early */
+    sr_input_set_screen(&a->input, a->input.layout.width, a->input.layout.height, g_pending_safe[0], g_pending_safe[1],
+                        g_pending_safe[2], g_pending_safe[3]);
   sr_app_load_settings(a);
   sr_scene_init(&a->scene, a->input.coarse_pointer);
   sr_scene_free(&a->body_scene);
@@ -592,17 +597,27 @@ const char *sr_app_test_exec(SrApp *a, const char *cmd) {
 #ifdef __EMSCRIPTEN__
 /* GCOVR_EXCL_START reason: Emscripten-only glue, verified by the Playwright tests */
 #ifdef SR_TEST_HOOKS
-EMSCRIPTEN_KEEPALIVE const char *sr_web_test_exec(const char *cmd) { return sr_app_test_exec(g_web_app, cmd); }
+EMSCRIPTEN_KEEPALIVE const char *sr_web_test_exec(const char *cmd) {
+  return g_web_app ? sr_app_test_exec(g_web_app, cmd) : "error: not ready";
+}
 #endif
+/* The page may call these before the app exists (WebAssembly does not trap on a NULL write). */
 EMSCRIPTEN_KEEPALIVE void sr_web_set_safe_area(float l, float r, float t, float b) {
+  if (!g_web_app) { /* applied once the app starts */
+    g_pending_safe[0] = l, g_pending_safe[1] = r, g_pending_safe[2] = t, g_pending_safe[3] = b;
+    g_has_pending_safe = true;
+    return;
+  }
   SrInput *in = &g_web_app->input;
   sr_input_set_screen(in, in->layout.width, in->layout.height, l, r, t, b);
 }
 EMSCRIPTEN_KEEPALIVE void sr_web_context_lost(void) {
+  if (!g_web_app) return;
   g_web_app->context_lost = true;
   sr_glb_context_lost(&g_web_app->gfx);
 }
 EMSCRIPTEN_KEEPALIVE void sr_web_context_restored(void) {
+  if (!g_web_app) return;
   sr_glb_init(&g_web_app->gfx, true);
   g_web_app->context_lost = false;
 }

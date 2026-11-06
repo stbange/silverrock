@@ -71,8 +71,6 @@ static void test_soak_bounds(void) {
   printf("  soak: %d ops, %d news, %d elections, act %d, ending %d, arcs %d/%d\n", ops, w.ch->news.count,
          w.ch->pol.elections_held, w.ch->story.act, w.ch->story.ending, w.ch->story.arcs_started,
          w.ch->story.arcs_finished);
-  for (int i = 0; i < 12 && i < w.ch->history_count; i++)
-    printf("    %s\n", w.ch->history[(w.ch->history_count - 1 - i) % SR_MAX_HISTORY]);
   SR_CHECK(ops > 50);
   world_free(&w);
 }
