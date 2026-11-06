@@ -43,6 +43,12 @@ uint32_t sr_site_objective_id(int32_t job) { return 0x40000000u | (uint32_t)job;
 
 /* ---- geometry ------------------------------------------------------------------------------ */
 
+/* Grid row of a room (integer division on purpose). */
+static int room_row(const SrSite *s, int room) {
+  int row = room / s->in.w;
+  return row;
+}
+
 int sr_site_room_at(const SrSite *s, float x, float z) {
   float lx = x - s->ox, lz = z - s->oz;
   if (lx < 0 || lz < 0) return -1;
@@ -51,7 +57,7 @@ int sr_site_room_at(const SrSite *s, float x, float z) {
 
 SrVec3 sr_site_room_center(const SrSite *s, int room) {
   return sr_v3(s->ox + ((float)(room % s->in.w) + 0.5f) * CELL, SR_SITE_FLOOR_Y + GUARD_EYE,
-               s->oz + ((float)(room / s->in.w) + 0.5f) * CELL);
+               s->oz + ((float)room_row(s, room) + 0.5f) * CELL);
 }
 
 static int door_device(const SrInterior *in, int room, int dir) {
@@ -186,7 +192,7 @@ int sr_site_prop_near(const SrSite *s, SrVec3 eye, float yaw, float range) {
 
 static SrVec3 door_pos(const SrSite *s, int room, int dir) {
   float x = s->ox + ((float)(room % s->in.w) + (dir == 0 ? 1.0f : 0.5f)) * CELL;
-  float z = s->oz + ((float)(room / s->in.w) + (dir == 1 ? 1.0f : 0.5f)) * CELL;
+  float z = s->oz + ((float)room_row(s, room) + (dir == 1 ? 1.0f : 0.5f)) * CELL;
   return sr_v3(x, SR_SITE_FLOOR_Y + GUARD_EYE, z);
 }
 
@@ -233,7 +239,7 @@ void sr_site_console(SrSite *s, SrDeltas *d) {
 SrVec3 sr_site_camera_pos(const SrSite *s, int dev) {
   int room = s->in.devices[dev].room;
   float x = s->ox + (float)(room % s->in.w) * CELL + 0.3f + 0.2f * (float)(dev % 3);
-  float z = s->oz + (float)(room / s->in.w) * CELL + 0.3f;
+  float z = s->oz + (float)room_row(s, room) * CELL + 0.3f;
   return sr_v3(x, SR_SITE_FLOOR_Y + 2.7f, z);
 }
 
@@ -442,8 +448,8 @@ static bool effect_active(const SrSite *s, SrEffectType t) {
 SrVec3 sr_site_throw_point(const SrSite *s, SrVec3 eye, float yaw, float max_dist) {
   SrVec3 f = sr_dir_from_yaw_pitch(yaw, 0);
   SrVec3 at = eye;
-  for (float t = 0.25f; t <= max_dist; t += 0.25f) {
-    SrVec3 p = sr_v3_add(eye, sr_v3_scale(f, t));
+  for (int i = 1; (float)i * 0.25f <= max_dist; i++) {
+    SrVec3 p = sr_v3_add(eye, sr_v3_scale(f, (float)i * 0.25f));
     if (wall_at(s, p.x - s->ox, p.z - s->oz, 0.2f, false, true)) break;
     at = p;
   }
