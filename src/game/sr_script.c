@@ -390,6 +390,12 @@ static SrResult command(ScriptState *st, char *line, char *out, size_t cap) {
       if (sr_str_starts_with(tok[i], "strategy=")) s = sr_strategy_parse(tok[i] + 9);
       if (sr_str_starts_with(tok[i], "weeks=")) weeks = atoi(tok[i] + 6);
     }
+    if (s == SR_STRAT_STORY) {
+      SrAutoplayStats cs;
+      int d = sr_campaign(g, weeks * 7, &cs);
+      snprintf(out, cap, "days=%d jobs=%d ending=%s", d, cs.jobs_done, sr_ending_name((SrEnding)g->chess.story.ending));
+      return d < 0 || cs.soft_lock ? SR_ERR_INVALID : SR_OK;
+    }
     SrAutoplayStats stats = sr_autoplay(g, s, weeks * 7, s == SR_STRAT_GIG ? 0 : 3);
     snprintf(out, cap, "days=%d jobs=%d failed=%d missed_rent=%d earned=%lld", stats.days, stats.jobs_done,
              stats.jobs_failed, stats.missed_rent, (long long)stats.earned);
@@ -481,6 +487,7 @@ SrStrategy sr_strategy_parse(const char *s) {
   if (strcmp(s, "hammer") == 0) return SR_STRAT_HAMMER;
   if (strcmp(s, "netrunner") == 0) return SR_STRAT_NETRUNNER;
   if (strcmp(s, "live") == 0) return SR_STRAT_LIVE;
+  if (strcmp(s, "story") == 0) return SR_STRAT_STORY;
   return SR_STRAT_GIG;
 }
 
@@ -548,6 +555,57 @@ static bool find_open_food(SrGame *g, int *out) {
   return best >= 0;
 }
 
+/* The story bot's choices; true when it took a job. */
+static bool story_bot(SrGame *g, int max_tier) {
+  SrStory *st = &g->chess.story;
+  if (st->ending != SR_END_NONE) return false;
+  if (st->offer_open && !st->retainer) sr_game_accept_retainer(g);
+  /* a rival's offer is taken when the patron turned or trust is low */
+  if (st->rival_offer >= 0 && (st->hostile >= 0 || st->trust < 25)) sr_game_accept_offer(g);
+  if (st->finale_ready) { /* endings vary by seed */
+    unsigned m = sr_story_endings(st);
+    int n = 0;
+    for (int e = SR_END_LOYAL; e <= SR_END_SUNRISE; e++) n += (m >> e) & 1u;
+    int pick = (int)(g->seed % (uint64_t)SR_MAX(1, n));
+    for (int e = SR_END_LOYAL; e <= SR_END_SUNRISE; e++)
+      if (((m >> e) & 1u) && pick-- == 0) {
+        sr_game_choose_ending(g, (SrEnding)e);
+        break;
+      }
+    return false;
+  }
+  /* the patron's work first: handler contracts and black ops */
+  for (int i = 0; i < g->jobs.count; i++) {
+    SrJob *j = &g->jobs.jobs[i];
+    SrApproach a;
+    if (j->state != SR_JS_OFFERED || j->client_faction != st->patron || st->patron < 0) continue;
+    if ((j->tier > max_tier && j->tier != 4) || !approach_for(SR_STRAT_GIG, j, &a)) continue;
+    if (sr_game_accept(g, j->id) == SR_OK) return true;
+  }
+  return false;
+}
+
+int sr_campaign(SrGame *g, int max_days, SrAutoplayStats *out) {
+  SrAutoplayStats total;
+  memset(&total, 0, sizeof total);
+  int days = 0;
+  while (days < max_days && g->chess.story.ending == SR_END_NONE) {
+    int tier = sr_max_tier_for_cred(g->player.prog.street_cred);
+    SrAutoplayStats st = sr_autoplay(g, SR_STRAT_STORY, 7, tier);
+    days += 7;
+    total.jobs_done += st.jobs_done;
+    total.jobs_failed += st.jobs_failed;
+    total.missed_rent += st.missed_rent;
+    total.earned += st.earned;
+    total.flatlines += st.flatlines;
+    if (st.soft_lock) total.soft_lock = true;
+    if (g->player.cred < 200) sr_player_tx(&g->player, sr_game_time(g), 400, "odd jobs"); /* bots do not starve */
+  }
+  total.days = days;
+  if (out) *out = total;
+  return g->chess.story.ending != SR_END_NONE ? days : -1;
+}
+
 SrAutoplayStats sr_autoplay(SrGame *g, SrStrategy s, int days, int max_tier) {
   SrAutoplayStats st;
   memset(&st, 0, sizeof st);
@@ -603,6 +661,7 @@ SrAutoplayStats sr_autoplay(SrGame *g, SrStrategy s, int days, int max_tier) {
       g->active_job = -1;
       job = NULL;
     }
+    if (!job && s == SR_STRAT_STORY && story_bot(g, max_tier)) continue;
     if (!job) {
       int district = g->city->blocks[g->city->buildings[p->home].block].district;
       int fixer = g->city->factions.fixer_building[district];

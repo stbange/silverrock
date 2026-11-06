@@ -171,6 +171,12 @@ float sr_chess_dominance(const SrChess *ch, const SrCity *c, int *leader) {
   return total > 0 ? (float)best / (float)total : 0.0f;
 }
 
+int sr_chess_city_hall(const SrCity *c) {
+  for (int b = 0; b < c->building_count; b++)
+    if (c->buildings[b].poi == SR_POI_CITY_HALL) return b;
+  return -1; /* GCOVR_EXCL_LINE reason: every city has a city hall (generation invariant) */
+}
+
 int sr_chess_gang_of(const SrCity *c, int district) {
   for (int g = c->factions.gang_first; g < c->factions.gang_first + c->factions.gang_count; g++)
     if (c->factions.f[g].turf & (1u << district)) return g;
@@ -179,7 +185,13 @@ int sr_chess_gang_of(const SrCity *c, int district) {
 
 void sr_chess_reveal(SrChess *ch, int a, int b, SrLinkType t) {
   for (int i = 0; i < ch->link_count; i++)
-    if (ch->links[i].a == a && ch->links[i].b == b && ch->links[i].type == t) ch->links[i].known = true;
+    if (ch->links[i].a == a && ch->links[i].b == b && ch->links[i].type == t) {
+      ch->links[i].known = true;
+      return;
+    }
+  /* evidence of a link the board did not track yet */
+  add_link(ch, a, b, t);
+  if (ch->link_count > 0 && ch->links[ch->link_count - 1].a == a) ch->links[ch->link_count - 1].known = true;
 }
 
 int sr_chess_reveal_faction(SrChess *ch, int f) {
@@ -415,6 +427,17 @@ static void apply_success(SrChess *ch, SrCity *c, SrPopulation *pop, SrEventLog 
         ch->turf_version++;
         snprintf(msg, sizeof msg, "%s takes %s", c->factions.f[cl].name, c->districts[op->district].name);
         sr_chess_note(ch, now, msg);
+        SrWorldEvent e; /* a turf war is fought on the street */
+        memset(&e, 0, sizeof e);
+        e.type = SR_EV_GUNFIRE;
+        e.time = now;
+        e.district = op->district;
+        e.building = -1;
+        e.victim_faction = (int8_t)t;
+        e.blamed_faction = (int8_t)cl;
+        e.significant = true;
+        snprintf(e.text, sizeof e.text, "Gang war in %s", c->districts[op->district].name);
+        sr_events_add(log, &e);
         if (c->factions.f[t].turf == 0) dissolve_gang(ch, c, t, now, log);
       }
       break;
@@ -454,7 +477,7 @@ void sr_chess_resolve(SrChess *ch, SrCity *c, SrPopulation *pop, SrEventLog *log
   if (op->target >= 0 && op->type != SR_OP_BRIBE) {
     if (success) raise_security(ch, op->building, 2);
     /* a strike back is not itself answered, or the city would never calm down */
-    bool answer = op->type != SR_OP_RETALIATE && sr_mix64(sr_hash_combine(ch->seed, (uint64_t)k->id * 13u)) % 10 < 6;
+    bool answer = op->type != SR_OP_RETALIATE && sr_mix64(sr_hash_combine(ch->seed, (uint64_t)k->id * 13u)) % 10 < 4;
     if (answer && blamed >= 0 && blamed < c->factions.count && blamed != op->target) {
       ch->f[op->target].retaliate_against = (int8_t)blamed;
       ch->f[op->target].retaliate_by = now + 7 * 86400;
@@ -478,17 +501,26 @@ void sr_chess_resolve(SrChess *ch, SrCity *c, SrPopulation *pop, SrEventLog *log
   op->active = false;
   apply_success(ch, c, pop, log, op, now);
   char msg[72];
-  snprintf(msg, sizeof msg, "%s: %s on %s succeeds", c->factions.f[op->client].name, sr_op_name((SrOpType)op->type),
-           op->target >= 0 ? c->factions.f[op->target].name : "-");
+  if (op->type == SR_OP_BRIBE && op->district >= 0 && op->district < ch->pol.seat_count)
+    snprintf(msg, sizeof msg, "%s buys councillor %s", c->factions.f[op->client].name,
+             ch->pol.seats[op->district].name);
+  else
+    snprintf(msg, sizeof msg, "%s: %s on %s succeeds", c->factions.f[op->client].name, sr_op_name((SrOpType)op->type),
+             op->target >= 0 ? c->factions.f[op->target].name : "-");
   sr_chess_note(ch, now, msg);
   if (op->arc >= 0) sr_story_beat_done(ch, c, op->arc, true, now);
 }
 
 /* Off-screen odds: the client's means against the target's defences. */
-static bool offscreen_success(const SrChess *ch, const SrOperation *op, uint64_t key) {
+static bool offscreen_success(const SrChess *ch, const SrCity *c, const SrOperation *op, uint64_t key) {
   int atk = ch->f[op->client].res[SR_RES_FORCE] + ch->f[op->client].res[SR_RES_INTEL];
   int def = op->target >= 0 ? ch->f[op->target].res[SR_RES_NETDEF] + ch->f[op->target].res[SR_RES_FORCE] : 40;
   def += op->building >= 0 ? sr_chess_security(ch, op->building) * 12 : 0;
+  /* a gang defends its last streets to the end */
+  if (op->type == SR_OP_TURF && op->target >= 0) {
+    unsigned turf = c->factions.f[op->target].turf;
+    if (turf != 0 && (turf & (turf - 1u)) == 0) def += 45;
+  }
   int chance = SR_CLAMP(50 + (atk - def) / 3, 15, 85);
   return (int)(sr_mix64(key) % 100) < chance;
 }
@@ -532,7 +564,7 @@ static int weight(const SrCity *c, int f, SrOpType t) {
                                                           {120, 180, 380, 60, 60, 0, 60, 140, 0, 0}}; /* Vulture */
     return w[fa->doctrine][t];
   }
-  if (fa->kind == SR_FK_GANG) return t == SR_OP_TURF ? 600 : t == SR_OP_EXPAND ? 400 : 0;
+  if (fa->kind == SR_FK_GANG) return t == SR_OP_TURF ? 350 : t == SR_OP_EXPAND ? 650 : 0;
   if (fa->kind == SR_FK_MEDIA) return t == SR_OP_SMEAR ? 500 : t == SR_OP_EXPAND ? 500 : 0;
   return t == SR_OP_FORTIFY ? 500 : t == SR_OP_EXPAND ? 500 : 0;
 }
@@ -576,7 +608,7 @@ static void strategy(SrChess *ch, SrCity *c, int f, int64_t now) {
       break;
     case SR_OP_BRIBE:
       district = sr_rng_range(&r, 0, SR_MAX(1, ch->pol.seat_count) - 1);
-      building = c->factions.gov >= 0 ? c->factions.f[c->factions.gov].hq_building : -1;
+      building = sr_chess_city_hall(c);
       target = c->factions.gov;
       break;
     case SR_OP_FORTIFY:
@@ -597,19 +629,26 @@ static void gang_rebirth(SrChess *ch, SrCity *c, SrEventLog *log, int64_t now) {
   for (int g = c->factions.gang_first; g < c->factions.gang_first + c->factions.gang_count; g++) {
     SrFactionSim *s = &ch->f[g];
     if (!s->dissolved || now < s->reborn_at) continue;
-    s->dissolved = false;
-    s->generation++;
     SrFaction *fa = &c->factions.f[g];
-    sr_name_gang(ch->seed, (uint64_t)g * 131u + s->generation, fa->name, sizeof fa->name);
-    fa->hue = (uint8_t)((fa->hue + 7u) % 24u);
-    /* a free district, or the one with the least gang presence */
+    /* a free district, or one taken from a gang that holds several */
     int pick = -1;
     for (int d = 0; d < c->district_count && pick < 0; d++)
       if (sr_chess_gang_of(c, d) < 0 && c->districts[d].type != SR_D_SPIRE) pick = d;
-    if (pick < 0) pick = (int)(sr_mix64(ch->seed + (uint64_t)g) % (uint64_t)c->district_count);
-    int holder = sr_chess_gang_of(c, pick);
-    if (holder >= 0 && holder != g && (c->factions.f[holder].turf & (c->factions.f[holder].turf - 1u)) != 0)
-      c->factions.f[holder].turf = (uint16_t)(c->factions.f[holder].turf & ~(1u << pick));
+    for (int d = 0; d < c->district_count && pick < 0; d++) {
+      int holder = sr_chess_gang_of(c, d);
+      if (holder >= 0 && (c->factions.f[holder].turf & (c->factions.f[holder].turf - 1u)) != 0) {
+        c->factions.f[holder].turf = (uint16_t)(c->factions.f[holder].turf & ~(1u << d));
+        pick = d;
+      }
+    }
+    if (pick < 0) { /* no room yet: try again next week */
+      s->reborn_at = now + SR_WEEK_S;
+      continue;
+    }
+    s->dissolved = false;
+    s->generation++;
+    sr_name_gang(ch->seed, (uint64_t)g * 131u + s->generation, fa->name, sizeof fa->name);
+    fa->hue = (uint8_t)((fa->hue + 7u) % 24u);
     fa->turf = (uint16_t)(1u << pick);
     for (int k = 0; k < SR_RES_COUNT; k++) s->res[k] = base_level(c, g, (SrResource)k);
     ch->turf_version++;
@@ -650,7 +689,7 @@ void sr_chess_tick(SrChess *ch, SrCity *c, SrPopulation *pop, SrEventLog *log, i
     SrContract *k = &ch->contracts[i];
     if (!k->open || now < k->deadline) continue;
     SrOperation *op = sr_chess_op(ch, k->op);
-    bool ok = op && offscreen_success(ch, op, sr_hash_combine(ch->seed, (uint64_t)k->id * 7u + 3u));
+    bool ok = op && offscreen_success(ch, c, op, sr_hash_combine(ch->seed, (uint64_t)k->id * 7u + 3u));
     if (op && op->arc >= 0) ch->story.beats_offscreen++;
     sr_chess_resolve(ch, c, pop, log, k, ok, false, now);
   }

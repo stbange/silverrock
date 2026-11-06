@@ -10,13 +10,15 @@ agenda.
 
 ![Night street in a generated city](docs/screenshots/street.png)
 
-**Status:** milestones M0–M4 implemented (2026-11-06). You wake up in your apartment, walk a generated city at night
+**Status:** milestones M0–M5 implemented (2026-11-06). You wake up in your apartment, walk a generated city at night
 among citizens, traffic and aerodynes, eat, sleep, pay (or miss) rent, move to a better place, ride the metro, buy
 gadgets and cyberware, take jobs from fixers and play site jobs inside the building. With a cyberdeck you can jack in
 (home rig, public booth, a building's port, wireless or a data spike): fly the Matrix grid, breach hosts, dodge or
 fight ICE, steal paydata, plant backdoors, and loop cameras, unlock doors, turn turrets, kill the lights or black out
-a district in the real world. Not yet: the corporate-chess story (M5). Manual checks on Windows hardware and real
-phones are still open.
+a district in the real world. Behind it all the megacorps, gangs, council and press play their own game: every job is
+a step in someone's operation, elections and curfews change the streets, share prices move with your work, and a
+patron's black-ops handler pulls you into a campaign with procedural story arcs and five endings. Manual checks on
+Windows hardware and real phones are still open.
 
 ## Build and play
 
@@ -33,7 +35,7 @@ cmake --preset linux-gcc-debug && cmake --build --preset linux-gcc-debug
 ```
 
 Controls: WASD move, mouse look, left click fire, J jack in/out, V Netsight, E interact (enter buildings, eat, sleep, shop, talk to fixers,
-do and report jobs, take down guards from behind, ride the metro), Q active cyberware, T terminal (E in the home
+do and report jobs, take down guards from behind, ride the metro), Q active cyberware, T terminal (left/right switch tabs: home, news, market, Board, story; E in the home
 terminal lists apartments), 1–4 quick slots (gadgets), Shift sprint, C crouch (crawl through vents, enter by the
 service door), Space jump, Esc pause, F11 fullscreen. Gamepads and touch work too.
 
@@ -88,6 +90,7 @@ and spec deltas (22 capabilities, 206 requirements, 310 scenarios). Implemented 
 | M2 Living City | [`add-living-city`](openspec/changes/add-living-city) | population-simulation, player-life, game-persistence |
 | M3 Mercenary Work | [`add-mercenary-work`](openspec/changes/add-mercenary-work) | job-system, combat, equipment, character-progression, law-and-heat |
 | M4 The Matrix | [`add-matrix`](openspec/changes/add-matrix) | matrix-navigation, matrix-world-link |
+| M5 Corporate chess | [`add-corporate-chess`](openspec/changes/add-corporate-chess) | faction-simulation, city-politics, corporate-market, news-media, story-campaign |
 | M5 Corporate Chess | [`add-corporate-chess`](openspec/changes/add-corporate-chess) | faction-simulation, city-politics, corporate-market, news-media, story-campaign |
 
 Validate the specs:

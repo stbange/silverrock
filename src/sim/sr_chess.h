@@ -348,6 +348,7 @@ int sr_chess_security(const SrChess *ch, int building);  /* added facility secur
 int sr_chess_price_pct(const SrChess *ch, int district); /* 100 = normal */
 float sr_chess_dominance(const SrChess *ch, const SrCity *c, int *leader);
 int sr_chess_gang_of(const SrCity *c, int district); /* controlling gang or -1 */
+int sr_chess_city_hall(const SrCity *c);             /* the city hall building */
 void sr_chess_reveal(SrChess *ch, int a, int b, SrLinkType t);
 /* Reveals every link involving a faction (a stolen file from one of its hosts). */
 int sr_chess_reveal_faction(SrChess *ch, int faction);

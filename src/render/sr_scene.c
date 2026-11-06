@@ -239,7 +239,7 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
   }
   const SrPalette *pal = sr_palette(c->districts[b->district].type);
   int gang = -1;
-  for (int f = c->factions.gang_first; f < c->factions.gang_first + c->factions.gang_count; f++)
+  for (int f = c->factions.gang_first; f < c->factions.gang_first + c->factions.gang_count && gang < 0; f++)
     if (c->factions.f[f].turf & (1u << b->district)) gang = f;
   /* streets (west and north strips of the block) and the sidewalk-lined lot */
   sr_mesh_quad(m, sr_v3(x0, 0, z0 + s), sr_v3(x0 + st, 0, z0 + s), sr_v3(x0 + st, 0, z0), sr_v3(x0, 0, z0), 0, 0, 1,

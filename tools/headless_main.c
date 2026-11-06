@@ -112,6 +112,59 @@ static int balance(int seeds, const char *bands) {
   return bad != 0;
 }
 
+/* Story bots play the campaign on n seeds; every run must reach an ending. */
+static int campaign(int n) {
+  int failures = 0;
+  for (int k = 0; k < n; k++) {
+    uint64_t seed = 1000u + (uint64_t)k * 7919u;
+    SrGame *g = sr_game_create();
+    sr_game_new(g, seed, NULL, (SrBackground)(k % SR_BG_COUNT), "Bot");
+    g->crowd_enabled = false;
+    sr_game_leave(g);
+    SrAutoplayStats st;
+    int days = sr_campaign(g, 7 * 52, &st);
+    printf("seed %llu: %s after %d days, %d jobs, act %d, arcs %d/%d, %s\n", (unsigned long long)seed,
+           days > 0 ? sr_ending_name((SrEnding)g->chess.story.ending) : "NO ENDING", st.days, st.jobs_done,
+           g->chess.story.act, g->chess.story.arcs_finished, g->chess.story.arcs_started,
+           st.soft_lock ? "SOFT-LOCK" : "ok");
+    failures += days <= 0 || st.soft_lock;
+    sr_game_destroy(g);
+  }
+  printf("campaign: %d seeds, %d without an ending\n", n, failures);
+  return failures;
+}
+
+/* The corporate game without the player for a year: the full history of notable outcomes. */
+static int soak(int n) {
+  for (int k = 0; k < n; k++) {
+    uint64_t seed = 500u + (uint64_t)k * 104729u;
+    SrCity *c = (SrCity *)calloc(1, sizeof *c);
+    SrPopulation *pop = (SrPopulation *)calloc(1, sizeof *pop);
+    SrChess *ch = (SrChess *)calloc(1, sizeof *ch);
+    SrEventLog log;
+    sr_city_generate(c, seed, NULL);
+    sr_population_generate(pop, c);
+    sr_events_init(&log);
+    sr_chess_init(ch, c, seed, -1, 0);
+    printf("== soak seed %llu: %s, %d megacorps, %d gangs\n", (unsigned long long)seed, c->name, c->factions.corp_count,
+           c->factions.gang_count);
+    int printed = 0;
+    for (int w = 1; w <= 52; w++) {
+      sr_chess_advance(ch, c, pop, &log, (int64_t)w * SR_WEEK_S);
+      if (ch->history_count - printed > SR_MAX_HISTORY) printed = ch->history_count - SR_MAX_HISTORY;
+      for (; printed < ch->history_count; printed++) printf("  %s\n", ch->history[printed % SR_MAX_HISTORY]);
+    }
+    int leader = 0;
+    float dom = sr_chess_dominance(ch, c, &leader);
+    printf("  -> leader %s (%.0f%%), %d elections, %d news\n", c->factions.f[leader].name, (double)(dom * 100.0f),
+           ch->pol.elections_held, ch->news.count);
+    free(c);
+    free(pop);
+    free(ch);
+  }
+  return 0;
+}
+
 int main(int argc, char **argv) {
   sr_log_set_sink(sink, NULL);
   for (int i = 1; i < argc; i++) {
@@ -144,8 +197,15 @@ int main(int argc, char **argv) {
         i += 2;
       }
       if (balance(seeds, bands) != 0) return 1;
+    } else if (strcmp(argv[i], "--campaign") == 0 && i + 1 < argc) {
+      if (campaign(atoi(argv[++i])) != 0) return 1;
+    } else if (strcmp(argv[i], "--soak") == 0 && i + 1 < argc) {
+      soak(atoi(argv[++i]));
     } else {
-      fprintf(stderr, "usage: %s [--script file.scn]... [--sweep N] [--balance SEEDS [--bands FILE]]\n", argv[0]);
+      fprintf(stderr,
+              "usage: %s [--script file.scn]... [--sweep N] [--balance SEEDS [--bands FILE]] [--campaign SEEDS] "
+              "[--soak SEEDS]\n",
+              argv[0]);
       return 2;
     }
   }

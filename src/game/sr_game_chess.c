@@ -104,7 +104,8 @@ int sr_game_handler_offers(SrGame *g) {
   if (rival < 0) return 0; /* GCOVR_EXCL_LINE reason: every city has several corps */
   int hq = g->city->factions.f[rival].hq_building;
   SrJob j;
-  if (!sr_job_for_contract(g->city, type, hq, s->patron, rival, key, t, &j)) return 0; /* GCOVR_EXCL_LINE */
+  if (!sr_job_for_contract(g->city, type, hq, s->patron, rival, key, t, &j))
+    return 0; /* GCOVR_EXCL_LINE reason: generation always binds */
   j.tier = 4;
   int32_t lo, hi;
   sr_tier_pay_range(4, &lo, &hi);
@@ -272,10 +273,7 @@ static bool media_host(const SrGame *g, int b) {
   return o >= g->city->factions.media_first && o < g->city->factions.media_first + g->city->factions.media_count;
 }
 
-static bool city_hall(const SrGame *g, int b) {
-  int gov = g->city->factions.gov;
-  return gov >= 0 && g->city->factions.f[gov].hq_building == b;
-}
+static bool city_hall(const SrGame *g, int b) { return g->city->buildings[b].poi == SR_POI_CITY_HALL; }
 
 /* A seat the owner of this host bought. */
 static int bribed_seat(const SrGame *g, int b) {

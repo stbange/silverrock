@@ -160,10 +160,12 @@ static void policies(SrChess *ch, const SrCity *c, const SrEventLog *log, int64_
       p->curfew = (uint16_t)(p->curfew | (1u << d));
       snprintf(head, sizeof head, "Curfew declared in %s", c->districts[d].name);
       sr_news_publish(ch, c, outlet_for(c, -1), -1, d, -1, SR_NEWS_POLICY, false, head, now);
+      sr_chess_note(ch, now, head);
     } else if (on && (v == 0 || lean < 0)) {
       p->curfew = (uint16_t)(p->curfew & ~(1u << d));
       snprintf(head, sizeof head, "Curfew lifted in %s", c->districts[d].name);
       sr_news_publish(ch, c, outlet_for(c, -1), -1, d, -1, SR_NEWS_POLICY, false, head, now);
+      sr_chess_note(ch, now, head);
     }
   }
   int majority = p->seat_count / 2 + 1;

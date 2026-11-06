@@ -129,7 +129,7 @@ static void beat_start(SrChess *ch, SrCity *c, int idx, int64_t now) {
   if (t == SR_OP_BRIBE) {
     district = (int)(sr_mix64(ch->seed + (uint64_t)a->started + a->beat) % (uint64_t)SR_MAX(1, ch->pol.seat_count));
     target = c->factions.gov;
-    building = c->factions.gov >= 0 ? c->factions.f[c->factions.gov].hq_building : -1;
+    building = sr_chess_city_hall(c);
   } else if (t == SR_OP_TURF) {
     district = -1;
     for (int d = 0; d < c->district_count && district < 0; d++)
@@ -299,12 +299,8 @@ SrScenario sr_story_pick_scenario(const SrChess *ch, const SrCity *c, int leader
   *other = second;
   if (ch->story.matrix_depth >= 60) return SR_SC_GHOST;
   if (sr_politics_seats_of(&ch->pol, leader) >= ch->pol.seat_count / 2 + 1) return SR_SC_COUP;
-  if (energy(c, leader) || (second >= 0 && energy(c, second))) {
-    if (second >= 0 && energy(c, second)) *other = leader, leader = second;
-    return SR_SC_PALL;
-  }
-  if (second >= 0 && c->factions.rel[leader][second] > 30) return SR_SC_MERGER;
-  return SR_SC_MERGER;
+  if (energy(c, leader) || (second >= 0 && energy(c, second))) return SR_SC_PALL;
+  return SR_SC_MERGER; /* the two strongest corps join forces, allied or not */
 }
 
 unsigned sr_story_endings(const SrStory *s) {

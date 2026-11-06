@@ -28,8 +28,8 @@ flowchart LR
 
 ### Status (2026-11-06)
 
-M0–M4 are implemented. Open items are the manual checks on Windows hardware and real phones (one exit demo per
-milestone) and M5. Unit, platform, scenario, browser and gate tests all pass in CI; line coverage is 98.6 %. The
+M0–M5 are implemented. Open items are the manual checks on Windows hardware and real phones (one exit demo per
+milestone), including a full campaign on two seeds for M5. Unit, platform, scenario, browser and gate tests all pass in CI; line coverage is 98.6 %. The
 web build is deployed to GitHub Pages from the default branch.
 
 ## 2. First playable slice
