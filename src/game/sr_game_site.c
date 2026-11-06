@@ -93,7 +93,7 @@ static void site_consequences(SrGame *g) {
   if (!s->alarm && !s->kills && !s->camera_seen && !(s->witnessed && s->hostile)) return;
   SrCrime cr;
   memset(&cr, 0, sizeof cr);
-  cr.jurisdiction = (int8_t)sr_heat_jurisdiction(g->city, s->building);
+  cr.jurisdiction = (int8_t)sr_game_jurisdiction(g, s->building);
   cr.severity = (uint8_t)(s->kills ? 5 : s->alarm ? 3 : 1);
   cr.witnessed = s->witnessed;
   cr.camera = s->camera_seen;
@@ -289,7 +289,7 @@ static void street_noise(SrGame *g, SrVec3 at, float radius) {
   if (reacted > 0 && ev && ev->type == SR_EV_CRIME_REPORT && ev->time == sr_game_time(g)) {
     SrCrime cr;
     memset(&cr, 0, sizeof cr);
-    cr.jurisdiction = (int8_t)g->city->factions.police;
+    cr.jurisdiction = (int8_t)sr_game_police(g);
     cr.severity = 2;
     cr.witnessed = true;
     cr.look = sr_appearance_key(&g->player.look);
@@ -388,7 +388,7 @@ void sr_game_shop_open(SrGame *g, int b) {
   m->ripperdoc = bld(g, b)->poi == SR_POI_RIPPERDOC;
   m->count = sr_vendor_stock(g->city, b, sr_game_time(g) / SR_DAY_S, m->items, SR_MENU_MAX);
   for (int i = 0; i < m->count; i++) {
-    m->price[i] = sr_price_at(g->city, b, &m->items[i]);
+    m->price[i] = (int32_t)((int64_t)sr_price_at(g->city, b, &m->items[i]) * sr_game_price_pct(g, b) / 100);
     m->jailbreak[i] = -1;
   }
   if (m->ripperdoc)

@@ -85,6 +85,7 @@ bool sr_job_generate(const SrCity *c, SrJobType type, uint64_t key, int64_t t, S
   j->state = SR_JS_OFFERED;
   j->client_faction = -1;
   j->target_faction = -1;
+  j->framed = -1;
   j->offered = t;
   j->dest_building = -1;
   const SrFactions *fs = &c->factions;
@@ -147,6 +148,24 @@ bool sr_job_generate(const SrCity *c, SrJobType type, uint64_t key, int64_t t, S
   return true;
 }
 
+bool sr_job_for_contract(const SrCity *c, SrJobType type, int building, int client, int target, uint64_t key, int64_t t,
+                         SrJob *j) {
+  if (!sr_job_generate(c, type, key, t, j)) return false; /* GCOVR_EXCL_LINE reason: generation always binds */
+  if (building >= 0 && building < c->building_count) {
+    if (type == SR_JT_DELIVER)
+      j->dest_building = j->target_building = building;
+    else if (c->buildings[building].owner == target || target < 0)
+      j->target_building = building;
+  }
+  j->target_faction = (int8_t)(type == SR_JT_DELIVER ? -1 : c->buildings[j->target_building].owner);
+  if (target >= 0 && type != SR_JT_DELIVER && j->target_building == building) j->target_faction = (int8_t)target;
+  j->client_faction = (int8_t)(client == j->target_faction ? -1 : client);
+  j->approaches = sr_job_validate_approaches(c, j);
+  const char *who = j->client_faction >= 0 ? c->factions.f[j->client_faction].name : "A private client";
+  snprintf(j->title, sizeof j->title, "%s for %s", sr_job_type_name(type), who);
+  return true;
+}
+
 SrMatrixPlan sr_job_matrix_plan(const SrCity *c, const SrJob *j) {
   SrMatrixPlan p;
   memset(&p, 0, sizeof p);
@@ -203,7 +222,7 @@ static int count_bits(unsigned v) {
   return n;
 }
 
-static SrJob *board_push(SrJobBoard *b, const SrJob *j) {
+SrJob *sr_jobs_push(SrJobBoard *b, const SrJob *j) {
   if (b->count >= SR_MAX_JOBS) {
     /* drop the oldest job that is no longer active */
     int victim = -1;
@@ -268,7 +287,7 @@ int sr_jobs_fixer_offers(SrJobBoard *b, const SrCity *c, int fixer, int64_t t, i
       continue; /* GCOVR_EXCL_LINE reason: generation always binds for these types */
     j.source = SR_SRC_FIXER;
     j.client_building = fixer;
-    SrJob *s = board_push(b, &j);
+    SrJob *s = sr_jobs_push(b, &j);
     if (s) out_ids[n++] = s->id;
   }
   return n;
@@ -287,14 +306,16 @@ int sr_jobs_board_refresh(SrJobBoard *b, const SrCity *c, int64_t t, int32_t cre
       continue; /* GCOVR_EXCL_LINE reason: generation always binds for these types */
     j.source = SR_SRC_BOARD;
     j.client_building = c->home_building; /* report via terminal */
-    if (board_push(b, &j)) added++;
+    if (sr_jobs_push(b, &j)) added++;
   }
   return added;
 }
 
 SrResult sr_job_accept(SrJob *j, SrPlayer *p, int64_t t) {
   if (j->state != SR_JS_OFFERED) return SR_ERR_INVALID;
-  if (j->tier > sr_max_tier_for_cred(p->prog.street_cred)) return SR_ERR_DENIED;
+  /* black ops (T4) come only from the patron's handler, who already checked tier and trust */
+  bool black_op = j->tier == 4 && j->source == SR_SRC_CONTACT && sr_cred_tier(p->prog.street_cred) >= SR_CRED_KNIGHT;
+  if (j->tier > sr_max_tier_for_cred(p->prog.street_cred) && !black_op) return SR_ERR_DENIED;
   j->state = SR_JS_ACCEPTED;
   if (j->upfront > 0) {
     sr_player_tx(p, t, j->upfront, "job advance");

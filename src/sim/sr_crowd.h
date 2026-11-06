@@ -57,6 +57,10 @@ typedef struct SrCrowd {
   int spawned_in_view_near; /* diagnostics: must stay 0 */
   int despawned_in_view_near;
   int reports;
+  /* set by the game from city politics */
+  int8_t police_outfit;  /* outfit colour of officers under a corporate police contract, -1 city blue */
+  int8_t police_faction; /* faction officers serve */
+  uint16_t curfew;       /* districts under curfew right now: most citizens stay indoors */
 } SrCrowd;
 
 void sr_crowd_init(SrCrowd *cr);

@@ -10,6 +10,8 @@ void sr_crowd_init(SrCrowd *cr) {
   memset(cr, 0, sizeof *cr);
   cr->last_slot = -1;
   cr->fresh = true;
+  cr->police_outfit = -1;
+  cr->police_faction = -1;
 }
 
 bool sr_camera_sees(const SrCamera *cam, SrVec3 p) {
@@ -62,6 +64,10 @@ static void spawn(SrCrowd *cr, const SrCity *c, const SrAmbient *amb, int npc, i
   a->faction = amb->faction;
   a->bravery = amb->bravery;
   a->umbrella = amb->umbrella;
+  if (a->role == SR_ROLE_COP && cr->police_outfit >= 0) {
+    a->look.outfit_color = (uint8_t)cr->police_outfit;
+    a->faction = cr->police_faction;
+  }
   a->pos = sr_v3((float)amb->x / 100.0f, 0, (float)amb->y / 100.0f);
   a->speed = 1.2f + (float)(amb->key % 5) * 0.08f;
   a->state = SR_AG_WALK;
@@ -117,6 +123,11 @@ void sr_crowd_refresh(SrCrowd *cr, const SrCity *c, const SrPopulation *pop, con
         if (dist_xz(p, cam->pos) > SR_CROWD_RADIUS) continue;
         if (!cr->fresh && !may_pop(cam, p)) continue; /* no pop-in inside the view nearby */
         int npc = pop ? sr_population_find_by_key(pop, amb[i].key) : -1;
+        /* curfew: only officers, gangers and one citizen in five stay out */
+        int dist = c->blocks[b].district;
+        if (dist >= 0 && dist < 16 && (cr->curfew & (1u << dist)) && amb[i].role != SR_ROLE_COP &&
+            amb[i].role != SR_ROLE_GANG && amb[i].key % 5 != 0)
+          continue;
         spawn(cr, c, &amb[i], npc, b);
       }
     }

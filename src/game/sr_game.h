@@ -9,6 +9,7 @@
 #include "game/sr_storage.h"
 #include "input/sr_input.h"
 #include "sim/sr_air.h"
+#include "sim/sr_chess.h"
 #include "sim/sr_combat.h"
 #include "sim/sr_crowd.h"
 #include "sim/sr_jobs.h"
@@ -153,6 +154,11 @@ typedef struct SrGame {
   /* the Matrix */
   SrNet net;
   SrDive dive;
+  /* the corporate game */
+  SrChess chess;
+  int8_t patron_choice; /* new game: chosen patron corp, -1 random */
+  int64_t curfew_stop_at;
+  int term_tab, term_sel, term_axis_x, term_axis_y;
   /* character creation */
   uint64_t create_seed;
   uint64_t create_look;
@@ -264,6 +270,34 @@ void sr_game_netsight(SrGame *g);
 void sr_game_node_menu(SrGame *g, int node);
 /* Lights of a district are out (blackout). */
 bool sr_game_blackout_at(const SrGame *g, int district);
+
+/* The corporate game (sr_game_chess.c). */
+typedef enum SrTermTab { SR_TAB_HOME, SR_TAB_NEWS, SR_TAB_MARKET, SR_TAB_BOARD, SR_TAB_STORY, SR_TAB_COUNT } SrTermTab;
+void sr_game_chess_init(SrGame *g);
+/* Every in-game minute: the board, news, contracts as jobs, job outcomes, world effects. */
+void sr_game_chess_minute(SrGame *g, int64_t t);
+/* After loading: replays recorded city changes and refreshes derived state. */
+void sr_game_chess_loaded(SrGame *g);
+int sr_game_police(const SrGame *g);
+int sr_game_jurisdiction(const SrGame *g, int building);
+/* District price index in percent (shortages after sabotage). */
+int sr_game_price_pct(const SrGame *g, int building);
+SrResult sr_game_accept_retainer(SrGame *g);
+SrResult sr_game_accept_offer(SrGame *g);
+SrResult sr_game_trade(SrGame *g, int corp, int qty);
+SrResult sr_game_choose_ending(SrGame *g, SrEnding e);
+/* Buys fake evidence pointing at a faction for an accepted job (framing). */
+SrResult sr_game_frame(SrGame *g, int32_t job, int faction);
+/* Black-op (T4) jobs from the handler when trust and Street Cred allow; returns jobs offered. */
+int sr_game_handler_offers(SrGame *g);
+int sr_game_chess_node_actions(const SrGame *g, int building, SrNodeAction *out);
+SrResult sr_game_chess_node_act(SrGame *g, int building, SrNodeAction a);
+void sr_game_chess_paydata(SrGame *g, int building);
+/* Terminal tabs and rows. */
+int sr_game_term_rows(const SrGame *g);
+void sr_game_term_input(SrGame *g, const SrActionState *a);
+/* Story options on the terminal's story tab (label for row i, or NULL). */
+const char *sr_game_story_option(const SrGame *g, int i, int *kind);
 
 /* Character creation: background choice and a randomisable appearance. */
 void sr_game_begin_create(SrGame *g, uint64_t seed);

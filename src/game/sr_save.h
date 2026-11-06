@@ -7,7 +7,7 @@
 #include "core/sr_mem.h"
 #include "game/sr_game.h"
 
-#define SR_SAVE_VERSION   3u
+#define SR_SAVE_VERSION   4u
 #define SR_AUTOSAVE_SLOTS 3
 #define SR_MANUAL_SLOTS   3
 
@@ -21,7 +21,13 @@ typedef enum SrSection {
   SR_SEC_EVENTS = 6,
   SR_SEC_DELTAS = 7,
   SR_SEC_META = 8,
-  SR_SEC_MATRIX = 9 /* v3: Matrix state; v2 saves load with an empty network state */
+  SR_SEC_MATRIX = 9, /* v3: Matrix state; v2 saves load with an empty network state */
+  /* v4: the corporate game; older saves start it fresh from the city at load time */
+  SR_SEC_BOARD = 10,
+  SR_SEC_POLITICS = 11,
+  SR_SEC_MARKET = 12,
+  SR_SEC_NEWS = 13,
+  SR_SEC_STORY = 14
 } SrSection;
 
 typedef struct SrSaveInfo {
@@ -32,7 +38,7 @@ typedef struct SrSaveInfo {
   int64_t saved_at; /* monotonic save counter, used for autosave rotation */
 } SrSaveInfo;
 
-/* Serialises the game. `version` lets tests write older formats (1 or 2). */
+/* Serialises the game. `version` lets tests write older formats (1 to 3). */
 SrResult sr_save_write(const SrGame *g, SrWriter *w, uint32_t version, int64_t counter);
 SrResult sr_save_read(SrGame *g, const void *data, size_t len);
 SrResult sr_save_peek(const void *data, size_t len, SrSaveInfo *info);

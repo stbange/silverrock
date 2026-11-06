@@ -396,23 +396,27 @@ static SrResult command(ScriptState *st, char *line, char *out, size_t cap) {
     return stats.soft_lock ? SR_ERR_INVALID : SR_OK;
   }
   if (strcmp(cmd, "job") == 0 && n >= 2) {
+    static int32_t first_offer = -1; /* "first": the first job of the latest fixer offers */
     if (strcmp(tok[1], "offers") == 0) {
       int ids[4];
       int fixer = g->city->factions.fixer_building[g->city->blocks[g->city->buildings[g->player.home].block].district];
       int k = sr_game_fixer(g, fixer, ids);
+      first_offer = k > 0 ? ids[0] : -1;
       snprintf(out, cap, "%d", k);
       return SR_OK;
     }
-    if (strcmp(tok[1], "accept") == 0 && n >= 3) return sr_game_accept(g, atoi(tok[2]));
+    int32_t id = n >= 3 ? (strcmp(tok[2], "first") == 0 ? first_offer : atoi(tok[2])) : -1;
+    if (strcmp(tok[1], "accept") == 0 && n >= 3) return sr_game_accept(g, id);
     if (strcmp(tok[1], "execute") == 0 && n >= 4) {
-      SrMissionResult r = sr_game_execute(g, atoi(tok[2]), (SrApproach)atoi(tok[3]));
+      SrMissionResult r = sr_game_execute(g, id, (SrApproach)atoi(tok[3]));
       snprintf(out, cap, "%d", r.success);
       return SR_OK;
     }
     if (strcmp(tok[1], "report") == 0 && n >= 3) {
-      snprintf(out, cap, "%d", sr_game_report(g, atoi(tok[2])));
+      snprintf(out, cap, "%d", sr_game_report(g, id));
       return SR_OK;
     }
+    if (strcmp(tok[1], "frame") == 0 && n >= 4) return sr_game_frame(g, id, atoi(tok[3]));
   }
   if (strcmp(cmd, "enter") == 0 && n >= 2) {
     int b = strcmp(tok[1], "home") == 0 ? g->player.home : atoi(tok[1]);

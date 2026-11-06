@@ -269,6 +269,93 @@ static void end(SecCtx s) {
   sr_put_u32(s.w, crc);
 }
 
+/* The corporate game is plain data: each part is written as a sized blob. A blob whose size does
+ * not match this build is ignored and that part starts fresh (migration). */
+static void put_blob(SrWriter *w, const void *p, size_t n) {
+  sr_put_u32(w, (uint32_t)n);
+  sr_put_bytes(w, p, n);
+}
+
+static bool get_blob(SrReader *r, void *p, size_t n) {
+  uint32_t len = sr_get_u32(r);
+  if (len != n) {
+    sr_get_bytes(r, NULL, len);
+    return false;
+  }
+  return sr_get_bytes(r, p, n);
+}
+
+static void put_chess(SrWriter *w, const SrGame *g) {
+  const SrChess *ch = &g->chess;
+  SecCtx s = begin(w, SR_SEC_BOARD, 1);
+  sr_put_u64(w, ch->seed);
+  sr_put_i64(w, ch->next_tick);
+  sr_put_i32(w, ch->next_op_id);
+  sr_put_i32(w, ch->next_contract_id);
+  put_blob(w, ch->f, sizeof ch->f);
+  sr_put_u8(w, (uint8_t)ch->op_count);
+  put_blob(w, ch->ops, sizeof(SrOperation) * (size_t)ch->op_count);
+  sr_put_u8(w, (uint8_t)ch->contract_count);
+  put_blob(w, ch->contracts, sizeof(SrContract) * (size_t)ch->contract_count);
+  sr_put_u8(w, (uint8_t)ch->secmod_count);
+  put_blob(w, ch->secmods, sizeof(SrSecMod) * (size_t)ch->secmod_count);
+  sr_put_bytes(w, ch->price_mod, sizeof ch->price_mod);
+  sr_put_bytes(w, ch->patrol_mod, sizeof ch->patrol_mod);
+  sr_put_u8(w, (uint8_t)ch->change_count);
+  put_blob(w, ch->changes, sizeof(SrOwnerChange) * (size_t)ch->change_count);
+  sr_put_u8(w, (uint8_t)ch->link_count);
+  put_blob(w, ch->links, sizeof(SrLink) * (size_t)ch->link_count);
+  sr_put_u32(w, ch->turf_version);
+  sr_put_i32(w, ch->street_cred);
+  sr_put_i32(w, ch->ticks);
+  sr_put_i32(w, ch->history_count);
+  put_blob(w, ch->history, sizeof ch->history);
+  for (int f = 0; f < SR_MAX_FACTIONS; f++) sr_put_u16(w, g->city->factions.f[f].turf);
+  end(s);
+  s = begin(w, SR_SEC_POLITICS, 1);
+  put_blob(w, &ch->pol, sizeof ch->pol);
+  end(s);
+  s = begin(w, SR_SEC_MARKET, 1);
+  put_blob(w, &ch->market, sizeof ch->market);
+  end(s);
+  s = begin(w, SR_SEC_NEWS, 1);
+  put_blob(w, &ch->news, sizeof ch->news);
+  end(s);
+  s = begin(w, SR_SEC_STORY, 1);
+  put_blob(w, &ch->story, sizeof ch->story);
+  end(s);
+}
+
+static bool get_board(SrReader *s, SrGame *g) {
+  SrChess *ch = &g->chess;
+  ch->seed = sr_get_u64(s);
+  ch->next_tick = sr_get_i64(s);
+  ch->next_op_id = sr_get_i32(s);
+  ch->next_contract_id = sr_get_i32(s);
+  get_blob(s, ch->f, sizeof ch->f);
+#define LIST(count, arr, max)                                                                                          \
+  count = sr_get_u8(s);                                                                                                \
+  if (count > (max)) return false;                                                                                     \
+  if (!get_blob(s, arr, sizeof(arr[0]) * (size_t)count)) count = 0;
+  LIST(ch->op_count, ch->ops, SR_MAX_OPS)
+  LIST(ch->contract_count, ch->contracts, SR_MAX_CONTRACTS)
+  LIST(ch->secmod_count, ch->secmods, SR_MAX_SECMODS)
+  sr_get_bytes(s, ch->price_mod, sizeof ch->price_mod);
+  sr_get_bytes(s, ch->patrol_mod, sizeof ch->patrol_mod);
+  LIST(ch->change_count, ch->changes, SR_MAX_CHANGES)
+  LIST(ch->link_count, ch->links, SR_MAX_LINKS)
+#undef LIST
+  for (int i = 0; i < ch->change_count; i++)
+    if (ch->changes[i].building < 0 || ch->changes[i].building >= g->city->building_count) return false;
+  ch->turf_version = sr_get_u32(s);
+  ch->street_cred = sr_get_i32(s);
+  ch->ticks = sr_get_i32(s);
+  ch->history_count = sr_get_i32(s);
+  get_blob(s, ch->history, sizeof ch->history);
+  for (int f = 0; f < SR_MAX_FACTIONS; f++) g->city->factions.f[f].turf = sr_get_u16(s);
+  return !s->failed;
+}
+
 SrResult sr_save_write(const SrGame *g, SrWriter *w, uint32_t version, int64_t counter) {
   sr_put_bytes(w, k_magic, 4);
   sr_put_u32(w, version);
@@ -311,13 +398,19 @@ SrResult sr_save_write(const SrGame *g, SrWriter *w, uint32_t version, int64_t c
   for (int i = base; i < g->pop->count; i++) sr_put_bytes(w, &g->pop->npcs[i], sizeof(SrNpc));
   end(s);
   if (version >= 2) {
-    s = begin(w, SR_SEC_JOBS, 1);
+    s = begin(w, SR_SEC_JOBS, version >= 4 ? 2 : 1);
     sr_put_u16(w, (uint16_t)g->jobs.count);
     sr_put_i32(w, g->jobs.next_id);
     sr_put_i32(w, g->jobs.completed);
     sr_put_i32(w, g->jobs.failed);
     sr_put_i32(w, g->active_job);
-    for (int i = 0; i < g->jobs.count; i++) put_job(w, &g->jobs.jobs[i]);
+    for (int i = 0; i < g->jobs.count; i++) {
+      put_job(w, &g->jobs.jobs[i]);
+      if (version >= 4) { /* framing and whether the corporate game booked the outcome */
+        sr_put_u8(w, (uint8_t)g->jobs.jobs[i].framed);
+        sr_put_u8(w, g->jobs.jobs[i].booked);
+      }
+    }
     end(s);
     s = begin(w, SR_SEC_HEAT, 1);
     for (int j = 0; j < SR_MAX_FACTIONS; j++) {
@@ -395,6 +488,7 @@ SrResult sr_save_write(const SrGame *g, SrWriter *w, uint32_t version, int64_t c
     sr_put_i64(w, n->dispatch_at);
     end(s);
   }
+  if (version >= 4) put_chess(w, g);
   s = begin(w, SR_SEC_DELTAS, 1);
   sr_put_u16(w, (uint16_t)g->deltas.count);
   for (int i = 0; i < g->deltas.count; i++) {
@@ -459,6 +553,8 @@ SrResult sr_save_read(SrGame *g, const void *data, size_t len) {
   memset(&g->deltas, 0, sizeof g->deltas);
   sr_game_net_reset(g); /* v2 saves have no network section: start clean */
   sr_crowd_init(&g->crowd);
+  bool chess_loaded = false;
+  sr_game_chess_init(g); /* parts missing from the save start fresh */
   for (;;) {
     uint32_t type = sr_get_u32(&r);
     if (type == SR_SEC_END) break;
@@ -508,7 +604,16 @@ SrResult sr_save_read(SrGame *g, const void *data, size_t len) {
         g->jobs.completed = sr_get_i32(&s);
         g->jobs.failed = sr_get_i32(&s);
         g->active_job = sr_get_i32(&s);
-        for (int i = 0; i < n; i++) get_job(&s, &g->jobs.jobs[i]);
+        for (int i = 0; i < n; i++) {
+          get_job(&s, &g->jobs.jobs[i]);
+          g->jobs.jobs[i].framed = -1;
+          if (sver >= 2) {
+            g->jobs.jobs[i].framed = (int8_t)sr_get_u8(&s);
+            g->jobs.jobs[i].booked = sr_get_u8(&s) != 0;
+          } else {
+            g->jobs.jobs[i].booked = true; /* older saves: outcomes before the corporate game */
+          }
+        }
         g->jobs.count = n;
         break;
       }
@@ -600,6 +705,14 @@ SrResult sr_save_read(SrGame *g, const void *data, size_t len) {
         n->dispatch_at = sr_get_i64(&s);
         break;
       }
+      case SR_SEC_BOARD:
+        if (!get_board(&s, g)) return SR_ERR_CORRUPT;
+        chess_loaded = true;
+        break;
+      case SR_SEC_POLITICS: get_blob(&s, &g->chess.pol, sizeof g->chess.pol); break;
+      case SR_SEC_MARKET: get_blob(&s, &g->chess.market, sizeof g->chess.market); break;
+      case SR_SEC_NEWS: get_blob(&s, &g->chess.news, sizeof g->chess.news); break;
+      case SR_SEC_STORY: get_blob(&s, &g->chess.story, sizeof g->chess.story); break;
       case SR_SEC_DELTAS: {
         int n = sr_get_u16(&s);
         for (int i = 0; i < n; i++) {
@@ -612,6 +725,10 @@ SrResult sr_save_read(SrGame *g, const void *data, size_t len) {
     }
     if (s.failed) return SR_ERR_CORRUPT;
   }
+  if (chess_loaded)
+    sr_game_chess_loaded(g);
+  else
+    sr_game_chess_init(g); /* migration: the corporate game begins at the loaded time */
   g->started = true;
   g->screen = SR_SCREEN_PLAY;
   g->site.active = false;

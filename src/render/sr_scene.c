@@ -238,6 +238,9 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
     return;
   }
   const SrPalette *pal = sr_palette(c->districts[b->district].type);
+  int gang = -1;
+  for (int f = c->factions.gang_first; f < c->factions.gang_first + c->factions.gang_count; f++)
+    if (c->factions.f[f].turf & (1u << b->district)) gang = f;
   /* streets (west and north strips of the block) and the sidewalk-lined lot */
   sr_mesh_quad(m, sr_v3(x0, 0, z0 + s), sr_v3(x0 + st, 0, z0 + s), sr_v3(x0 + st, 0, z0), sr_v3(x0, 0, z0), 0, 0, 1,
                s / st, white, SR_LAYER_ASPHALT, 0, 1);
@@ -314,6 +317,14 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
       sr_mesh_quad(m, sr_v3(cx - w - 1, 3.0f, bz1 + 2.0f), sr_v3(cx + w + 1, 3.0f, bz1 + 2.0f),
                    sr_v3(cx + w + 1, 3.0f, bz1), sr_v3(cx - w - 1, 3.0f, bz1), 0, 0, 1, 1, shade(neon, 40),
                    SR_LAYER_WHITE, 0, 0);
+    }
+    /* gang tags on the walls of their turf */
+    if (gang >= 0 && bd->poi != SR_POI_CORP_HQ && bd->poi != SR_POI_CORP_FACILITY && bd->id % 3 == 0) {
+      SrColor tag = sr_corp_color(c->factions.f[gang].hue);
+      float gx = bx0 + (bx1 - bx0) * (0.15f + 0.1f * (float)(bd->id % 4)), gw = 1.6f + 0.3f * (float)(bd->id % 3);
+      sr_mesh_quad(m, sr_v3(gx, 0.6f, bz1 + 0.05f), sr_v3(gx + gw, 0.6f, bz1 + 0.05f),
+                   sr_v3(gx + gw, 2.0f, bz1 + 0.05f), sr_v3(gx, 2.0f, bz1 + 0.05f), 0, 1, 1, 0, tag, SR_LAYER_SIGN, 70,
+                   0);
     }
     /* rooftop props */
     if (h > 20.0f && (bd->id % 3) == 0) {
@@ -812,6 +823,10 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
     f->nlights = k;
     if (district == g->net.blackout_district)
       for (int j = 0; j < 3; j++) f->ambient[j] *= 0.45f;
+  }
+  if (s->turf_version != g->chess.turf_version) { /* gangs moved: repaint the walls */
+    s->turf_version = g->chess.turf_version;
+    for (int i = 0; i < SR_CHUNK_CACHE; i++) s->chunks.chunks[i].valid = false;
   }
   /* city chunks around the camera, nearest first, limited build budget */
   int ccx = (int)(p->pos.x * 100.0f) / (SR_BLOCK_CM * SR_CHUNK_BLOCKS);

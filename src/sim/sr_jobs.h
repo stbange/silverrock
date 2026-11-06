@@ -49,6 +49,8 @@ typedef struct SrJob {
   int32_t pay, upfront, bonus;
   int32_t paid; /* total paid so far */
   int kills, alarms;
+  int8_t framed; /* faction the planted evidence points to, -1 none */
+  bool booked;   /* the corporate game has seen the outcome */
   char title[64];
 } SrJob;
 
@@ -94,6 +96,12 @@ int sr_jobs_fixer_offers(SrJobBoard *b, const SrCity *c, int fixer_building, int
 /* Public job board refresh (board jobs of unlocked tiers). */
 int sr_jobs_board_refresh(SrJobBoard *b, const SrCity *c, int64_t t, int32_t street_cred);
 SrJob *sr_jobs_get(SrJobBoard *b, int32_t id);
+/* Adds a job to the board (dropping the oldest inactive one when full); NULL if the board is busy. */
+SrJob *sr_jobs_push(SrJobBoard *b, const SrJob *j);
+/* A job for a contract of the corporate game: the type bound to the contract's target building
+ * and factions where the building fits. */
+bool sr_job_for_contract(const SrCity *c, SrJobType type, int building, int client, int target, uint64_t key, int64_t t,
+                         SrJob *out);
 
 SrResult sr_job_accept(SrJob *j, SrPlayer *p, int64_t t);
 int32_t sr_job_intel_price(const SrJob *j);

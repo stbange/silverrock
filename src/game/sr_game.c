@@ -47,6 +47,7 @@ SrGame *sr_game_create(void) {
   g->max_agents = 400;
   g->screen = SR_SCREEN_TITLE;
   g->active_job = -1;
+  g->patron_choice = -1;
   g->approach_building = -1;
   g->roof_building = -1;
   g->cam.cos_half_fov = 0.5f; /* 120 degree horizontal view */
@@ -100,6 +101,7 @@ SrResult sr_game_new(SrGame *g, uint64_t seed, const SrCityOptions *opt, SrBackg
   g->on_ground = true;
   memset(&g->site, 0, sizeof g->site);
   sr_game_net_reset(g);
+  sr_game_chess_init(g);
   g->approach_building = -1;
   g->buff_camo = g->buff_reflex = g->buff_mask = g->buff_focus = g->buff_pain = 0;
   g->thermal = false;
@@ -160,6 +162,7 @@ static void minute_tick(SrGame *g, int64_t t, bool sleeping) {
                      g->city->buildings[g->player.home].block;
   sr_heat_update(&g->heat, t, at_home || sleeping);
   if (t % 3600 == 0) sr_jobs_tick(&g->jobs, &g->player, t, &g->events);
+  sr_game_chess_minute(g, t);
 }
 
 static void process_minutes(SrGame *g, bool sleeping) {
@@ -278,9 +281,11 @@ void sr_game_step(SrGame *g, const SrActionState *a) {
       sr_game_confirm_resume(g);
     else if (a && a->pressed[SR_ACT_PAUSE] && g->screen == SR_SCREEN_TERMINAL)
       g->screen = SR_SCREEN_PLAY;
-    else if (a && a->pressed[SR_ACT_INTERACT] && g->screen == SR_SCREEN_TERMINAL && g->site.active &&
-             g->site.in.apartment)
+    else if (a && a->pressed[SR_ACT_INTERACT] && g->screen == SR_SCREEN_TERMINAL && g->term_tab == SR_TAB_HOME &&
+             g->site.active && g->site.in.apartment)
       sr_game_housing_open(g); /* the home terminal lists apartments for rent */
+    else if (a && g->screen == SR_SCREEN_TERMINAL)
+      sr_game_term_input(g, a);
     return;
   }
   float dt = (float)SR_STEP_DT;
@@ -534,7 +539,18 @@ SrResult sr_game_accept(SrGame *g, int32_t id) {
   SrJob *j = sr_jobs_get(&g->jobs, id);
   if (!j) return SR_ERR_NOT_FOUND;
   SrResult r = sr_job_accept(j, &g->player, sr_game_time(g));
-  if (r == SR_OK) g->active_job = id;
+  if (r != SR_OK) return r;
+  g->active_job = id;
+  SrStory *st = &g->chess.story;
+  if (st->act == SR_ACT_PROLOGUE && st->test_job == -1) st->test_job = id; /* secretly the patron's test */
+  /* trading on what you are about to do draws the banks' attention */
+  if (j->target_faction >= 0 && j->target_faction < g->city->factions.corp_count) {
+    int before = g->chess.market.suspicion_count;
+    if (sr_market_check_insider(&g->chess, g->city, j->target_faction, sr_game_time(g)) > 0)
+      for (int i = before; i < g->chess.market.suspicion_count; i++)
+        if (g->chess.market.suspicion[i].by >= 0)
+          sr_progress_standing(&g->player.prog, g->chess.market.suspicion[i].by, -10, true);
+  }
   return r;
 }
 
@@ -548,7 +564,7 @@ SrMissionResult sr_game_execute(SrGame *g, int32_t id, SrApproach a) {
   if (res.alarm || res.kills) {
     SrCrime cr;
     memset(&cr, 0, sizeof cr);
-    cr.jurisdiction = (int8_t)sr_heat_jurisdiction(g->city, j->target_building);
+    cr.jurisdiction = (int8_t)sr_game_jurisdiction(g, j->target_building);
     cr.severity = (uint8_t)(res.kills ? 5 : 2);
     cr.witnessed = res.witnessed;
     cr.camera = res.camera;
@@ -605,7 +621,7 @@ void sr_game_fire(SrGame *g) {
   if (reacted > 0 && reported) {
     SrCrime cr;
     memset(&cr, 0, sizeof cr);
-    cr.jurisdiction = (int8_t)g->city->factions.police;
+    cr.jurisdiction = (int8_t)sr_game_police(g);
     cr.severity = 2;
     cr.witnessed = true;
     cr.look = sr_appearance_key(&p->look);

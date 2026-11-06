@@ -685,18 +685,19 @@ static void test_scripts(void) {
   SR_SPEC("platform-runtime", "Headless script passes");
   SR_SPEC("platform-runtime", "Headless script fails");
   char err[512];
-  const char *ok = "seed 99\nnewgame background=medic corps=6\nexpect city.corps == 6\n"
-                   "expect player.level == 1\nset player.cash = 500\nexpect player.cash == 500\n"
-                   "advance 2h\nexpect clock.hour == 23\nadvance 30m\nadvance 90s\nsteps 10\npress jump\n"
-                   "hold sprint 5\nmove 0 1 10\nlook 0.1 5\nrelease sprint\nteleport home\nteleport food\n"
-                   "teleport building 3\neat\nsleep 8\nsleep 1 street\nsleep 1 capsule\nfire\nteleport home\ninteract\n"
-                   "focus 0\nexpect screen == pause\nexpect paused == true\nfocus 1\nexpect screen == play\n"
-                   "save s1\nload s1\nset player.skill.stealth = 7\nexpect player.skill.stealth == 7\n"
-                   "get player.cash\njob offers\njob accept 1\njob execute 1 1\njob report 1\nset hostiles = 0\n"
-                   "set combat = 0\nset player.health = 50\nset player.satiety = 50\nset player.fatigue = 10\n"
-                   "set player.cred = 12\nset player.medevac = 1\nset hardcore = 0\nset crowd = 0\n"
-                   "set pall_removed = 1\nexpect sky.daylight == true\nset clock.time = 100000\n"
-                   "expect clock.time == 100000\nexpect player.x > 0\necho done # comment\n";
+  const char *ok =
+      "seed 99\nnewgame background=medic corps=6\nexpect city.corps == 6\n"
+      "expect player.level == 1\nset player.cash = 500\nexpect player.cash == 500\n"
+      "advance 2h\nexpect clock.hour == 23\nadvance 30m\nadvance 90s\nsteps 10\npress jump\n"
+      "hold sprint 5\nmove 0 1 10\nlook 0.1 5\nrelease sprint\nteleport home\nteleport food\n"
+      "teleport building 3\neat\nsleep 8\nsleep 1 street\nsleep 1 capsule\nfire\nteleport home\ninteract\n"
+      "focus 0\nexpect screen == pause\nexpect paused == true\nfocus 1\nexpect screen == play\n"
+      "save s1\nload s1\nset player.skill.stealth = 7\nexpect player.skill.stealth == 7\n"
+      "get player.cash\njob offers\njob accept first\njob execute first 1\njob report first\nset hostiles = 0\n"
+      "set combat = 0\nset player.health = 50\nset player.satiety = 50\nset player.fatigue = 10\n"
+      "set player.cred = 12\nset player.medevac = 1\nset hardcore = 0\nset crowd = 0\n"
+      "set pall_removed = 1\nexpect sky.daylight == true\nset clock.time = 100000\n"
+      "expect clock.time == 100000\nexpect player.x > 0\necho done # comment\n";
   SR_CHECK_EQ(sr_script_run(ok, "ok.scn", err, sizeof err), 0);
   if (err[0]) printf("  %s\n", err);
   SR_CHECK_EQ(sr_script_run("seed 1\nnewgame\nexpect player.cash == -1\n", "fail.scn", err, sizeof err), 1);

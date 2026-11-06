@@ -219,6 +219,7 @@ typedef struct SrSceneCache {
   SrMesh inst_body, air;
   SrMesh grid, host;
   uint64_t grid_seed;
+  uint32_t turf_version; /* chunks carry gang graffiti: rebuilt when turf changes */
   float inst[SR_MAX_AGENTS * SR_INST_FLOATS];
   uint64_t site_key;
   bool skyline_built;

@@ -103,6 +103,11 @@ typedef enum SrNodeAction {
   SR_NA_BLACKOUT,
   SR_NA_OWN_ALL,
   SR_NA_ENTER_HOST,
+  /* the corporate game */
+  SR_NA_PLANT_STORY,
+  SR_NA_KILL_STORY,
+  SR_NA_TAMPER_VOTE,
+  SR_NA_LEAK_BRIBES,
   SR_NA_COUNT
 } SrNodeAction;
 

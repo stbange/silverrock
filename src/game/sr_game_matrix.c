@@ -39,7 +39,11 @@ const char *sr_node_action_name(SrNodeAction a) {
                                              "Alter account",
                                              "District blackout",
                                              "Take over every device",
-                                             "Enter host"};
+                                             "Enter host",
+                                             "Plant a story",
+                                             "Kill the next story",
+                                             "Alter the vote count",
+                                             "Leak bribery evidence"};
   return (unsigned)a < SR_NA_COUNT ? n[a] : "?";
 }
 
@@ -405,6 +409,8 @@ void sr_game_jack_out(SrGame *g, bool emergency) {
   SrDive *d = &g->dive;
   if (!d->active) return;
   d->active = false;
+  g->chess.story.matrix_depth += d->nodes_hacked;
+  d->nodes_hacked = 0;
   if (d->in_host && d->trace > 0.5f && !d->traced) raise_host_alert(g, d->building, SR_MAX(d->alert, 1));
   if (emergency) {
     g->player.health -= SR_DUMPSHOCK_DAMAGE;
@@ -521,6 +527,7 @@ int sr_game_node_actions(const SrGame *g, int node, SrNodeAction *out) {
       out[n++] = SR_NA_ERASE_WARRANT;
       out[n++] = SR_NA_FORGE_CREDS;
       out[n++] = SR_NA_ALTER_ACCOUNT;
+      n += sr_game_chess_node_actions(g, d->building, out + n);
       break;
     case SR_NODE_POWER:
       out[n++] = SR_NA_LIGHTS_OFF;
@@ -562,6 +569,7 @@ static void download_done(SrGame *g) {
       jb->intel |= SR_INTEL_GUARDS | SR_INTEL_CAMERAS | SR_INTEL_ENTRANCE | SR_INTEL_SECURITY;
   }
   if (!sr_inv_add(&g->player.inv, it)) sr_game_toast(g, "Inventory full: the file is lost.");
+  sr_game_chess_paydata(g, d->building);
   d->download_node = -1;
   d->nodes_hacked++;
 }
@@ -600,7 +608,7 @@ SrResult sr_game_node_act(SrGame *g, int node, SrNodeAction a) {
       sr_game_toast(g, "Logs erased. Nobody will know it was you.");
       break;
     case SR_NA_ERASE_WARRANT: {
-      int pol = g->city->factions.police;
+      int pol = sr_game_police(g);
       g->heat.level[pol] = (int8_t)SR_MAX(0, g->heat.level[pol] - 2);
       int k = 0; /* drop the evidence the police hold */
       for (int i = 0; i < g->heat.evidence_count; i++)
@@ -649,6 +657,10 @@ SrResult sr_game_node_act(SrGame *g, int node, SrNodeAction a) {
     case SR_NA_FALSE_ALARM:
       r = device_action(g, d->building, nd->type == SR_NODE_DEVICE ? nd->device : alarm_device(d), a, sec);
       break;
+    case SR_NA_PLANT_STORY:
+    case SR_NA_KILL_STORY:
+    case SR_NA_TAMPER_VOTE:
+    case SR_NA_LEAK_BRIBES: r = sr_game_chess_node_act(g, d->building, a); break;
     default: r = device_action(g, d->building, nd->device, a, sec); break;
   }
   if (r == SR_OK) {
@@ -733,7 +745,7 @@ static void trace_completed(SrGame *g) {
   d->traced = true;
   SrCrime cr;
   memset(&cr, 0, sizeof cr);
-  cr.jurisdiction = (int8_t)sr_heat_jurisdiction(g->city, d->building);
+  cr.jurisdiction = (int8_t)sr_game_jurisdiction(g, d->building);
   cr.severity = 3;
   cr.camera = true;
   cr.look = sr_appearance_key(&g->player.look);
@@ -874,7 +886,7 @@ void sr_game_net_tick(SrGame *g) {
     if (!tp->logs_erased) { /* the intrusion is attributed */
       SrCrime cr;
       memset(&cr, 0, sizeof cr);
-      cr.jurisdiction = (int8_t)sr_heat_jurisdiction(g->city, tp->building);
+      cr.jurisdiction = (int8_t)sr_game_jurisdiction(g, tp->building);
       cr.severity = 2;
       cr.camera = true;
       cr.evidence_left = true;

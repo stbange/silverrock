@@ -214,6 +214,15 @@ static void hud(SrUi *ui, const SrGame *g, const SrInput *in) {
                sr_corp_color(g->city->factions.f[f].hue));
   }
   sr_ui_rect(ui, cx - 1, m, 2, 9.0f * (float)s, k_white);
+  /* the district's billboards rotate the latest headlines */
+  const char *head = !g->site.active && d >= 0 ? sr_news_billboard(&g->chess.news, d, t) : NULL;
+  if (head) {
+    float hy = m + 11.0f * (float)s;
+    sr_ui_rect(ui, cx - cw / 2, hy - (float)s, cw, 9.0f * (float)s, (SrColor){40, 6, 30, 170});
+    int hs = fit_scale(head, s, cw - 4);
+    text_fit(ui, cx - SR_MIN((float)sr_ui_text_width(head, hs), cw - 4) / 2, hy, head, (SrColor){255, 80, 200, 255}, hs,
+             cw - 4);
+  }
   /* crosshair */
   sr_ui_rect(ui, (float)ui->w / 2 - (float)s, (float)ui->h / 2 - (float)s, 2.0f * (float)s, 2.0f * (float)s, k_white);
   /* context prompt with the interaction's icon */
@@ -413,16 +422,9 @@ static void centered(SrUi *ui, float y, const char *txt, SrColor c, int s) {
   sr_ui_text(ui, (float)ui->w / 2 - (float)sr_ui_text_width(txt, s) / 2, y, txt, c, s);
 }
 
-static void terminal(SrUi *ui, const SrGame *g) {
-  int s = ui->scale;
-  float m = 10.0f * (float)s, line = 10.0f * (float)s;
-  sr_ui_rect(ui, m, m, (float)ui->w - 2 * m, (float)ui->h - 2 * m, (SrColor){4, 14, 8, 235});
-  float x = m + 6.0f * (float)s, y = m + 6.0f * (float)s;
+static void terminal_home(SrUi *ui, const SrGame *g, float x, float y, float line, int s) {
   SrColor green = {80, 255, 120, 255};
   char buf[200];
-  snprintf(buf, sizeof buf, "TERMINAL // %s // %s", g->player.name, g->city->name);
-  sr_ui_text(ui, x, y, buf, green, s);
-  y += line * 1.5f;
   snprintf(buf, sizeof buf, "RENT %d DUE %s%s", g->player.rent, "SUN 23:59", g->player.evicted ? "  EVICTED" : "");
   sr_ui_text(ui, x, y, buf, g->player.evicted ? k_red : green, s);
   y += line;
@@ -434,7 +436,7 @@ static void terminal(SrUi *ui, const SrGame *g) {
   y += line;
   for (int i = g->player.msg_count - 1; i >= 0 && y < (float)ui->h * 0.6f; i--) {
     snprintf(buf, sizeof buf, "%s: %s", g->player.msgs[i].from, g->player.msgs[i].text);
-    buf[(ui->w - 2 * (int)x) / (6 * s)] = '\0';
+    buf[SR_CLAMP((ui->w - 2 * (int)x) / (6 * s), 1, 199)] = '\0';
     sr_ui_text(ui, x, y, buf, green, s);
     y += line;
   }
@@ -448,8 +450,124 @@ static void terminal(SrUi *ui, const SrGame *g) {
     sr_ui_text(ui, x, y, buf, green, s);
     y += line;
   }
-  sr_ui_text(ui, x, (float)ui->h - m - line,
-             g->site.active && g->site.in.apartment ? "[E] APARTMENTS  [ESC] CLOSE" : "[ESC] CLOSE", green, s);
+}
+
+static void terminal_news(SrUi *ui, const SrGame *g, float x, float y, float line, int s) {
+  char buf[160];
+  int n = sr_news_size(&g->chess.news);
+  if (n == 0) sr_ui_text(ui, x, y, "NO NEWS YET. THE CITY HOLDS ITS BREATH.", k_white, s);
+  for (int i = 0; i < n && y < (float)ui->h - 3 * line; i++) {
+    const SrNews *it = sr_news_latest(&g->chess.news, i);
+    const char *outlet = it->outlet >= 0 ? g->city->factions.f[it->outlet].name : "Pirate feed";
+    snprintf(buf, sizeof buf, "D%lld %s: %s", (long long)(it->time / 86400), outlet, it->headline);
+    text_fit(ui, x, y, buf, it->scandal ? k_red : k_white, s, (float)ui->w - 2 * x);
+    y += line;
+  }
+}
+
+static void terminal_market(SrUi *ui, const SrGame *g, float x, float y, float line, int s) {
+  char buf[160];
+  const SrMarket *m = &g->chess.market;
+  snprintf(buf, sizeof buf, "CRED %lld   PORTFOLIO %lld", (long long)g->player.cred,
+           (long long)sr_market_portfolio(m, g->city));
+  sr_ui_text(ui, x, y, buf, k_amber, s);
+  y += line * 1.5f;
+  for (int f = 0; f < g->city->factions.corp_count && y < (float)ui->h - 3 * line; f++) {
+    snprintf(buf, sizeof buf, "%s %-28s %5d  HELD %d", f == g->term_sel ? ">" : " ", g->city->factions.f[f].name,
+             m->price[f], m->shares[f]);
+    text_fit(ui, x, y, buf, f == g->term_sel ? k_cyan : k_white, s, (float)ui->w - 2 * x);
+    y += line;
+  }
+}
+
+static void terminal_board(SrUi *ui, const SrGame *g, float x, float y, float line, int s) {
+  static const char *const verb[SR_LINK_COUNT] = {"funds", "owns", "bribes seat", "feuds with"};
+  char buf[160];
+  const SrChess *ch = &g->chess;
+  int known = 0;
+  for (int i = 0; i < ch->link_count && y < (float)ui->h - 3 * line; i++) {
+    const SrLink *l = &ch->links[i];
+    if (!l->known) continue;
+    known++;
+    if (l->type == SR_LINK_BRIBES)
+      snprintf(buf, sizeof buf, "%s %s %d (%s)", g->city->factions.f[l->a].name, verb[l->type], l->b + 1,
+               ch->pol.seats[l->b].name);
+    else
+      snprintf(buf, sizeof buf, "%s %s %s", g->city->factions.f[l->a].name, verb[l->type],
+               g->city->factions.f[l->b].name);
+    text_fit(ui, x, y, buf, k_white, s, (float)ui->w - 2 * x);
+    y += line;
+  }
+  if (known == 0) sr_ui_text(ui, x, y, "NOTHING KNOWN. STEAL FILES TO MAP THE BOARD.", k_white, s);
+  y += line;
+  int leader = 0;
+  float dom = sr_chess_dominance(ch, g->city, &leader);
+  snprintf(buf, sizeof buf, "LEADING: %s (%d%%)", g->city->factions.f[leader].name, (int)(dom * 100.0f));
+  sr_ui_text(ui, x, y, buf, k_amber, s);
+}
+
+static void terminal_story(SrUi *ui, const SrGame *g, float x, float y, float line, int s) {
+  static const char *const acts[] = {"PROLOGUE", "ACT I: PAWN", "ACT II: KNIGHT", "ACT III: PROMOTION", "EPILOGUE"};
+  char buf[160];
+  const SrStory *st = &g->chess.story;
+  sr_ui_text(ui, x, y, acts[SR_MIN(st->act, 4)], k_amber, s);
+  y += line;
+  if (st->retainer && st->patron >= 0) {
+    snprintf(buf, sizeof buf, "PATRON %s  HANDLER %s  TRUST %d", g->city->factions.f[st->patron].name,
+             st->cast[SR_CAST_HANDLER].name, st->trust);
+    text_fit(ui, x, y, buf, k_white, s, (float)ui->w - 2 * x);
+    y += line;
+  }
+  if (st->hostile >= 0) {
+    snprintf(buf, sizeof buf, "HUNTED BY %s", g->city->factions.f[st->hostile].name);
+    sr_ui_text(ui, x, y, buf, k_red, s);
+    y += line;
+  }
+  if (st->ending != SR_END_NONE) {
+    snprintf(buf, sizeof buf, "ENDING: %s. THE CITY GOES ON.", sr_ending_name((SrEnding)st->ending));
+    sr_ui_text(ui, x, y, buf, k_cyan, s);
+    y += line;
+  }
+  y += line * 0.5f;
+  int kind = 0;
+  for (int i = 0; sr_game_story_option(g, i, &kind) && y < (float)ui->h - 3 * line; i++) {
+    snprintf(buf, sizeof buf, "%s %s", i == g->term_sel ? ">" : " ", sr_game_story_option(g, i, &kind));
+    text_fit(ui, x, y, buf, i == g->term_sel ? k_cyan : k_white, s, (float)ui->w - 2 * x);
+    y += line;
+  }
+}
+
+static void terminal(SrUi *ui, const SrGame *g) {
+  static const char *const tabs[SR_TAB_COUNT] = {"HOME", "NEWS", "MARKET", "BOARD", "STORY"};
+  int s = ui->scale;
+  float m = 10.0f * (float)s, line = 10.0f * (float)s;
+  sr_ui_rect(ui, m, m, (float)ui->w - 2 * m, (float)ui->h - 2 * m, (SrColor){4, 14, 8, 235});
+  float x = m + 6.0f * (float)s, y = m + 6.0f * (float)s;
+  SrColor green = {80, 255, 120, 255};
+  char buf[200];
+  snprintf(buf, sizeof buf, "TERMINAL // %s // %s", g->player.name, g->city->name);
+  text_fit(ui, x, y, buf, green, s, (float)ui->w - 2 * x);
+  y += line * 1.3f;
+  float tx = x;
+  for (int t = 0; t < SR_TAB_COUNT; t++) {
+    snprintf(buf, sizeof buf, t == g->term_tab ? "[%s]" : " %s ", tabs[t]);
+    sr_ui_text(ui, tx, y, buf, t == g->term_tab ? k_amber : green, s);
+    tx += (float)sr_ui_text_width(buf, s) + 4.0f * (float)s;
+  }
+  y += line * 1.5f;
+  switch ((SrTermTab)g->term_tab) {
+    case SR_TAB_NEWS: terminal_news(ui, g, x, y, line, s); break;
+    case SR_TAB_MARKET: terminal_market(ui, g, x, y, line, s); break;
+    case SR_TAB_BOARD: terminal_board(ui, g, x, y, line, s); break;
+    case SR_TAB_STORY: terminal_story(ui, g, x, y, line, s); break;
+    default: terminal_home(ui, g, x, y, line, s); break;
+  }
+  const char *hint = g->term_tab == SR_TAB_MARKET  ? "LEFT/RIGHT TABS  [E] BUY 10  [R] SELL 10  [ESC] CLOSE"
+                     : g->term_tab == SR_TAB_STORY ? "LEFT/RIGHT TABS  UP/DOWN CHOOSE  [E] CONFIRM  [ESC] CLOSE"
+                     : g->term_tab == SR_TAB_HOME && g->site.active && g->site.in.apartment
+                         ? "LEFT/RIGHT TABS  [E] APARTMENTS  [ESC] CLOSE"
+                         : "LEFT/RIGHT TABS  [ESC] CLOSE";
+  text_fit(ui, x, (float)ui->h - m - line, hint, green, s, (float)ui->w - 2 * x);
 }
 
 static void touch_overlay(SrUi *ui, const SrGame *g, const SrInput *in) {
