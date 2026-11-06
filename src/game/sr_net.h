@@ -20,7 +20,8 @@
 #define SR_CAMERA_CHECK_S    20.0f /* a disabled camera draws a guard after this delay */
 
 /* Extra device delta bits for Matrix control (doors and cameras also use SR_DV_*). */
-enum { SR_DV_LOOPED = 4, SR_DV_FOF = 8 };
+#define SR_DV_LOOPED 4
+#define SR_DV_FOF    8
 /* Elevator floors are kept under their own delta id. */
 uint32_t sr_net_elevator_id(uint32_t device_id);
 

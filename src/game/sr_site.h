@@ -34,8 +34,10 @@ void sr_deltas_set(SrDeltas *d, uint32_t id, uint8_t value);
 int sr_deltas_get(const SrDeltas *d, uint32_t id); /* -1 if unset */
 
 /* Delta ids and values for interiors. Devices use their stable device id. */
-enum { SR_DV_UNLOCKED = 1, SR_DV_DISABLED = 2 };
-enum { SR_GV_KO = 1, SR_GV_DEAD = 2 };
+#define SR_DV_UNLOCKED 1
+#define SR_DV_DISABLED 2
+#define SR_GV_KO       1
+#define SR_GV_DEAD     2
 uint32_t sr_site_guard_id(int building, int k);
 uint32_t sr_site_objective_id(int32_t job);
 
