@@ -278,6 +278,7 @@ static void test_consequences(void) {
   sr_chess_advance(w.ch, w.c, w.pop, &w.log, 100 + SR_GANG_REBIRTH_S + SR_WEEK_S * 3);
   SR_CHECK(w.ch->f[g1].generation >= 1); /* reborn (and maybe already in trouble again) */
   SR_CHECK(strcmp(old_name, w.c->factions.f[g1].name) != 0);
+  SR_CHECK(sr_faction_name_free(&w.c->factions, w.c->factions.f[g1].name, g1)); /* reads unlike the others */
   SR_CHECK(w.ch->f[g1].dissolved || w.c->factions.f[g1].turf != 0);
   sr_chess_apply_changes(w.ch, fresh); /* the new gang's identity survives a reload */
   SR_CHECK_STR(fresh->factions.f[g1].name, w.c->factions.f[g1].name);

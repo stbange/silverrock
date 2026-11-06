@@ -228,7 +228,7 @@ void sr_chess_apply_changes(const SrChess *ch, SrCity *c) {
   for (int g = c->factions.gang_first; g < c->factions.gang_first + c->factions.gang_count; g++) {
     const SrFactionSim *s = &ch->f[g];
     if (s->generation > 0) {
-      sr_name_gang(ch->seed, (uint64_t)g * 131u + s->generation, c->factions.f[g].name, sizeof c->factions.f[g].name);
+      snprintf(c->factions.f[g].name, sizeof c->factions.f[g].name, "%s", s->name);
       c->factions.f[g].hue = (uint8_t)((c->factions.f[g].hue + 7u * s->generation) % 24u);
     }
   }
@@ -647,7 +647,12 @@ static void gang_rebirth(SrChess *ch, SrCity *c, SrEventLog *log, int64_t now) {
     }
     s->dissolved = false;
     s->generation++;
-    sr_name_gang(ch->seed, (uint64_t)g * 131u + s->generation, fa->name, sizeof fa->name);
+    /* a new name that reads unlike every other corp and gang in town */
+    for (uint64_t salt = 0;; salt++) {
+      sr_name_gang(ch->seed, ((uint64_t)g * 131u + s->generation) * 64u + salt, s->name, sizeof s->name);
+      if (sr_faction_name_free(&c->factions, s->name, g) || salt > 400) break;
+    }
+    snprintf(fa->name, sizeof fa->name, "%s", s->name);
     fa->hue = (uint8_t)((fa->hue + 7u) % 24u);
     fa->turf = (uint16_t)(1u << pick);
     for (int k = 0; k < SR_RES_COUNT; k++) s->res[k] = base_level(c, g, (SrResource)k);

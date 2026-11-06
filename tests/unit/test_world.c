@@ -56,7 +56,7 @@ static void test_deterministic(void) {
   SrCity *a = sr_city_create(7, NULL), *b = sr_city_create(7, NULL);
   SR_CHECK(sr_city_digest(a) == sr_city_digest(b));
   /* Golden digest: identical on Linux, Windows and Web (unit tests run on all three). */
-  SR_CHECK(sr_city_digest(a) == 0xa62de72a404483c9ull);
+  SR_CHECK(sr_city_digest(a) == 0xf792e7129792887dull); /* faction names never read alike (M5 follow-up) */
   sr_city_destroy(a);
   sr_city_destroy(b);
 }
@@ -171,6 +171,35 @@ static void test_names(void) {
   SR_CHECK_STR(sr_sector_name(SR_SEC_COUNT), "?");
   SR_CHECK_STR(sr_doctrine_name(SR_DOC_SHARK), "Shark");
   SR_CHECK_STR(sr_doctrine_name(SR_DOC_COUNT), "?");
+}
+
+static void test_distinct_faction_names(void) {
+  /* names that read alike: a shared word or the same first five letters */
+  SR_CHECK(sr_name_similar("Umbra Systems", "Umbra Cybernetics"));
+  SR_CHECK(sr_name_similar("Hollow Hands", "Hollow Knives"));
+  SR_CHECK(sr_name_similar("Castellan-Adeyemi", "Castellan-Calloway"));
+  SR_CHECK(sr_name_similar("Mbeki-Whitlock", "Whitlock Dynamics"));
+  SR_CHECK(sr_name_similar("Castellane Group", "Castellan-Xu"));
+  SR_CHECK(sr_name_similar("umbra systems", "UMBRA Works"));
+  SR_CHECK(!sr_name_similar("Umbra Systems", "Vantor Orbital"));
+  SR_CHECK(!sr_name_similar("Iron Vipers", "Glass Wolves"));
+  SR_CHECK(!sr_name_similar("Channel 21 Pulse", "Free Signal 21")); /* numbers do not count */
+  SR_CHECK(!sr_name_similar("", "Glass Wolves"));
+  /* no two corps or gangs of a city read alike */
+  int clashes = 0;
+  for (uint64_t seed = 1; seed <= 300; seed++) {
+    SrCity *c = sr_city_create(seed, NULL);
+    const SrFactions *fs = &c->factions;
+    for (int a = 0; a < fs->count; a++)
+      for (int b = 0; b < a; b++) {
+        bool named = (fs->f[a].kind == SR_FK_CORP || fs->f[a].kind == SR_FK_GANG) &&
+                     (fs->f[b].kind == SR_FK_CORP || fs->f[b].kind == SR_FK_GANG);
+        if (named && sr_name_similar(fs->f[a].name, fs->f[b].name)) clashes++;
+      }
+    for (int f = 0; f < fs->corp_count; f++) SR_CHECK(sr_faction_name_free(fs, fs->f[f].name, f));
+    sr_city_destroy(c);
+  }
+  SR_CHECK_EQ(clashes, 0);
 }
 
 static void test_reroll(void) {
@@ -390,6 +419,7 @@ void suite_world(void) {
   SR_RUN(test_options_and_large);
   SR_RUN(test_landmarks_and_layers);
   SR_RUN(test_names);
+  SR_RUN(test_distinct_faction_names);
   SR_RUN(test_reroll);
   SR_RUN(test_validate_detects);
   SR_RUN(test_queries);

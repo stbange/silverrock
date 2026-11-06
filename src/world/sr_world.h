@@ -269,6 +269,11 @@ void sr_name_city(uint64_t seed, char *out, size_t cap);
 void sr_name_business(uint64_t seed, uint64_t id, SrPoi poi, char *out, size_t cap);
 void sr_name_blackops(uint64_t seed, uint64_t id, char *out, size_t cap);
 bool sr_name_blocked(const char *name);
+/* Two names read alike: they share a word or start with the same five letters. */
+bool sr_name_similar(const char *a, const char *b);
+/* A faction name that reads unlike every corp and gang of the city except `self` (gangs that
+ * reappear use it too). */
+bool sr_faction_name_free(const SrFactions *fs, const char *name, int self);
 
 /* Seed codes: 13 base32 symbols carry the 64-bit seed, 2 symbols carry a checksum. */
 #define SR_SEED_CODE_LEN 18 /* "XXXXX-XXXXX-XXXXX" + NUL */

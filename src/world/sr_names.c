@@ -179,6 +179,40 @@ void sr_name_city(uint64_t seed, char *out, size_t cap) {
   })
 }
 
+/* Splits a name into lower-case words (spaces and hyphens separate them). */
+static int words_of(const char *name, char w[6][24]) {
+  int n = 0, len = 0;
+  for (const char *p = name;; p++) {
+    bool sep = *p == ' ' || *p == '-' || *p == '\0';
+    if (!sep && len < 23) {
+      char ch = *p;
+      w[n][len++] = (char)(ch >= 'A' && ch <= 'Z' ? ch - 'A' + 'a' : ch);
+    }
+    if (sep && len > 0) {
+      w[n][len] = '\0';
+      len = 0;
+      if (++n == 6) break;
+    }
+    if (*p == '\0') break;
+  }
+  return n;
+}
+
+static bool numeric(const char *w) { return w[0] >= '0' && w[0] <= '9'; }
+
+bool sr_name_similar(const char *a, const char *b) {
+  char wa[6][24], wb[6][24];
+  int na = words_of(a, wa), nb = words_of(b, wb);
+  for (int i = 0; i < na; i++)
+    for (int j = 0; j < nb; j++) {
+      if (numeric(wa[i]) || numeric(wb[j])) continue;
+      if (strcmp(wa[i], wb[j]) == 0) return true;
+      /* Umbra / Umbral, Castellan / Castellane: the same first five letters read alike */
+      if (strlen(wa[i]) >= 5 && strlen(wb[j]) >= 5 && strncmp(wa[i], wb[j], 5) == 0) return true;
+    }
+  return false;
+}
+
 void sr_name_blackops(uint64_t seed, uint64_t id, char *out, size_t cap) {
   GEN_LOOP("name.blackops", snprintf(out, cap, "%s", PICK(&r, k_blackops)))
 }

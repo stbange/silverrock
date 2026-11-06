@@ -35,9 +35,10 @@ k·104729), read for coherence. The nightly workflow writes the same histories t
    always starts at the 12-week Act II limit. Dominance can still be reached through the player's
    takeovers, and it is tested with a forced board. Revisit in playtests: either make takeovers
    raise a corp's long-run capital, or scale the threshold with the number of corps.
-2. **Similar faction names in one city.** Examples: "Umbra Systems" next to "Umbra Cybernetics",
-   and "Hollow Hands" next to "Hollow Knives". This comes from the M1 name generator; a follow-up
-   should reject shared first words within a city.
+2. **Similar faction names in one city: fixed.** The M1 name generator could produce names like
+   "Umbra Systems" next to "Umbra Cybernetics", or "Hollow Hands" next to "Hollow Knives". City
+   generation and gang rebirth now re-roll any corp or gang name that shares a word, or the same
+   first five letters, with another one (`sr_name_similar`). Unit tests check this over 300 seeds.
 3. **Bribes are frequent.** There are about 20 a year per city, so councillors change hands
    often. It is coherent with Spider doctrines but may feel busy on the Board. Watch in playtests.
 

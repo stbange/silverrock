@@ -5,6 +5,15 @@
 #include <stdio.h>
 #include <string.h>
 
+bool sr_faction_name_free(const SrFactions *fs, const char *name, int self) {
+  for (int j = 0; j < fs->count; j++) {
+    SrFactionKind k = fs->f[j].kind;
+    if (j == self || (k != SR_FK_CORP && k != SR_FK_GANG) || !fs->f[j].name[0]) continue;
+    if (sr_name_similar(fs->f[j].name, name)) return false;
+  }
+  return true;
+}
+
 const char *sr_sector_name(SrSector s) {
   static const char *const n[SR_SEC_COUNT] = {
       "Arms & Security",     "Cyberware", "Biotech & Synthfood",   "Media & Entertainment",      "AI & Netware",
@@ -96,10 +105,9 @@ void sr_factions_generate(SrCity *c, uint64_t seed) {
     for (uint64_t salt = 0;; salt++) {
       sr_name_corp(seed, (uint64_t)k * 100u + salt, fa->name, sizeof fa->name);
       sr_name_blackops(seed, (uint64_t)k * 100u + salt, fa->blackops, sizeof fa->blackops);
-      bool dup = false;
-      for (int j = 0; j < k; j++)
-        dup |= strcmp(fs->f[j].name, fa->name) == 0 || strcmp(fs->f[j].blackops, fa->blackops) == 0;
-      if (!dup || salt > 200) break;
+      bool dup = !sr_faction_name_free(fs, fa->name, f);
+      for (int j = 0; j < k; j++) dup |= strcmp(fs->f[j].blackops, fa->blackops) == 0;
+      if (!dup || salt > 400) break;
     }
     fa->sector1 = (uint8_t)sectors[k];
     fa->sector2 = (uint8_t)sectors[(k + 1 + sr_rng_range(&r, 0, 3)) % SR_SEC_COUNT];
@@ -156,9 +164,7 @@ void sr_factions_generate(SrCity *c, uint64_t seed) {
     SrFaction *fa = &fs->f[f];
     for (uint64_t salt = 0;; salt++) {
       sr_name_gang(seed, (uint64_t)g * 100u + salt, fa->name, sizeof fa->name);
-      bool dup = false;
-      for (int j = fs->gang_first; j < f; j++) dup |= strcmp(fs->f[j].name, fa->name) == 0;
-      if (!dup || salt > 200) break;
+      if (sr_faction_name_free(fs, fa->name, f) || salt > 400) break;
     }
     fa->theme = (uint8_t)sr_rng_range(&r, 0, 5);
     fa->hue = (uint8_t)sr_rng_range(&r, 0, 23);
