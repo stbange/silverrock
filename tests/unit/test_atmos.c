@@ -606,7 +606,7 @@ static void test_street_dressing(void) {
   int blk = c->buildings[c->home_building].block;
   SrMesh m;
   sr_mesh_init(&m);
-  sr_build_block_props(c, blk, 2, &m);
+  sr_build_block_props(c, blk, 2, NULL, &m);
   int vertical = 0, crosswalks = 0;
   SrAtlasCell cw = sr_atlas_cell(SR_LAYER_DECALS, SR_DECAL_CROSSWALK);
   for (int q = 0; q + 3 < m.nv; q += 4) {
@@ -617,9 +617,9 @@ static void test_street_dressing(void) {
   SR_CHECK(vertical >= 4);
   SR_CHECK(crosswalks >= 16); /* four tiles on each of the four sides */
   int full = m.nv;
-  sr_build_block_props(c, blk, 0, &m);
+  sr_build_block_props(c, blk, 0, NULL, &m);
   SR_CHECK(m.nv < full); /* low detail drops props */
-  sr_build_block_props(c, -1, 2, &m);
+  sr_build_block_props(c, -1, 2, NULL, &m);
   SR_CHECK_EQ(m.nv, 0);
   sr_mesh_free(&m);
 }
@@ -716,6 +716,120 @@ static void test_props_collide_and_shops(void) {
   sr_mesh_free(&m);
 }
 
+static int count_font_quads(const SrMesh *m, float min_h) {
+  int n = 0;
+  for (int q = 0; q + 3 < m->nv; q += 4)
+    if (m->v[q].layer == SR_LAYER_FONT && fabsf(m->v[q + 2].y - m->v[q].y) >= min_h) n++;
+  return n;
+}
+
+static void test_signs_and_adverts(void) {
+  SR_SPEC("retro-rendering", "Shop name readable");
+  SR_SPEC("news-media", "Adverts for the city's corporations");
+  SR_SPEC("news-media", "Scandal vandalises adverts");
+  SR_SPEC("news-media", "Winners multiply");
+  SR_SPEC("news-media", "Ticker shows the news");
+  SR_SPEC("news-media", "Wanted posters");
+  SrGame *g = g_game;
+  const SrCity *c = g->city;
+  SrMesh m;
+  sr_mesh_init(&m);
+  /* shop names: glyphs at least 0.26 m tall (5 px at 10 m at 270 lines) */
+  int shop = -1;
+  for (int bi = 0; bi < c->building_count && shop < 0; bi++)
+    if (c->buildings[bi].poi == SR_POI_GUNSHOP || c->buildings[bi].poi == SR_POI_BAR) shop = bi;
+  SR_CHECK(shop >= 0);
+  sr_build_shop_name(&m, &c->buildings[shop], (SrColor){255, 0, 128, 255}, true);
+  SR_CHECK(count_font_quads(&m, 0.26f) >= 3);
+  SR_CHECK(sr_projected_pixels(0.3f, 10.0f, 70.0f * SR_PI / 180.0f, 270) >= 5.0f);
+  /* billboards: an existing corp's colour and a product name */
+  int slot_blk = -1;
+  SrBillboardSlot slots[SR_MAX_BLOCK_SLOTS];
+  int ns = 0;
+  for (int b = 0; b < c->grid * c->grid && slot_blk < 0; b++) {
+    ns = sr_billboard_slots(c, b, slots, SR_MAX_BLOCK_SLOTS);
+    for (int i = 0; i < ns && slot_blk < 0; i++)
+      if (!slots[i].empty) slot_blk = b;
+  }
+  SR_CHECK(slot_blk >= 0);
+  SrAdContext ctx;
+  sr_ads_context(&ctx, &g->chess, c, sr_game_time(g));
+  int filled = -1;
+  for (int i = 0; i < ns; i++)
+    if (!slots[i].empty) filled = i;
+  SrAd ad = sr_ad_for_slot(&ctx, &slots[filled], c->blocks[slot_blk].district);
+  SR_CHECK(!ad.empty && ad.corp >= 0 && ad.corp < c->factions.corp_count);
+  sr_mesh_clear(&m);
+  sr_build_billboard(&m, c, &slots[filled], ad);
+  SrColor corp = sr_corp_color(c->factions.f[ad.corp].hue);
+  bool tinted = false;
+  for (int v = 0; v < m.nv; v++) tinted = tinted || (m.v[v].r == corp.r && m.v[v].g == corp.g && m.v[v].b == corp.b);
+  SR_CHECK(tinted);
+  SR_CHECK(count_font_quads(&m, 0.1f) >= 5);
+  char name[24];
+  sr_product_name(c, ad.corp, slots[filled].seed, name, sizeof name);
+  SR_CHECK(strlen(name) >= 5);
+  /* scandal: about half of the corp's billboards vandalised for 7 days */
+  int64_t now = sr_game_time(g);
+  int target = ad.corp, total = 0, vandal = 0;
+  SrChess *ch = &g->chess;
+  SrNewsDesk saved = ch->news;
+  SrNews *it = &ch->news.items[ch->news.count % SR_MAX_NEWS];
+  memset(it, 0, sizeof *it);
+  it->time = now - 86400;
+  it->subject = (int8_t)target;
+  it->scandal = true;
+  ch->news.count++;
+  sr_ads_context(&ctx, ch, c, now);
+  SR_CHECK(ctx.scandal_mask & (1u << target));
+  for (uint32_t seed = 0; seed < 400; seed++) {
+    SrBillboardSlot s = slots[filled];
+    s.seed = seed * (uint32_t)c->factions.corp_count + (uint32_t)target; /* slots of the target corp */
+    SrAd a2 = sr_ad_for_slot(&ctx, &s, -1);
+    if (a2.corp != target) continue;
+    total++;
+    vandal += a2.vandal;
+  }
+  SR_CHECK(total > 100 && vandal > total / 3 && vandal < total * 2 / 3);
+  sr_ads_context(&ctx, ch, c, now + 8 * 86400); /* a week later: clean again */
+  SR_CHECK(!(ctx.scandal_mask & (1u << target)));
+  ch->news = saved;
+  /* a dominant corp fills the empty slots */
+  sr_ads_context(&ctx, ch, c, now);
+  SrBillboardSlot empty = slots[filled];
+  empty.empty = 1;
+  ctx.leader = -1;
+  SR_CHECK(sr_ad_for_slot(&ctx, &empty, -1).empty);
+  ctx.leader = 0;
+  SrAd won = sr_ad_for_slot(&ctx, &empty, -1);
+  SR_CHECK(!won.empty && won.corp == 0);
+  /* tickers scroll the latest headline */
+  sr_mesh_clear(&m);
+  int tickers = 0;
+  SrVec3 at = sr_v3(0, 0, 0);
+  for (int s = 0; s < c->station_count && tickers == 0; s++) {
+    int32_t ox, oy;
+    sr_city_block_origin(c->stations[s].block, c->grid, &ox, &oy);
+    at = sr_v3((float)ox / 100.0f + 4.0f, 1.7f, (float)oy / 100.0f + 10.0f);
+    tickers = sr_build_tickers(c, "RAIN FOREVER", at, 0.0f, &m);
+  }
+  SR_CHECK(tickers > 0);
+  int glyphs_a = count_font_quads(&m, 0.1f);
+  uint64_t da = sr_mesh_digest(&m);
+  sr_mesh_clear(&m);
+  sr_build_tickers(c, "CORP WAR IN THE DOCKS", at, 0.0f, &m);
+  SR_CHECK(glyphs_a > 5 && sr_mesh_digest(&m) != da); /* a new headline shows at once */
+  /* wanted posters at Heat 3 in the home district, gone below */
+  int home_d = c->blocks[c->buildings[c->home_building].block].district;
+  sr_game_teleport_building(g, c->home_building);
+  sr_mesh_clear(&m);
+  SR_CHECK_EQ(sr_build_wanted(c, home_d, 2, (SrColor){200, 40, 40, 255}, g->player.pos, &m), 0);
+  int posters = sr_build_wanted(c, home_d, 3, (SrColor){200, 40, 40, 255}, g->player.pos, &m);
+  SR_CHECK(posters > 0 && m.nv == posters * 4);
+  SR_CHECK(m.v[0].r == 200 && m.v[0].g == 40); /* in the player's outfit colour */
+  sr_mesh_free(&m);
+}
+
 void suite_atmos(void) {
   g_game = sr_game_create();
   sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Atmos");
@@ -731,5 +845,6 @@ void suite_atmos(void) {
   SR_RUN(test_shapes_and_roofs);
   SR_RUN(test_street_dressing);
   SR_RUN(test_props_collide_and_shops);
+  SR_RUN(test_signs_and_adverts);
   sr_game_destroy(g_game);
 }

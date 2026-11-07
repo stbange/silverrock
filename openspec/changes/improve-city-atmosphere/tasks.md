@@ -62,13 +62,13 @@ alone refers to a scenario in this change's deltas, and "D1"…"D18" refer to de
 
 ## 7. Signs and adverts (about 1 week)
 
-- [ ] 7.1 Shop names in the bitmap font on a dark plate under the icon (spec: "Sign legibility", "Shop name readable")
-- [ ] 7.2 Neon script of 64 procedural glyphs; blade signs on corners in Commercial, Entertainment and the Old Quarter
-- [ ] 7.3 Billboard slots (roofs, side walls, highways) with product adverts in eight layouts drawn into the billboard atlas (spec: "Adverts for the city's corporations")
-- [ ] 7.4 `chess.ads_version`; scandal vandalises, dominance takes empty slots, a lost takeover loses slots (spec: "Scandal vandalises adverts", "Winners multiply")
-- [ ] 7.5 Holo-ads in the glow pass over plazas
-- [ ] 7.6 LED tickers with the latest headline on media buildings and metro entrances (spec: "Ticker shows the news")
-- [ ] 7.7 Broken neon (8 %, more in poor districts); posters; wanted posters at Heat 3 or more (spec: "Wanted posters")
+- [x] 7.1 Shop names in the bitmap font on a dark plate under the icon (spec: "Sign legibility", "Shop name readable")
+- [x] 7.2 Neon script of 64 procedural glyphs; blade signs on corners in Commercial, Entertainment and the Old Quarter
+- [x] 7.3 Billboard slots (roofs, side walls, highways) with product adverts in eight layouts drawn into the billboard atlas (spec: "Adverts for the city's corporations")
+- [x] 7.4 `chess.ads_version`; scandal vandalises, dominance takes empty slots, a lost takeover loses slots (spec: "Scandal vandalises adverts", "Winners multiply")
+- [x] 7.5 Holo-ads in the glow pass over plazas
+- [x] 7.6 LED tickers with the latest headline on media buildings and metro entrances (spec: "Ticker shows the news")
+- [x] 7.7 Broken neon (8 %, more in poor districts); posters; wanted posters at Heat 3 or more (spec: "Wanted posters")
 
 ## 8. Sky details (about 3–4 days)
 

@@ -228,18 +228,21 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
       sr_mesh_quad(m, sr_v3(cx - 1.0f, 3.3f, bz1 + 0.2f), sr_v3(cx + 1.0f, 3.3f, bz1 + 0.2f),
                    sr_v3(cx + 1.0f, 5.3f, bz1 + 0.2f), sr_v3(cx - 1.0f, 5.3f, bz1 + 0.2f), ic.u0, ic.v1, ic.u1, ic.v0,
                    neon, ic.layer, em, 0);
+      sr_build_shop_name(m, bd, neon, open != 0);
       /* awning: shelter from the rain */
       sr_mesh_quad(m, sr_v3(cx - w - 1, 3.0f, bz1 + 2.0f), sr_v3(cx + w + 1, 3.0f, bz1 + 2.0f),
                    sr_v3(cx + w + 1, 3.0f, bz1), sr_v3(cx - w - 1, 3.0f, bz1), 0, 0, 1, 1, shade(neon, 40),
                    SR_LAYER_WHITE, 0, 0);
     }
-    /* gang tags on the walls of their turf */
+    sr_build_blade_signs(c, bi, m);
+    /* gang tags on the walls of their turf: each gang's own mark in its colour */
     if (gang >= 0 && bd->poi != SR_POI_CORP_HQ && bd->poi != SR_POI_CORP_FACILITY && bd->id % 3 == 0) {
       SrColor tag = sr_corp_color(c->factions.f[gang].hue);
+      SrAtlasCell tc = sr_atlas_cell(SR_LAYER_DECALS, SR_DECAL_TAG + (gang - c->factions.gang_first) % 6);
       float gx = bx0 + (bx1 - bx0) * (0.15f + 0.1f * (float)(bd->id % 4)), gw = 1.6f + 0.3f * (float)(bd->id % 3);
       sr_mesh_quad(m, sr_v3(gx, 0.6f, bz1 + 0.05f), sr_v3(gx + gw, 0.6f, bz1 + 0.05f),
-                   sr_v3(gx + gw, 2.0f, bz1 + 0.05f), sr_v3(gx, 2.0f, bz1 + 0.05f), 0, 1, 1, 0, tag, SR_LAYER_SIGN, 70,
-                   0);
+                   sr_v3(gx + gw, 2.0f, bz1 + 0.05f), sr_v3(gx, 2.0f, bz1 + 0.05f), tc.u0, tc.v1, tc.u1, tc.v0, tag,
+                   tc.layer, 70, 0);
     }
   }
 }
@@ -295,6 +298,15 @@ SrChunk *sr_chunk_get(SrChunkCache *cc, const SrCity *c, const SrDeltas *d, int 
 }
 
 /* ---- characters ------------------------------------------------------------------------------- */
+
+SrColor sr_outfit_color(const SrAppearance *a) {
+  static const SrColor base[16] = {
+      {30, 30, 34, 255},   {200, 200, 205, 255}, {150, 30, 40, 255},  {40, 60, 140, 255},
+      {40, 110, 60, 255},  {200, 160, 40, 255},  {120, 40, 140, 255}, {40, 140, 150, 255},
+      {170, 90, 40, 255},  {90, 90, 100, 255},   {220, 60, 150, 255}, {60, 200, 220, 255},
+      {130, 200, 60, 255}, {240, 120, 40, 255},  {100, 60, 40, 255},  {170, 170, 120, 255}};
+  return base[a->outfit_color % 16];
+}
 
 static SrColor palette16(int i, int sat) {
   static const SrColor k[16] = {{40, 40, 46, 255},    {200, 200, 205, 255}, {150, 30, 40, 255},  {30, 60, 140, 255},
@@ -552,7 +564,7 @@ SrMesh *sr_scene_street(SrSceneCache *s, const SrCity *c, int block) {
   s->street[oldest].block = block;
   s->street[oldest].detail = s->street_detail;
   s->street[oldest].used = s->street_tick;
-  sr_build_block_props(c, block, s->street_detail, &s->street[oldest].mesh);
+  sr_build_block_props(c, block, s->street_detail, &s->ads, &s->street[oldest].mesh);
   return &s->street[oldest].mesh;
 }
 
@@ -898,9 +910,11 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
     }
   }
   /* the street around the camera: kerbs, markings and props, a draw (and lights) per block */
-  if (s->sky_seed != s->street_seed) {
+  sr_ads_context(&s->ads, &g->chess, c, t);
+  if (s->sky_seed != s->street_seed || s->ads.key != s->ads_key) { /* another city, or the adverts changed */
     for (int i = 0; i < 32; i++) s->street[i].used = 0;
     s->street_seed = s->sky_seed;
+    s->ads_key = s->ads.key;
   }
   int sring = s->street_detail >= 2 ? 2 : 1;
   int cb = sr_city_block_at(c, (int32_t)(p->pos.x * 100.0f), (int32_t)(p->pos.z * 100.0f));
@@ -914,6 +928,12 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
       add_draw(f, sm, SR_PASS_WORLD, sr_v3((float)sox / 100.0f + 48.0f, 2.0f, (float)soy / 100.0f + 48.0f));
     }
   sr_build_poi_fronts(c, &g->deltas, p->pos, t, &s->fronts); /* open shops light up their fronts */
+  const SrNews *latest = g->chess.news.count > 0 ? sr_news_latest(&g->chess.news, 0) : NULL;
+  sr_build_tickers(c, latest ? latest->headline : "", p->pos, f->time_s, &s->fronts);
+  int heat = 0;
+  for (int k = 0; k < SR_MAX_FACTIONS; k++) heat = SR_MAX(heat, g->heat.level[k]);
+  int home_d = c->blocks[c->buildings[c->home_building].block].district;
+  sr_build_wanted(c, home_d, heat, sr_outfit_color(&g->player.look), p->pos, &s->fronts);
   add_draw(f, &s->fronts, SR_PASS_WORLD, p->pos);
   /* wet streets: reflections, splashes, drips, lamp cones, steam and ripples */
   sr_mesh_clear(&s->wet);
@@ -935,6 +955,7 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
       }
   }
   sr_build_stack_smoke(c, p->pos, f->time_s, &s->wet);
+  sr_build_holo_ads(c, &s->ads, p->pos, f->time_s, &s->wet);
   add_draw(f, &s->wet, SR_PASS_GLOW, p->pos);
 }
 

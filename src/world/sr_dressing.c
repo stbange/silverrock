@@ -651,3 +651,71 @@ int sr_building_volumes(const SrCity *c, int building, const SrFacade *f, SrVolu
   }
   return n;
 }
+
+/* ---- billboards ---------------------------------------------------------------------------------- */
+
+int sr_billboard_slots(const SrCity *c, int block, SrBillboardSlot *out, int max) {
+  if (block < 0 || block >= c->grid * c->grid || c->blocks[block].water) return 0;
+  const SrBlock *b = &c->blocks[block];
+  SrDistrictType t = c->districts[b->district].type;
+  static const int8_t k_roof_pct[SR_D_COUNT] = {35, 25, 60, 70, 35, 30, 25, 20, 20, 30, 10};
+  int n = 0;
+  for (int i = 0; i < b->building_count && n < max; i++) {
+    int bi = b->first_building + i;
+    const SrBuilding *bd = &c->buildings[bi];
+    if (bd->poi == SR_POI_CORP_HQ || bd->poi == SR_POI_CITY_HALL) continue;
+    SrFacade f;
+    sr_facade_for(c, bi, &f);
+    uint64_t h = bhash(c, bd, 9);
+    float x0 = (float)bd->x0 / 100.0f, x1 = (float)bd->x1 / 100.0f, z1 = (float)bd->y1 / 100.0f;
+    float hgt = (float)bd->height_cm / 100.0f;
+    bool flat = f.roof == SR_ROOF_FLAT || f.roof == SR_ROOF_HVAC || f.roof == SR_ROOF_TANKS || f.roof == SR_ROOF_DISHES;
+    if (flat && hgt > 10.0f && hgt < 90.0f && f.shape == SR_SHAPE_BOX && (int)(h % 100u) < k_roof_pct[t]) {
+      float w = SR_MIN(14.0f, (x1 - x0) * 0.7f);
+      out[n++] = (SrBillboardSlot){(x0 + x1) * 0.5f, hgt + 1.5f,
+                                   z1 - 1.0f,        w,
+                                   w * 0.45f,        0.0f,
+                                   SR_SLOT_ROOF,     (uint8_t)((h >> 8) % 100u < 30u),
+                                   (int16_t)bi,      (uint32_t)(h >> 16)};
+    }
+    /* blank side walls facing a gap: a big painted advert above the alley */
+    if ((f.blank & 1u) && n < max && hgt > 16.0f && ((h >> 24) & 1u))
+      out[n++] = (SrBillboardSlot){x0 - 0.05f,
+                                   8.0f,
+                                   (float)(bd->y0 + bd->y1) / 200.0f,
+                                   8.0f,
+                                   5.0f,
+                                   -SR_PI / 2,
+                                   SR_SLOT_WALL,
+                                   0,
+                                   (int16_t)bi,
+                                   (uint32_t)(h >> 28)};
+    if ((f.blank & 2u) && n < max && hgt > 16.0f && ((h >> 25) & 1u))
+      out[n++] = (SrBillboardSlot){x1 + 0.05f,
+                                   8.0f,
+                                   (float)(bd->y0 + bd->y1) / 200.0f,
+                                   8.0f,
+                                   5.0f,
+                                   SR_PI / 2,
+                                   SR_SLOT_WALL,
+                                   0,
+                                   (int16_t)bi,
+                                   (uint32_t)(h >> 30)};
+  }
+  if (b->highway && n < max) { /* over the highway deck, facing the street below */
+    int32_t ox, oy;
+    sr_city_block_origin(block, c->grid, &ox, &oy);
+    uint64_t h = sr_mix64(c->seed ^ ((uint64_t)block * 0xA24BAED4963EE407ull));
+    out[n++] = (SrBillboardSlot){(float)ox / 100.0f + 48.0f,
+                                 12.2f,
+                                 (float)oy / 100.0f + (float)SR_STREET_CM / 100.0f - 2.0f,
+                                 12.0f,
+                                 4.0f,
+                                 0.0f,
+                                 SR_SLOT_HIGHWAY,
+                                 0,
+                                 -1,
+                                 (uint32_t)(h >> 20)};
+  }
+  return n;
+}

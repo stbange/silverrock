@@ -317,6 +317,20 @@ void sr_light_grid_build(SrLightGrid *lg, const SrCity *c);
 void sr_light_grid_free(SrLightGrid *lg);
 int sr_light_grid_query(const SrLightGrid *lg, const SrCity *c, SrVec3 cam, float radius, SrLight *out, int max);
 
+/* Adverts follow the corporate board (sr_sign_mesh.c). */
+typedef struct SrAdContext {
+  const SrCity *c;
+  int64_t now;
+  uint32_t scandal_mask;               /* corps with a scandal in the last 7 days */
+  int leader;                          /* corp above 25 % of megacorp resources, or -1 */
+  uint32_t owners[SR_MAX_DISTRICTS];   /* corps owning a facility in each district */
+  int8_t main_owner[SR_MAX_DISTRICTS]; /* corp owning the most there, or -1 */
+  uint64_t key;                        /* changes whenever an advert would change */
+} SrAdContext;
+typedef struct SrAd {
+  int corp;
+  bool vandal, empty;
+} SrAd;
 /* A large light seen from afar through the fog (logos, beacons, signs, billboards). */
 typedef struct SrBeacon {
   SrVec3 pos;
@@ -356,6 +370,8 @@ typedef struct SrSceneCache {
   uint64_t street_tick;
   int street_detail; /* 0 low, 1 medium, 2 high */
   uint64_t street_seed;
+  uint64_t ads_key;
+  SrAdContext ads;
   struct {
     int block;
     int n;
@@ -376,8 +392,23 @@ void sr_build_door(SrMesh *m, float cx, float z, SrColor frame);
 /* A whole building: volumes with facades, crowns, roof kits, landmark crowns. */
 void sr_build_building(const SrCity *c, int building, SrColor neon, SrMesh *m);
 
-/* The street of a block (sr_street_mesh.c): kerbs, markings, props, overhead lines. detail 0..2. */
-void sr_build_block_props(const SrCity *c, int block, int detail, SrMesh *out);
+/* Signs and adverts (sr_sign_mesh.c). */
+void sr_ads_context(SrAdContext *a, const SrChess *ch, const SrCity *c, int64_t now);
+SrAd sr_ad_for_slot(const SrAdContext *a, const SrBillboardSlot *s, int district);
+void sr_product_name(const SrCity *c, int corp, uint32_t seed, char *out, size_t cap);
+void sr_build_billboard(SrMesh *m, const SrCity *c, const SrBillboardSlot *s, SrAd ad);
+void sr_mesh_text(SrMesh *m, SrVec3 o, SrVec3 right, SrVec3 up, float h, const char *s, SrColor col, int em);
+float sr_text_width(const char *s, float h);
+void sr_build_shop_name(SrMesh *m, const SrBuilding *b, SrColor neon, bool lit);
+void sr_build_blade_signs(const SrCity *c, int building, SrMesh *m);
+void sr_build_holo_ads(const SrCity *c, const SrAdContext *ads, SrVec3 eye, float time_s, SrMesh *out);
+int sr_build_tickers(const SrCity *c, const char *headline, SrVec3 eye, float time_s, SrMesh *out);
+int sr_build_wanted(const SrCity *c, int district, int heat, SrColor outfit, SrVec3 eye, SrMesh *out);
+SrColor sr_outfit_color(const SrAppearance *a);
+
+/* The street of a block (sr_street_mesh.c): kerbs, markings, props, overhead lines and billboards
+ * (when ads is given). detail 0..2. */
+void sr_build_block_props(const SrCity *c, int block, int detail, const SrAdContext *ads, SrMesh *out);
 /* Lights of a block's lit props (lamps, fires, vending machines, booths, stalls). */
 int sr_block_prop_lights(const SrCity *c, int block, SrLight *out, int max);
 SrColor sr_lamp_color(SrDistrictType t);

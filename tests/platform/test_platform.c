@@ -1031,7 +1031,7 @@ static void test_headless_app(void) {
 
 /* ---- Reference views of the city's atmosphere (improve-city-atmosphere D15) ------------------ */
 
-typedef enum { AV_STREET, AV_ALLEY, AV_HIGHWAY, AV_ROOF, AV_AERIAL } AtmosKind;
+typedef enum { AV_STREET, AV_ALLEY, AV_HIGHWAY, AV_ROOF, AV_AERIAL, AV_FRONTS } AtmosKind;
 typedef struct {
   const char *name;
   int district; /* SrDistrictType, or -1 for the home district */
@@ -1057,6 +1057,7 @@ static const AtmosView k_atmos_views[] = {
     {"noon", SR_D_RESIDENTIAL, AV_STREET, 12, 30, SR_WX_CLEAR, 0},
     {"dusk", SR_D_RESIDENTIAL, AV_STREET, 14, 30, SR_WX_CLEAR, 1},
     {"aerial", SR_D_COMMERCIAL, AV_AERIAL, 23, 0, SR_WX_CLEAR, 0},
+    {"shopfronts", SR_D_ENTERTAINMENT, AV_FRONTS, 23, 0, SR_WX_DRIZZLE, 0},
 };
 #define ATMOS_VIEWS ((int)(sizeof k_atmos_views / sizeof k_atmos_views[0]))
 
@@ -1105,6 +1106,10 @@ static bool atmos_place(SrGame *g, const AtmosView *v) {
         }
     }
     if (best <= 0) return false;
+  } else if (v->kind == AV_FRONTS) { /* the street south of the block: the buildings' fronts, signs above */
+    g->player.pos = sr_v3(x0 + 20.0f, 1.7f, z0 + (float)SR_BLOCK_CM / 100.0f + 5.0f);
+    g->player.yaw = -SR_PI / 2 + 0.25f;
+    g->player.pitch = 0.2f;
   } else if (v->kind == AV_AERIAL) { /* high above a street corner, looking down over the roofs */
     g->player.pos = sr_v3(x0 + 8.0f, 75.0f, z0 + 8.0f);
     g->player.yaw = -SR_PI / 4;

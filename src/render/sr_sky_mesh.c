@@ -23,7 +23,7 @@ void sr_sky_prepare(SrSceneCache *s, const SrCity *c) {
   s->sky_seed = c->seed + 1;
   for (int i = 0; i < 16; i++) s->prop_cache[i].used = 0; /* another city: forget its props */
   free(s->beacons);
-  int cap = c->building_count * 2 + c->factions.corp_count + 8;
+  int cap = c->building_count * 3 + c->factions.corp_count + c->grid * c->grid + 8;
   s->beacons = (SrBeacon *)calloc((size_t)cap, sizeof *s->beacons);
   s->nbeacons = 0;
   /* headquarters logos: the brightest marks in the fog */
@@ -57,6 +57,18 @@ void sr_sky_prepare(SrSceneCache *s, const SrCity *c) {
       k->pos = sr_v3((float)(b->x0 + b->x1) / 200.0f, 4.3f, (float)b->y1 / 100.0f + 0.3f);
       k->size = 12.0f;
       k->col = pal->neon[b->id % 3];
+    }
+  }
+  /* billboards glow through the fog too */
+  for (int blk = 0; blk < c->grid * c->grid; blk++) {
+    SrBillboardSlot slots[SR_MAX_BLOCK_SLOTS];
+    int ns = sr_billboard_slots(c, blk, slots, SR_MAX_BLOCK_SLOTS);
+    for (int i = 0; i < ns && s->nbeacons < cap; i++) {
+      if (slots[i].empty) continue;
+      SrBeacon *k = &s->beacons[s->nbeacons++];
+      k->pos = sr_v3(slots[i].x, slots[i].y + slots[i].h * 0.5f, slots[i].z);
+      k->size = slots[i].w * 1.4f;
+      k->col = sr_corp_color(c->factions.f[slots[i].seed % (uint32_t)SR_MAX(1, c->factions.corp_count)].hue);
     }
   }
   /* glow each block throws up at the clouds: district neon times how lit the block is */

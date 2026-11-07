@@ -154,4 +154,20 @@ float sr_walk_lane(float pavement_m);
 bool sr_dressing_blocks(const SrCity *c, float x, float z);
 uint64_t sr_dressing_digest(const SrCity *c);
 
+/* ---- billboards ---------------------------------------------------------------------------------- */
+
+typedef enum SrSlotKind { SR_SLOT_ROOF, SR_SLOT_WALL, SR_SLOT_HIGHWAY } SrSlotKind;
+typedef struct SrBillboardSlot {
+  float x, y, z; /* centre of the panel's bottom edge, metres */
+  float w, h;    /* panel size */
+  float yaw;     /* the panel faces +z turned by yaw */
+  uint8_t kind;  /* SrSlotKind */
+  uint8_t empty; /* 1 when no corp has bought it by default */
+  int16_t building;
+  uint32_t seed;
+} SrBillboardSlot;
+#define SR_MAX_BLOCK_SLOTS 8
+/* Billboard slots of a block: on low flat roofs, on blank side walls, and over highways. */
+int sr_billboard_slots(const SrCity *c, int block, SrBillboardSlot *out, int max);
+
 #endif

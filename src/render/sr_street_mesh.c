@@ -337,7 +337,7 @@ static void overhead(const SrCity *c, int blk, SrMesh *m) {
   }
 }
 
-void sr_build_block_props(const SrCity *c, int blk, int detail, SrMesh *out) {
+void sr_build_block_props(const SrCity *c, int blk, int detail, const SrAdContext *ads, SrMesh *out) {
   sr_mesh_clear(out);
   if (blk < 0 || blk >= c->grid * c->grid || c->blocks[blk].water) return;
   SrDistrictType t = c->districts[c->blocks[blk].district].type;
@@ -370,6 +370,12 @@ void sr_build_block_props(const SrCity *c, int blk, int detail, SrMesh *out) {
     prop_mesh(out, p, t, ground, (uint32_t)(sr_mix64(c->seed ^ ((uint64_t)blk << 16) ^ (uint64_t)i) >> 20));
   }
   overhead(c, blk, out);
+  if (ads) { /* billboards for the city's corporations, following the board */
+    SrBillboardSlot slots[SR_MAX_BLOCK_SLOTS];
+    int ns = sr_billboard_slots(c, blk, slots, SR_MAX_BLOCK_SLOTS);
+    for (int i = 0; i < ns; i++)
+      sr_build_billboard(out, c, &slots[i], sr_ad_for_slot(ads, &slots[i], c->blocks[blk].district));
+  }
 }
 
 int sr_block_prop_lights(const SrCity *c, int blk, SrLight *out, int max) {
