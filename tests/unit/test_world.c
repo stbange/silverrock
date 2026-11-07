@@ -447,7 +447,8 @@ static void test_weather_and_sky(void) {
   SrSky dusk = sr_sky_at(14 * 3600 + 1800, false);
   SR_CHECK(dusk.band[0] > 0.5f && dusk.band[0] > dusk.band[1] * 2.0f && dusk.band[1] >= dusk.band[2]);
   SrWeatherState clear = sr_weather_fixed(SR_WX_CLEAR), pour = sr_weather_fixed(SR_WX_DOWNPOUR);
-  SR_CHECK(sr_sky_weather(dusk, &clear).band[0] > sr_sky_weather(dusk, &pour).band[0] * 3.0f); /* rain hides it */
+  SrSky dusk_clear = sr_sky_weather(dusk, &clear), dusk_pour = sr_sky_weather(dusk, &pour);
+  SR_CHECK(dusk_clear.band[0] > dusk_pour.band[0] * 3.0f); /* rain hides it */
   SR_CHECK(sr_sky_weather(noon, &pour).ambient < noon.ambient);
   /* the Sunrise ending: the only clear sky */
   SrSky sun = sr_sky_at(12 * 3600, true), sunnight = sr_sky_at(2 * 3600, true);
