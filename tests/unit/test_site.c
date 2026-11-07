@@ -829,10 +829,10 @@ static void test_cyberware_in_play(void) {
   /* thermal: warm bodies are drawn through smoke and walls */
   open_site(g, 10);
   sr_site_add_effect(&g->site, SR_FX_SMOKE, g->player.pos, 3, 100);
-  SrSceneCache sc;
-  sr_scene_init(&sc, false);
+  SrSceneCache *sc = (SrSceneCache *)calloc(1, sizeof *sc); /* too big for the web build's stack */
+  sr_scene_init(sc, false);
   SrFrame *f = (SrFrame *)malloc(sizeof(SrFrame));
-  sr_scene_build(&sc, g, 16.0f / 9.0f, f);
+  sr_scene_build(sc, g, 16.0f / 9.0f, f);
   bool xray = false;
   for (int i = 0; i < f->ndraws; i++)
     if (f->draws[i].pass == SR_PASS_XRAY && f->draws[i].mesh->nv > 0) {
@@ -842,16 +842,17 @@ static void test_cyberware_in_play(void) {
   SR_CHECK(xray);
   SR_CHECK(sr_game_ability(g)); /* toggles off */
   SR_CHECK(!g->thermal);
-  sr_scene_build(&sc, g, 16.0f / 9.0f, f);
+  sr_scene_build(sc, g, 16.0f / 9.0f, f);
   for (int i = 0; i < f->ndraws; i++) SR_CHECK(f->draws[i].pass != SR_PASS_XRAY);
   /* on the street, citizens glow too */
   sr_game_leave(g);
   g->crowd_enabled = true;
   steps(g, 2);
   g->thermal = true;
-  sr_scene_build(&sc, g, 16.0f / 9.0f, f);
+  sr_scene_build(sc, g, 16.0f / 9.0f, f);
   free(f);
-  sr_scene_free(&sc);
+  sr_scene_free(sc);
+  free(sc);
   /* reflex booster and chameleon skin: timed abilities with a cooldown */
   p->prog.attr[SR_ATTR_BODY] = 10;
   p->prog.attr[SR_ATTR_TECH] = 10;

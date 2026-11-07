@@ -677,10 +677,10 @@ static void test_doors_cameras_turrets(void) {
   SR_CHECK_EQ(sr_game_node_act(g, cam, SR_NA_LOOP), SR_OK);
   SR_CHECK_EQ(sr_game_node_act(g, cam, SR_NA_FEED), SR_OK); /* the feed: the room seen from the camera */
   SR_CHECK_EQ(g->dive.feed_device, g->dive.host.nodes[cam].device);
-  SrSceneCache sc;
-  sr_scene_init(&sc, false);
+  SrSceneCache *sc = (SrSceneCache *)calloc(1, sizeof *sc); /* too big for the web build's stack */
+  sr_scene_init(sc, false);
   SrFrame *f = (SrFrame *)malloc(sizeof(SrFrame));
-  sr_scene_build(&sc, g, 16.0f / 9.0f, f);
+  sr_scene_build(sc, g, 16.0f / 9.0f, f);
   SrVec3 cp = sr_site_camera_pos(&g->site, g->dive.feed_device);
   SR_CHECK(sr_v3_len(sr_v3_sub(f->eye, cp)) < 1e-3f);
   SrActionState mv;
@@ -688,7 +688,7 @@ static void test_doors_cameras_turrets(void) {
   mv.move_y = 1;
   sr_game_step(g, &mv); /* moving returns to the persona */
   SR_CHECK_EQ(g->dive.feed_device, -1);
-  sr_scene_build(&sc, g, 16.0f / 9.0f, f); /* host view */
+  sr_scene_build(sc, g, 16.0f / 9.0f, f); /* host view */
   sr_game_jack_out(g, false);
   for (int i = 0; i < g->site.guard_count; i++) g->site.guards[i].e.dead = true;
   SrVec3 tc = sr_site_room_center(&g->site, g->site.in.target_room);
@@ -738,7 +738,8 @@ static void test_doors_cameras_turrets(void) {
     SR_CHECK(g->player.health >= hp - 1e-3f);
   }
   free(f);
-  sr_scene_free(&sc);
+  sr_scene_free(sc);
+  free(sc);
   sr_game_destroy(g);
 }
 
@@ -867,15 +868,16 @@ static void test_blackout_and_records(void) {
     reacting += g->crowd.agents[i].state == SR_AG_SHELTER || g->crowd.agents[i].state == SR_AG_GAWK;
   SR_CHECK(reacting > 0);
   sr_game_jack_out(g, false);
-  SrSceneCache sc;
-  sr_scene_init(&sc, false);
+  SrSceneCache *sc = (SrSceneCache *)calloc(1, sizeof *sc); /* too big for the web build's stack */
+  sr_scene_init(sc, false);
   SrFrame *f = (SrFrame *)malloc(sizeof(SrFrame));
-  sr_scene_build(&sc, g, 16.0f / 9.0f, f);
+  sr_scene_build(sc, g, 16.0f / 9.0f, f);
   for (int i = 0; i < f->nlights; i++)
     SR_CHECK(sr_city_district_at(g->city, (int32_t)(f->lights[i].pos.x * 100), (int32_t)(f->lights[i].pos.z * 100)) !=
              district);
   free(f);
-  sr_scene_free(&sc);
+  sr_scene_free(sc);
+  free(sc);
   sr_game_skip(g, SR_BLACKOUT_S + 60, false);
   steps(g, 1);
   SR_CHECK(!sr_game_blackout_at(g, district));
@@ -1147,17 +1149,18 @@ static void test_matrix_render(void) {
   sr_ui_begin(&ui, 1280, 720, 2);
   sr_ui_build(&ui, g, NULL, false);
   sr_ui_free(&ui);
-  SrSceneCache sc;
-  sr_scene_init(&sc, false);
+  SrSceneCache *sc = (SrSceneCache *)calloc(1, sizeof *sc); /* too big for the web build's stack */
+  sr_scene_init(sc, false);
   SrFrame *f = (SrFrame *)malloc(sizeof(SrFrame));
-  sr_scene_build(&sc, g, 16.0f / 9.0f, f);
+  sr_scene_build(sc, g, 16.0f / 9.0f, f);
   SR_CHECK(f->ndraws >= 1);
   sr_game_jack_out(g, false);
   SR_CHECK_EQ(sr_game_jack_in_via(g, SR_ACCESS_RIG, -1), SR_OK); /* the grid */
-  sr_scene_build(&sc, g, 16.0f / 9.0f, f);
+  sr_scene_build(sc, g, 16.0f / 9.0f, f);
   SR_CHECK(f->ndraws >= 1);
   free(f);
-  sr_scene_free(&sc);
+  sr_scene_free(sc);
+  free(sc);
   sr_mesh_free(&m);
   for (int a = 0; a <= SR_NA_COUNT; a++) SR_CHECK(sr_node_action_name((SrNodeAction)a) != NULL);
   sr_game_destroy(g);

@@ -345,8 +345,8 @@ static void test_wet_streets(void) {
   SR_CHECK_NEAR(sr_fog_with_mist(0.9f, 0.5f, 0.0f, 40.0f), 1.0f, 1e-6);
   int under = -1, docks = -1;
   for (int b = 0; b < c->grid * c->grid && (under < 0 || docks < 0); b++) {
-    SrDistrictType t = c->districts[c->blocks[b].district].type;
     if (c->blocks[b].water) continue;
+    SrDistrictType t = c->districts[c->blocks[b].district].type;
     if (t == SR_D_UNDERCITY && under < 0) under = b;
     if (t == SR_D_DOCKS && docks < 0) docks = b;
   }

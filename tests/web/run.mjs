@@ -115,7 +115,7 @@ await test('mobile: a tap goes full screen and the game fills the screen', async
   const page = await ctx.newPage();
   await boot(page);
   await page.touchscreen.tap(320, 180);
-  await page.waitForTimeout(500);
+  await page.waitForFunction(() => !!document.fullscreenElement, null, { timeout: 4000 }).catch(() => {});
   expect(await page.evaluate(() => !!document.fullscreenElement), 'full screen after the first tap');
   const r = await page.evaluate(() => {
     const b = document.getElementById('canvas').getBoundingClientRect();
@@ -125,7 +125,7 @@ await test('mobile: a tap goes full screen and the game fills the screen', async
   await page.evaluate(() => document.exitFullscreen());
   await page.waitForTimeout(300);
   await page.touchscreen.tap(320, 180); /* tapping again goes back into full screen */
-  await page.waitForTimeout(500);
+  await page.waitForFunction(() => !!document.fullscreenElement, null, { timeout: 4000 }).catch(() => {});
   expect(await page.evaluate(() => !!document.fullscreenElement), 'full screen again after leaving it');
   await ctx.close();
 });
