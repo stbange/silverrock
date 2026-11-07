@@ -138,6 +138,7 @@ static const char *k_world_vs =
     "flat out float v_usage;\n"
     "flat out float v_seed;\n"
     "out vec3 v_wpos;\n"
+    "out vec3 v_base;\n"
     "void main() {\n"
     "  vec3 p = a_pos;\n"
     "  vec3 base = a_color.rgb;\n"
@@ -172,6 +173,7 @@ static const char *k_world_vs =
     "  v_wire = a_extra.z;\n"
     "  v_fogz = -(u_view * vec4(p, 1.0)).z;\n"
     "  v_wpos = p;\n"
+    "  v_base = base;\n"
     "  v_usage = floor(a_extra.w / 64.0);\n"
     "  v_seed = mod(a_extra.w, 64.0);\n"
     "}\n";
@@ -188,6 +190,12 @@ static const char *k_world_fs =
     "uniform float u_band_dir;\n"
     "uniform vec3 u_eye;\n"
     "uniform float u_mist;\n" /* extra fog below 3 m */
+    "uniform int u_pixel;\n"  /* per-pixel light for the ground and the lower walls */
+    "uniform vec3 u_lpos[8];\n"
+    "uniform vec4 u_lcol[8];\n"
+    "uniform int u_nl;\n"
+    "uniform vec3 u_amb;\n"
+    "uniform float u_wet;\n"
     "in vec4 v_color;\n"
     "in vec3 v_uvw;\n"
     "flat in float v_layer;\n"
@@ -197,6 +205,7 @@ static const char *k_world_fs =
     "flat in float v_usage;\n"
     "flat in float v_seed;\n"
     "in vec3 v_wpos;\n"
+    "in vec3 v_base;\n"
     "out vec4 o_color;\n"
     "float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }\n"
     "vec3 fog_color() {\n" /* the fog, warmed toward the dawn or dusk side low on the horizon */
@@ -247,6 +256,16 @@ static const char *k_world_fs =
     "      fog_em = 0.0;\n"
     "    }\n"
     "  }\n"
+    "  if (u_pixel == 1 && v_wpos.y < 6.0 && em < 0.3 && !(t.a > 0.7 && t.a < 0.86)) {\n" /* per-pixel light */
+    "    vec3 light = u_amb;\n"
+    "    for (int i = 0; i < 8; i++) {\n"
+    "      if (i >= u_nl) break;\n"
+    "      float d = length(u_lpos[i] - v_wpos);\n"
+    "      float att = clamp(1.0 - d / u_lcol[i].w, 0.0, 1.0);\n"
+    "      light += u_lcol[i].rgb * att * att * (1.0 + step(0.5, v_wire) * step(v_wire, 1.5) * u_wet * 1.5);\n"
+    "    }\n"
+    "    c = vec4(t.rgb * v_base * mix(light, vec3(1.0), em), c.a);\n"
+    "  }\n"
     "  if (v_em > 0.5 && !(t.a > 0.7 && t.a < 0.86)) {\n" /* neon motion: pad 0x80 | seed */
     "    float pad = v_usage * 64.0 + v_seed;\n"
     "    float lvl = 1.0;\n"
@@ -280,6 +299,10 @@ static const char *k_post_fs =
     "uniform vec2 u_res;\n"
     "uniform sampler2D u_bloom;\n"
     "uniform float u_bloom_k;\n"
+    "uniform vec3 u_lift;\n"
+    "uniform vec3 u_gain;\n"
+    "uniform float u_bright;\n"
+    "uniform int u_vig;\n"
     "in vec2 v_uv;\n"
     "out vec4 o_color;\n"
     "float bayer(vec2 p) {\n"
@@ -290,7 +313,15 @@ static const char *k_post_fs =
     "}\n"
     "void main() {\n"
     "  vec3 c = texture(u_tex, v_uv).rgb;\n"
+    "  if (u_crt == 1) {\n" /* VHS: a little chromatic offset */
+    "    c.r = texture(u_tex, v_uv + vec2(1.0 / u_res.x, 0.0)).r;\n"
+    "    c.b = texture(u_tex, v_uv - vec2(1.0 / u_res.x, 0.0)).b;\n"
+    "  }\n"
     "  if (u_bloom_k > 0.0) c += texture(u_bloom, v_uv).rgb * u_bloom_k;\n"
+    "  c = clamp(c * u_gain + u_lift * (1.0 - c), 0.0, 1.0);\n" /* the district's grade */
+    "  vec3 u = 1.0 - c;\n"
+    "  c = clamp(c + u_bright * 0.05 * u * u * u, 0.0, 1.0);\n" /* brightness lifts the dark (sr_brightness) */
+    "  if (u_vig == 1) { vec2 q = v_uv - 0.5; c *= 1.0 - 0.55 * dot(q, q); }\n"
     "  vec2 px = floor(v_uv * u_res);\n"
     "  if (u_dither == 1) c += bayer(px) / 24.0;\n"
     "  if (u_quant == 1) c = floor(c * vec3(31.0, 63.0, 31.0) + 0.5) / vec3(31.0, 63.0, 31.0);\n"
@@ -531,6 +562,7 @@ bool sr_glb_init(SrGlBackend *b, bool gles) {
   b->u_band_dir = pGetUniformLocation(p, "u_band_dir");
   b->u_eye = pGetUniformLocation(p, "u_eye");
   b->u_mist = pGetUniformLocation(p, "u_mist");
+  b->u_pixel = pGetUniformLocation(p, "u_pixel");
   p = b->prog_post;
   b->p_tex = pGetUniformLocation(p, "u_tex");
   b->p_dither = pGetUniformLocation(p, "u_dither");
@@ -539,6 +571,10 @@ bool sr_glb_init(SrGlBackend *b, bool gles) {
   b->p_res = pGetUniformLocation(p, "u_res");
   b->p_bloom = pGetUniformLocation(p, "u_bloom");
   b->p_bloom_k = pGetUniformLocation(p, "u_bloom_k");
+  b->p_lift = pGetUniformLocation(p, "u_lift");
+  b->p_gain = pGetUniformLocation(p, "u_gain");
+  b->p_bright = pGetUniformLocation(p, "u_bright");
+  b->p_vig = pGetUniformLocation(p, "u_vig");
   b->b_tex = pGetUniformLocation(b->prog_blur, "u_tex");
   b->b_dir = pGetUniformLocation(b->prog_blur, "u_dir");
   b->b_bright = pGetUniformLocation(b->prog_blur, "u_bright");
@@ -717,6 +753,7 @@ static void scene_pass(SrGlBackend *b, const SrFrame *f, unsigned fbo, int iw, i
   pUniform1f(b->u_band_dir, f->band_dir_x);
   pUniform3f(b->u_eye, f->eye.x, f->eye.y, f->eye.z);
   pUniform1f(b->u_mist, f->mist);
+  pUniform1i(b->u_pixel, f->pixel_lighting ? 1 : 0);
   /* the sky dome first, fully fogged and behind everything */
   pDepthMask(GL_FALSE);
   pUniform2f(b->u_fogr, -2.0f, -1.0f);
@@ -824,6 +861,13 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
     pUniform2f(b->p_res, (float)iw, (float)ih);
     pUniform1i(b->p_bloom, 1);
     pUniform1f(b->p_bloom_k, f->bloom ? 0.75f : 0.0f);
+    bool graded = f->grade_gain[0] > 0.0f; /* frames that set no grade (tests, the Matrix) pass through */
+    pUniform3f(b->p_lift, graded ? f->grade_lift[0] : 0.0f, graded ? f->grade_lift[1] : 0.0f,
+               graded ? f->grade_lift[2] : 0.0f);
+    pUniform3f(b->p_gain, graded ? f->grade_gain[0] : 1.0f, graded ? f->grade_gain[1] : 1.0f,
+               graded ? f->grade_gain[2] : 1.0f);
+    pUniform1f(b->p_bright, (float)f->brightness);
+    pUniform1i(b->p_vig, f->vignette ? 1 : 0);
     pActiveTexture(GL_TEXTURE1);
     pBindTexture(GL_TEXTURE_2D, f->bloom ? b->bloom_tex[0] : b->fbo_color);
     pActiveTexture(GL_TEXTURE0);
@@ -853,6 +897,10 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
     pUniform1i(b->p_crt, 1);
     pUniform2f(b->p_res, (float)w, (float)h);
     pUniform1f(b->p_bloom_k, 0.0f);
+    pUniform3f(b->p_lift, 0, 0, 0);
+    pUniform3f(b->p_gain, 1, 1, 1);
+    pUniform1f(b->p_bright, 0.0f);
+    pUniform1i(b->p_vig, 0);
     pBindVertexArray(b->quad_vao);
     pDrawArrays(GL_TRIANGLES, 0, 6);
     b->draw_calls++;
@@ -878,6 +926,7 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
     pUniform1i(b->u_debug, 0);
     pUniform3f(b->u_band, 0, 0, 0);
     pUniform1f(b->u_mist, 0);
+    pUniform1i(b->u_pixel, 0);
     draw_mesh(b, &ui->mesh);
   }
   pBindVertexArray(0);

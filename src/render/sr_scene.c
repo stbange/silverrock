@@ -182,7 +182,29 @@ static SrColor shade(SrColor c, int pct) {
   return (SrColor){(uint8_t)(c.r * pct / 100), (uint8_t)(c.g * pct / 100), (uint8_t)(c.b * pct / 100), c.a};
 }
 
+/* A ground quad over [xa, xb] x [za, zb] (v0 at zb), split into cells of `step` metres when fine,
+ * so vertex lighting can show pools of light near the camera. */
+static void ground(SrMesh *m, float xa, float za, float xb, float zb, float y, float u0, float v0, float u1, float v1,
+                   SrColor col, int layer, float step) {
+  int nx = step > 0 ? SR_MAX(1, (int)((xb - xa) / step)) : 1, nz = step > 0 ? SR_MAX(1, (int)((zb - za) / step)) : 1;
+  for (int j = 0; j < nz; j++)
+    for (int i = 0; i < nx; i++) {
+      float x0 = xa + (xb - xa) * (float)i / (float)nx, x1 = xa + (xb - xa) * (float)(i + 1) / (float)nx;
+      float z1 = zb - (zb - za) * (float)j / (float)nz, z0 = zb - (zb - za) * (float)(j + 1) / (float)nz;
+      float ua = u0 + (u1 - u0) * (float)i / (float)nx, ub = u0 + (u1 - u0) * (float)(i + 1) / (float)nx;
+      float va = v0 + (v1 - v0) * (float)j / (float)nz, vb = v0 + (v1 - v0) * (float)(j + 1) / (float)nz;
+      sr_mesh_quad(m, sr_v3(x0, y, z1), sr_v3(x1, y, z1), sr_v3(x1, y, z0), sr_v3(x0, y, z0), ua, va, ub, vb, col,
+                   layer, 0, 1);
+    }
+}
+
+static void build_block_detail(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m, bool fine);
+
 static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) {
+  build_block_detail(c, d, blk, m, false);
+}
+
+static void build_block_detail(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m, bool fine) {
   const SrBlock *b = &c->blocks[blk];
   int32_t ox, oy;
   sr_city_block_origin(blk, c->grid, &ox, &oy);
@@ -199,12 +221,11 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
   for (int f = c->factions.gang_first; f < c->factions.gang_first + c->factions.gang_count && gang < 0; f++)
     if (c->factions.f[f].turf & (1u << b->district)) gang = f;
   /* streets (west and north strips of the block) and the sidewalk-lined lot */
-  sr_mesh_quad(m, sr_v3(x0, 0, z0 + s), sr_v3(x0 + st, 0, z0 + s), sr_v3(x0 + st, 0, z0), sr_v3(x0, 0, z0), 0, 0, 1,
-               s / st, white, SR_LAYER_ASPHALT, 0, 1);
-  sr_mesh_quad(m, sr_v3(x0 + st, 0, z0 + st), sr_v3(x0 + s, 0, z0 + st), sr_v3(x0 + s, 0, z0), sr_v3(x0 + st, 0, z0), 0,
-               0, (s - st) / st, 1, white, SR_LAYER_ASPHALT, 0, 1);
-  sr_mesh_quad(m, sr_v3(x0 + st, 0.12f, z0 + s), sr_v3(x0 + s, 0.12f, z0 + s), sr_v3(x0 + s, 0.12f, z0 + st),
-               sr_v3(x0 + st, 0.12f, z0 + st), 0, 0, (s - st) / 4, (s - st) / 4, pal->ground, SR_LAYER_SIDEWALK, 0, 1);
+  float cell = fine ? 4.0f : 0.0f;
+  ground(m, x0, z0, x0 + st, z0 + s, 0.0f, 0, 0, 1, s / st, white, SR_LAYER_ASPHALT, cell);
+  ground(m, x0 + st, z0, x0 + s, z0 + st, 0.0f, 0, 0, (s - st) / st, 1, white, SR_LAYER_ASPHALT, cell);
+  ground(m, x0 + st, z0 + st, x0 + s, z0 + s, 0.12f, 0, 0, (s - st) / 4, (s - st) / 4, pal->ground, SR_LAYER_SIDEWALK,
+         cell);
   if (b->highway) sr_build_highway(c, blk, m); /* elevated highway deck overhead */
   for (int i = 0; i < b->building_count; i++) {
     int bi = b->first_building + i;
@@ -554,6 +575,25 @@ void sr_build_rain_lit(SrVec3 cam, float intensity, uint64_t frame, const SrCity
   }
 }
 
+/* The camera's chunk is drawn block by block from finely tessellated meshes. */
+static SrMesh *scene_block(SrSceneCache *s, const SrGame *g, int block) {
+  s->block_tick++;
+  int oldest = 0;
+  for (int i = 0; i < 24; i++) {
+    if (s->blocks[i].used && s->blocks[i].block == block && s->blocks[i].turf == g->chess.turf_version) {
+      s->blocks[i].used = s->block_tick;
+      return &s->blocks[i].mesh;
+    }
+    if (s->blocks[i].used < s->blocks[oldest].used) oldest = i;
+  }
+  s->blocks[oldest].block = block;
+  s->blocks[oldest].turf = g->chess.turf_version;
+  s->blocks[oldest].used = s->block_tick;
+  sr_mesh_clear(&s->blocks[oldest].mesh);
+  build_block_detail(g->city, &g->deltas, block, &s->blocks[oldest].mesh, true);
+  return &s->blocks[oldest].mesh;
+}
+
 SrMesh *sr_scene_street(SrSceneCache *s, const SrCity *c, int block) {
   s->street_tick++;
   int oldest = 0;
@@ -661,6 +701,8 @@ void sr_scene_free(SrSceneCache *s) {
                      &s->silhouettes, &s->sun,  &s->wet,       &s->fronts};
   for (size_t i = 0; i < sizeof gloom / sizeof gloom[0]; i++) sr_mesh_free(gloom[i]);
   for (int i = 0; i < 32; i++) sr_mesh_free(&s->street[i].mesh);
+  for (int i = 0; i < 24; i++) sr_mesh_free(&s->blocks[i].mesh);
+  sr_mesh_free(&s->pools);
   free(s->beacons);
   s->beacons = NULL;
 }
@@ -804,6 +846,11 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   f->affine = g->settings.affine;
   f->crt = g->settings.crt;
   f->bloom = g->settings.bloom;
+  s->street_detail = SR_CLAMP(g->settings.street_detail, 0, 2);
+  f->brightness = g->settings.brightness;
+  f->pixel_lighting = g->settings.pixel_lighting;
+  f->vignette = true;
+  sr_grade_at(c, p->pos.x, p->pos.z, f->grade_lift, f->grade_gain);
   if (matrix && g->dive.active) {
     const SrDive *d = &g->dive;
     if (d->feed_device >= 0 && g->site.active && g->site.building == d->building &&
@@ -852,6 +899,18 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
     for (int dy = -ring; dy <= ring; dy++) {
       for (int dx = -ring; dx <= ring; dx++) {
         if (SR_MAX(abs(dx), abs(dy)) != ring) continue;
+        if (ring == 0) { /* the camera's chunk: a draw per block, so each gets the lights nearest to it */
+          for (int by = 0; by < SR_CHUNK_BLOCKS; by++)
+            for (int bx = 0; bx < SR_CHUNK_BLOCKS; bx++) {
+              int gx = ccx * SR_CHUNK_BLOCKS + bx, gy = ccy * SR_CHUNK_BLOCKS + by;
+              if (gx >= c->grid || gy >= c->grid) continue;
+              int32_t box, boy;
+              sr_city_block_origin(gy * c->grid + gx, c->grid, &box, &boy);
+              add_draw(f, scene_block(s, g, gy * c->grid + gx), SR_PASS_WORLD,
+                       sr_v3((float)box / 100.0f + 48.0f, 2.0f, (float)boy / 100.0f + 48.0f));
+            }
+          continue;
+        }
         SrChunk *ch = sr_chunk_get(&s->chunks, c, &g->deltas, ccx + dx, ccy + dy, 2);
         if (!ch) continue;
         float mx = ((float)(ccx + dx) + 0.5f) * SR_CHUNK_BLOCKS * SR_BLOCK_CM / 100.0f;
@@ -874,7 +933,9 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   add_draw(f, &s->characters, g->thermal ? SR_PASS_XRAY : SR_PASS_WORLD, p->pos);
   if (w.rain > 0.05f) { /* game time: same time, same drops */
     SrColor rc = w.to == SR_WX_ACID ? (SrColor){120, 200, 100, 170} : (SrColor){140, 155, 185, 170};
-    sr_build_rain_lit(p->pos, w.rain, g->steps, c, f->lights, f->nlights, rc, &s->rain);
+    static const float k_rain[3] = {0.4f, 0.67f, 1.0f}; /* 600, 1000 or 1500 streaks in a downpour */
+    sr_build_rain_lit(p->pos, w.rain * k_rain[s->street_detail] * k_rain[s->street_detail], g->steps, c, f->lights,
+                      f->nlights, rc, &s->rain);
     add_draw(f, &s->rain, SR_PASS_WORLD, p->pos);
   }
   sr_build_aerodynes(&g->air, (double)g->steps / 60.0, p->pos, 600.0f, &s->air);
@@ -982,7 +1043,10 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   add_draw(f, &s->fronts, SR_PASS_WORLD, p->pos);
   /* wet streets: reflections, splashes, drips, lamp cones, steam and ripples */
   sr_mesh_clear(&s->wet);
-  s->reflections = sr_build_reflections(f->lights, f->nlights, p->pos, w.wetness, 64, &s->wet);
+  static const int k_refl[3] = {16, 32, 64};
+  s->reflections = g->settings.reflections ? sr_build_reflections(f->lights, f->nlights, p->pos, w.wetness,
+                                                                  k_refl[s->street_detail], &s->wet)
+                                           : 0;
   sr_build_splashes(c, p->pos, w.rain, g->steps, &s->wet);
   sr_build_drips(c, p->pos, w.rain, f->time_s, &s->wet);
   sr_build_lamp_cones(f->lights, f->nlights, p->pos, wet_air, &s->wet);
@@ -995,11 +1059,14 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
         if (bx < 0 || by < 0 || bx >= c->grid || by >= c->grid) continue;
         int n = 0;
         const SrStreetProp *pr = sr_scene_props(s, c, by * c->grid + bx, &n);
-        sr_build_steam(pr, n, p->pos, steam_rain, f->time_s, 60.0f, &s->wet);
+        sr_build_steam(pr, n, p->pos, steam_rain, f->time_s, 30.0f + 15.0f * (float)s->street_detail, &s->wet);
         sr_build_ripples(pr, n, p->pos, w.rain, f->time_s, &s->wet);
       }
   }
   sr_build_stack_smoke(c, p->pos, f->time_s, &s->wet);
+  sr_mesh_clear(&s->pools); /* pools of light under lamps, signs, vending machines and fires */
+  sr_build_light_pools(c, f->lights, f->nlights, p->pos, &s->pools);
+  add_draw(f, &s->pools, SR_PASS_GLOW, p->pos);
   sr_build_holo_ads(c, &s->ads, p->pos, f->time_s, &s->wet);
   sr_build_highway_traffic(c, p->pos, f->time_s, &s->wet);
   sr_build_flyers(c, p->pos, f->time_s, &s->wet);

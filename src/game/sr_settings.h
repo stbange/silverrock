@@ -11,6 +11,10 @@ typedef struct SrSettings {
   bool dither, quantize, vertex_snap, affine, crt;
   bool bloom; /* neon glow (off in the mobile preset) */
   bool dynamic_res;
+  int street_detail;   /* 0 low, 1 medium, 2 high: street props, sprite distance, rain, reflections */
+  bool reflections;    /* neon reflections on wet ground */
+  bool pixel_lighting; /* per-pixel lighting of the ground and lower facades (desktop) */
+  int brightness;      /* -2..2: lifts the dark tones for dark screens and bright rooms */
   float mouse_sensitivity;
   float touch_sensitivity;
   float aim_assist; /* 0..1 */

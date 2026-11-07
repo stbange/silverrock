@@ -15,6 +15,10 @@ void sr_settings_default(SrSettings *s) {
   s->crt = false;
   s->bloom = true;
   s->dynamic_res = true;
+  s->street_detail = 2;
+  s->reflections = true;
+  s->pixel_lighting = true;
+  s->brightness = 0;
   s->mouse_sensitivity = 0.0025f;
   s->touch_sensitivity = 0.006f;
   s->aim_assist = 0.6f;
@@ -42,6 +46,10 @@ static const Field k_fields[] = {F(internal_res, T_INT),
                                  F(crt, T_BOOL),
                                  F(bloom, T_BOOL),
                                  F(dynamic_res, T_BOOL),
+                                 F(street_detail, T_INT),
+                                 F(reflections, T_BOOL),
+                                 F(pixel_lighting, T_BOOL),
+                                 F(brightness, T_INT),
                                  F(mouse_sensitivity, T_FLOAT),
                                  F(touch_sensitivity, T_FLOAT),
                                  F(aim_assist, T_FLOAT),

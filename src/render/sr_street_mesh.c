@@ -482,6 +482,24 @@ void sr_build_block_props(const SrCity *c, int blk, int detail, const SrAdContex
   }
 }
 
+int sr_block_props_drawn(const SrCity *c, int blk, int detail, int *lit) {
+  *lit = 0;
+  if (blk < 0 || blk >= c->grid * c->grid || c->blocks[blk].water) return 0;
+  SrStreetProp props[SR_MAX_BLOCK_PROPS];
+  int n = sr_dressing_block(c, blk, props, SR_MAX_BLOCK_PROPS), drawn = 0, other = 0;
+  for (int i = 0; i < n; i++) { /* the same rule as sr_build_block_props */
+    const SrStreetProp *p = &props[i];
+    if (p->kind == SR_SP_MANHOLE || p->kind == SR_SP_DRAIN || p->kind == SR_SP_PUDDLE) continue;
+    if (!(p->flags & SR_SPF_LIT) && detail < 2) {
+      other++;
+      if (detail == 1 ? other % 3 == 0 : other % 3 != 0) continue;
+    }
+    drawn++;
+    *lit += (p->flags & SR_SPF_LIT) != 0;
+  }
+  return drawn;
+}
+
 int sr_block_prop_lights(const SrCity *c, int blk, SrLight *out, int max) {
   if (blk < 0 || blk >= c->grid * c->grid || c->blocks[blk].water) return 0;
   SrDistrictType t = c->districts[c->blocks[blk].district].type;

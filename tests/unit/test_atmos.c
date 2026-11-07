@@ -1086,6 +1086,121 @@ static void test_motion(void) {
   free(s);
 }
 
+static void test_lighting_and_settings(void) {
+  SR_SPEC("retro-rendering", "Lamp light pools on the pavement");
+  SR_SPEC("retro-rendering", "Night lighting near the camera");
+  SR_SPEC("retro-rendering", "Grading follows the district");
+  SR_SPEC("retro-rendering", "Detail setting");
+  SR_SPEC("retro-rendering", "Atmosphere within budget");
+  SR_SPEC("retro-rendering", "Brightness lifts the dark");
+  SrGame *g = g_game;
+  const SrCity *c = g->city;
+  /* a lamp casts a pool of its colour on the ground beneath it */
+  SrLight lamp = {sr_v3(30, 6.2f, 30), 18, 1.0f, 0.6f, 0.2f};
+  SrMesh m;
+  sr_mesh_init(&m);
+  SR_CHECK_EQ(sr_build_light_pools(c, &lamp, 1, sr_v3(25, 1.7f, 25), &m), 1);
+  SrAtlasCell pool = sr_atlas_cell(SR_LAYER_SPRITES, SR_SPR_POOL);
+  SR_CHECK(m.nv == 4 && m.v[0].layer == pool.layer);
+  for (int v = 0; v < 4; v++) SR_CHECK(m.v[v].y < 0.2f && fabsf(m.v[v].x - 30.0f) < 6.0f);
+  SR_CHECK(m.v[0].r > m.v[0].g && m.v[0].g > m.v[0].b); /* in the lamp's colour */
+  SrLight sign = {sr_v3(40, 4.5f, 40), 14, 0.2f, 0.4f, 1.0f};
+  sr_mesh_clear(&m);
+  sr_build_light_pools(c, &sign, 1, sr_v3(40, 1.7f, 45), &m);
+  SR_CHECK(m.nv == 8); /* a pool and a splash on the wall */
+  /* the camera's chunk: one draw per block, each with the lights nearest to that block */
+  SrSceneCache *s = (SrSceneCache *)calloc(1, sizeof *s);
+  sr_scene_init(s, false);
+  sr_game_leave(g);
+  SrFrame *f = (SrFrame *)malloc(sizeof *f);
+  for (int i = 0; i < 4; i++) sr_scene_build(s, g, 16.0f / 9.0f, f);
+  int block_draws = 0;
+  for (int i = 0; i < f->ndraws; i++)
+    for (int k = 0; k < 24; k++)
+      if (f->draws[i].mesh == &s->blocks[k].mesh && s->blocks[k].used) block_draws++;
+  SR_CHECK(block_draws >= 4 && block_draws <= SR_CHUNK_BLOCKS * SR_CHUNK_BLOCKS);
+  int pb = sr_city_block_at(c, (int32_t)(g->player.pos.x * 100.0f), (int32_t)(g->player.pos.z * 100.0f));
+  int32_t ox, oy;
+  sr_city_block_origin(pb, c->grid, &ox, &oy);
+  SrVec3 centre = sr_v3((float)ox / 100.0f + 48.0f, 2.0f, (float)oy / 100.0f + 48.0f);
+  int want[SR_MAX_LIGHTS_PER_DRAW];
+  int nw = sr_select_lights(f->lights, f->nlights, centre, want);
+  bool found = false;
+  for (int i = 0; i < f->ndraws && !found; i++) {
+    const SrDraw *d = &f->draws[i];
+    if (d->nlights != nw || nw == 0) continue;
+    bool same = true;
+    for (int k = 0; k < nw; k++) same = same && d->lights[k] == want[k];
+    found = same;
+  }
+  SR_CHECK(found);
+  /* budgets: draws, lights, sprites and meshes at every detail level */
+  for (int level = 0; level <= 2; level++) {
+    g->settings.street_detail = level;
+    g->force_weather = SR_WX_DOWNPOUR;
+    for (int i = 0; i < 6; i++) sr_scene_build(s, g, 16.0f / 9.0f, f);
+    SR_CHECK(f->ndraws <= SR_MAX_DRAWS && f->nlights <= SR_MAX_FRAME_LIGHTS);
+    SR_CHECK(s->wet.nv / 4 <= 4000 && s->pools.nv / 4 <= 400);
+    for (int i = 0; i < f->ndraws; i++) SR_CHECK(f->draws[i].mesh->nv <= 60000);
+    for (int k = 0; k < 32; k++)
+      if (s->street[k].used && s->street[k].detail == level)
+        SR_CHECK(s->street[k].mesh.nv <= (level == 2 ? 14000 : 9000));
+    printf("  detail %d: %d draws, %d lights, %d sprite quads\n", level, f->ndraws, f->nlights, s->wet.nv / 4);
+  }
+  g->settings.street_detail = 2;
+  g->force_weather = -1;
+  /* the detail setting keeps every lit prop and about a third of the others on low */
+  int lit_hi = 0, lit_lo = 0, all_hi = 0, all_lo = 0;
+  for (int b = 0; b < c->grid * c->grid; b++) {
+    int lh, ll;
+    all_hi += sr_block_props_drawn(c, b, 2, &lh);
+    all_lo += sr_block_props_drawn(c, b, 0, &ll);
+    lit_hi += lh;
+    lit_lo += ll;
+  }
+  SR_CHECK_EQ(lit_hi, lit_lo);
+  float other_share = (float)(all_lo - lit_lo) / (float)SR_MAX(1, all_hi - lit_hi);
+  SR_CHECK(other_share > 0.28f && other_share < 0.4f);
+  /* grading blends across a district border over about 30 m, without a jump */
+  int border_found = 0;
+  for (int b = 0; b + 1 < c->grid * c->grid && !border_found; b++) {
+    if (b % c->grid == c->grid - 1 || c->blocks[b].water || c->blocks[b + 1].water) continue;
+    if (c->blocks[b].district == c->blocks[b + 1].district) continue;
+    sr_city_block_origin(b, c->grid, &ox, &oy);
+    float z = (float)oy / 100.0f + 48.0f, prev[3], gain[3], max_step = 0, total = 0;
+    sr_grade_at(c, (float)ox / 100.0f + 40.0f, z, prev, gain);
+    float first[3] = {prev[0], prev[1], prev[2]};
+    for (float x = (float)ox / 100.0f + 41.0f; x < (float)ox / 100.0f + 150.0f; x += 1.0f) {
+      float l[3];
+      sr_grade_at(c, x, z, l, gain);
+      for (int k = 0; k < 3; k++) {
+        max_step = SR_MAX(max_step, fabsf(l[k] - prev[k]));
+        prev[k] = l[k];
+      }
+    }
+    for (int k = 0; k < 3; k++) total += fabsf(prev[k] - first[k]);
+    if (total < 0.005f) continue; /* districts with the same fog */
+    border_found = 1;
+    SR_CHECK(max_step < total * 0.25f + 1e-4f); /* no single metre does most of the change */
+  }
+  SR_CHECK(border_found);
+  /* brightness lifts the dark tones; white, the fog distance and neon stay */
+  SR_CHECK(sr_brightness(0.05f, 2) > sr_brightness(0.05f, 0) + 0.05f);
+  SR_CHECK_NEAR(sr_brightness(1.0f, 2), 1.0, 1e-6);
+  SR_CHECK(fabsf(sr_brightness(0.95f, 2) - 0.95f) < 0.001f);
+  SR_CHECK(sr_brightness(0.05f, -2) < 0.05f);
+  sr_scene_build(s, g, 16.0f / 9.0f, f);
+  float fog_end = f->fog_end;
+  g->settings.brightness = 2;
+  sr_scene_build(s, g, 16.0f / 9.0f, f);
+  SR_CHECK(f->fog_end == fog_end && f->brightness == 2);
+  g->settings.brightness = 0;
+  free(f);
+  sr_scene_free(s);
+  free(s);
+  sr_mesh_free(&m);
+}
+
 void suite_atmos(void) {
   g_game = sr_game_create();
   sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Atmos");
@@ -1105,5 +1220,6 @@ void suite_atmos(void) {
   SR_RUN(test_sky_details);
   SR_RUN(test_district_kits_and_layers);
   SR_RUN(test_motion);
+  SR_RUN(test_lighting_and_settings);
   sr_game_destroy(g_game);
 }

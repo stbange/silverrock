@@ -286,8 +286,12 @@ typedef struct SrFrame {
   float win_share[4]; /* lit window share per building use (sr_window_share) */
   float band[3];      /* dawn or dusk glow on the fog toward band_dir_x (+1 east, -1 west) */
   float band_dir_x;
-  int halo_count;      /* neon halos drawn beyond the fog end this frame */
-  float mist;          /* extra fog below 3 m (Undercity, Docks, foggy weather) */
+  int halo_count;                     /* neon halos drawn beyond the fog end this frame */
+  float mist;                         /* extra fog below 3 m (Undercity, Docks, foggy weather) */
+  float grade_lift[3], grade_gain[3]; /* the district's colour grade (post pass) */
+  int brightness;                     /* -2..2 */
+  bool pixel_lighting;                /* per-pixel light for the ground and lower facades */
+  bool vignette;
   bool debug_emissive; /* tests: draw emissive surfaces white, everything else black */
   int nlights;
   SrLight lights[SR_MAX_FRAME_LIGHTS];
@@ -357,6 +361,14 @@ typedef struct SrSceneCache {
   SrMesh sky, deck, deck_glow, halos, near_glow, silhouettes, sun;
   SrMesh beams, blimps, blimp_glow, distant, skyline_glow;
   SrMesh vertical, trains; /* skyways and metro tracks (built once), trains (every frame) */
+  SrMesh pools;            /* light pools and wall splashes (every frame) */
+  struct {
+    int block;
+    uint64_t used;
+    uint32_t turf;
+    SrMesh mesh;
+  } blocks[24]; /* per-block meshes of the camera's chunk, each drawn with its own lights */
+  uint64_t block_tick;
   bool vertical_built;
   bool distant_built;
   SrBeacon *beacons;
@@ -417,6 +429,8 @@ void sr_build_block_props(const SrCity *c, int block, int detail, const SrAdCont
 /* Lights of a block's lit props (lamps, fires, vending machines, booths, stalls). */
 int sr_block_prop_lights(const SrCity *c, int block, SrLight *out, int max);
 SrColor sr_lamp_color(SrDistrictType t);
+/* How many of a block's props are drawn at a detail level (and how many of them carry a light). */
+int sr_block_props_drawn(const SrCity *c, int block, int detail, int *lit);
 
 /* The cached street mesh of a block at the current detail level. */
 SrMesh *sr_scene_street(SrSceneCache *s, const SrCity *c, int block);
@@ -439,6 +453,11 @@ int sr_build_flyers(const SrCity *c, SrVec3 eye, float time_s, SrMesh *out);
 int sr_build_litter(const SrCity *c, SrVec3 eye, float time_s, SrVec3 wind, SrMesh *out);
 void sr_build_sparks(const SrCity *c, SrVec3 eye, float time_s, SrMesh *out);
 void sr_build_fans(const SrCity *c, SrVec3 eye, float time_s, SrMesh *out);
+
+/* Lighting (sr_light_mesh.c). */
+int sr_build_light_pools(const SrCity *c, const SrLight *l, int n, SrVec3 eye, SrMesh *out);
+void sr_grade_at(const SrCity *c, float x, float z, float lift[3], float gain[3]);
+float sr_brightness(float v, int level); /* mirrors the post shader */
 
 /* Props of a block, cached (for sprites and lights around the camera). */
 const SrStreetProp *sr_scene_props(SrSceneCache *s, const SrCity *c, int block, int *n);
