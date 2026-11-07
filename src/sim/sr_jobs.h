@@ -49,8 +49,9 @@ typedef struct SrJob {
   int32_t pay, upfront, bonus;
   int32_t paid; /* total paid so far */
   int kills, alarms;
-  int8_t framed; /* faction the planted evidence points to, -1 none */
-  bool booked;   /* the corporate game has seen the outcome */
+  int8_t framed;   /* faction the planted evidence points to, -1 none */
+  int8_t approach; /* approach the job was done with, -1 not yet */
+  bool booked;     /* the corporate game has seen the outcome */
   char title[64];
 } SrJob;
 

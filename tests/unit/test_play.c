@@ -346,6 +346,217 @@ static void test_hunters(void) {
   sr_game_destroy(g);
 }
 
+/* ---- phase 3 --------------------------------------------------------------------------------- */
+
+/* A finished job of the player's top tier against a megacorp, booked by the corporate game. */
+static SrJob *done_job(SrGame *g, int tier) {
+  SrJob j;
+  sr_job_for_contract(g->city, SR_JT_SURVEIL, facility_of(g->city, 2), 1, 2, (uint64_t)g->jobs.next_id, sr_game_time(g),
+                      &j);
+  j.tier = (uint8_t)tier;
+  j.state = SR_JS_COMPLETED;
+  j.client_building = g->player.home;
+  return sr_jobs_push(&g->jobs, &j);
+}
+
+static void test_street_cred_curve(void) {
+  SR_SPEC("character-progression", "Weekly cap");
+  SR_SPEC("character-progression", "Idle decay");
+  SR_SPEC("character-progression", "Story gates");
+  SrGame *g = game(47);
+  SrProgress *pr = &g->player.prog;
+  pr->street_cred = 30;
+  int64_t week = (sr_game_time(g) / SR_WEEK_S + 1) * SR_WEEK_S + 3600;
+  sr_game_skip(g, week - sr_game_time(g), false);
+  int before = pr->street_cred;
+  for (int k = 0; k < 10; k++) done_job(g, sr_max_tier_for_cred(pr->street_cred));
+  sr_game_skip(g, 120, false);
+  SR_CHECK(pr->street_cred > before);
+  SR_CHECK(pr->street_cred - before <= SR_CRED_WEEK_CAP);
+  /* a failure costs */
+  SrJob *f = done_job(g, 2);
+  f->state = SR_JS_FAILED;
+  int now = pr->street_cred;
+  sr_game_skip(g, 120, false);
+  SR_CHECK_EQ(pr->street_cred, now - 1);
+  /* idle above Runner: one point a week */
+  pr->street_cred = 50;
+  int64_t t = sr_game_time(g);
+  sr_game_skip(g, SR_WEEK_S + 3 * 3600, false);
+  SR_CHECK_EQ(pr->street_cred, 49);
+  (void)t;
+  /* story gates: 69 until Act II, 89 until Act III */
+  pr->street_cred = 68;
+  g->chess.camp.cred_gained = 0;
+  sr_game_skip(g, SR_WEEK_S, false); /* a new week */
+  for (int k = 0; k < 6; k++) done_job(g, 3);
+  sr_game_skip(g, 120, false);
+  SR_CHECK(pr->street_cred <= 69);
+  g->chess.story.act = SR_ACT_KNIGHT;
+  for (int k = 0; k < 6; k++) done_job(g, 3);
+  sr_game_skip(g, 120, false);
+  SR_CHECK(pr->street_cred >= 70);
+  pr->street_cred = 88;
+  sr_game_skip(g, SR_WEEK_S, false);
+  for (int k = 0; k < 6; k++) done_job(g, 4);
+  sr_game_skip(g, 120, false);
+  SR_CHECK(pr->street_cred <= 89);
+  sr_game_destroy(g);
+}
+
+static void test_living_costs(void) {
+  SR_SPEC("player-life", "Upkeep with rent");
+  SR_SPEC("player-life", "Medical bill");
+  SR_SPEC("player-life", "Notoriety raises the rent");
+  SrGame *g = game(48);
+  SrPlayer *p = &g->player;
+  p->cred = 100000;
+  /* 10,000 cred of cyberware: 200 upkeep with the rent */
+  p->cyber_count = 0;
+  int type = 0;
+  while (sr_item_base_price(&(SrItem){.kind = SR_IK_CYBER, .type = (uint8_t)type}) <= 0) type++;
+  int32_t value = 0;
+  while (value < 10000 && p->cyber_count < SR_MAX_CYBER) {
+    p->cyber[p->cyber_count++] = sr_item_simple(SR_IK_CYBER, type, 1);
+    value = 0;
+    for (int i = 0; i < p->cyber_count; i++) value += sr_item_base_price(&p->cyber[i]);
+  }
+  p->equipped = -1;
+  SR_CHECK_EQ(sr_game_weekly_upkeep(g), value * 2 / 100);
+  sr_game_skip(g, 3600, false);
+  int64_t due = p->rent_due, cash = p->cred;
+  int32_t rent = p->rent;
+  sr_game_skip(g, due - sr_game_time(g) + 3600, false);
+  SR_CHECK_EQ(cash - p->cred, rent + sr_game_weekly_upkeep(g));
+  /* notoriety: Operator pays 10 % more */
+  p->prog.street_cred = 50;
+  sr_game_skip(g, 3600, false);
+  SR_CHECK_EQ(p->rent, sr_housing_def(p->tier)->rent * 110 / 100);
+  /* a night at home heals 60 % of the damage at 5 cred a point */
+  p->health = p->max_health - 40.0f;
+  p->satiety = 30.0f; /* hungry enough not to mend while awake */
+  sr_game_teleport_building(g, p->home);
+  cash = p->cred;
+  float before = p->health;
+  p->satiety = 100.0f; /* fed: no starvation, no extra mending during the night */
+  SR_CHECK_EQ(sr_game_sleep(g, 8, SR_SLEEP_HOME), SR_OK);
+  float healed = p->health - before;
+  SR_CHECK(healed >= 24.0f - 0.5f);
+  SR_CHECK(cash - p->cred >= (int64_t)(24 * SR_MED_SLEEP_PER_HP) - 5);
+  /* no cash: the bill is owed */
+  p->cred = 0;
+  sr_game_medical_bill(g, 10.0f, SR_MED_CLINIC_PER_HP);
+  SR_CHECK_EQ(g->chess.camp.medical_debt, 150);
+  sr_game_medical_bill(g, 0.0f, SR_MED_CLINIC_PER_HP);
+  /* the clinic patches up the rest */
+  int clinic = -1;
+  for (int b = 0; b < g->city->building_count && clinic < 0; b++)
+    if (g->city->buildings[b].poi == SR_POI_CLINIC) clinic = b;
+  p->cred = 5000;
+  p->health = p->max_health - 10.0f;
+  sr_clock_set_seconds(&g->clock, (sr_game_time(g) / 86400 + 1) * 86400 + 12 * 3600);
+  g->last_minute = sr_game_time(g) / 60;
+  sr_game_teleport_building(g, clinic);
+  g->ctx = sr_game_context(g);
+  p->satiety = 100.0f;
+  if (g->ctx.kind == SR_CTX_CLINIC) {
+    SR_CHECK_EQ(sr_game_interact(g), SR_OK);
+    SR_CHECK(p->health >= p->max_health - 0.01f);
+    SR_CHECK_EQ(sr_game_interact(g), SR_ERR_INVALID);
+  }
+  /* heat clean-up at a fixer */
+  g->heat.level[3] = 2;
+  p->cred = 0;
+  SR_CHECK_EQ(sr_game_heat_cleanup(g), SR_ERR_DENIED);
+  p->cred = 5000;
+  SR_CHECK_EQ(sr_game_heat_cleanup(g), SR_OK);
+  SR_CHECK_EQ(g->heat.level[3], 1);
+  memset(g->heat.level, 0, sizeof g->heat.level);
+  SR_CHECK_EQ(sr_game_heat_cleanup(g), SR_ERR_INVALID);
+  sr_game_destroy(g);
+}
+
+static void test_blackops_and_rewards(void) {
+  SR_SPEC("story-campaign", "Black ops are rare");
+  SR_SPEC("job-system", "Clean bonus");
+  SrGame *g = game(49);
+  SrStory *st = &g->chess.story;
+  st->offer_open = true;
+  sr_game_accept_retainer(g);
+  g->player.prog.street_cred = 75;
+  st->trust = 70;
+  SR_CHECK_EQ(sr_game_handler_offers(g), 1);
+  SrJob *bo = &g->jobs.jobs[g->jobs.count - 1];
+  int32_t lo, hi;
+  sr_tier_pay_range(4, &lo, &hi);
+  SR_CHECK(bo->pay <= hi / 2); /* half of it in favours */
+  bo->state = SR_JS_WITHDRAWN;
+  SR_CHECK_EQ(sr_game_handler_offers(g), 0); /* not again this week */
+  sr_game_skip(g, 7 * 86400, false);
+  int n = 0;
+  for (int i = 0; i < g->jobs.count; i++) n += g->jobs.jobs[i].tier == 4 && g->jobs.jobs[i].state == SR_JS_OFFERED;
+  SR_CHECK(n >= 1 || sr_game_handler_offers(g) == 1);
+  /* a black op done: the favour arrives (Board, Heat or a voucher) */
+  for (int k = 0; k < 3; k++) {
+    SrJob *j = done_job(g, 4);
+    j->id = 9000 + k; /* vary the favour */
+    sr_game_skip(g, 120, false);
+  }
+  /* clean work: +20 % and a level of Heat off; loud work: none */
+  SrJob *clean = done_job(g, 2);
+  clean->approach = SR_AP_GHOST;
+  clean->pay = 1000;
+  int jur = sr_game_jurisdiction(g, clean->target_building);
+  g->heat.level[jur] = 2;
+  int64_t cash = g->player.cred;
+  g->heat.last_seen[jur] = sr_game_time(g);
+  g->heat.decay_from[jur] = sr_game_time(g) + 86400;
+  sr_game_skip(g, 60, false);
+  SR_CHECK(g->player.cred >= cash + 200 - 5);
+  SR_CHECK_EQ(g->heat.level[jur], 1);
+  SrJob *loud = done_job(g, 2);
+  loud->alarms = 1;
+  loud->pay = 1000;
+  cash = g->player.cred;
+  sr_game_skip(g, 60, false);
+  SR_CHECK(g->player.cred < cash + 200);
+  /* paydata sells high */
+  SrItem pd = sr_item_simple(SR_IK_PAYDATA, 2, 1);
+  sr_inv_add(&g->player.inv, pd);
+  int fence = -1;
+  for (int b = 0; b < g->city->building_count && fence < 0; b++)
+    if (sr_vendor_buys(g->city, b, &pd)) fence = b;
+  if (fence >= 0) {
+    cash = g->player.cred;
+    sr_player_sell(&g->player, g->city, fence, g->player.inv.count - 1, sr_game_time(g));
+    SR_CHECK(g->player.cred - cash >= sr_price_at(g->city, fence, &pd) * 4 / 10 * 3 / 2 - 1);
+  }
+  sr_game_destroy(g);
+}
+
+static void test_reachable_dominance(void) {
+  SR_SPEC("faction-simulation", "Takeovers accumulate");
+  SR_SPEC("faction-simulation", "Threshold scales with the board");
+  SrGame *g = game(50);
+  SrChess *ch = &g->chess;
+  for (int k = 0; k < 3; k++) {
+    int target = 1 + k % 3, b = facility_of(g->city, target);
+    int id = sr_chess_start_op(ch, g->city, SR_OP_TAKEOVER, 0, target, b, -1, sr_game_time(g));
+    for (int step = 0; step < 2; step++) {
+      SrOperation *op = sr_chess_op(ch, id);
+      sr_chess_resolve(ch, g->city, g->pop, &g->events, sr_chess_contract(ch, op->contract), true, false,
+                       sr_game_time(g));
+    }
+  }
+  SR_CHECK_EQ(ch->camp.capital_bonus[0], 24);
+  SrCity c = *g->city;
+  c.factions.corp_count = 10;
+  SR_CHECK(sr_chess_dominance_threshold(&c) > 0.249f && sr_chess_dominance_threshold(&c) < 0.251f);
+  c.factions.corp_count = 5;
+  SR_CHECK(sr_chess_dominance_threshold(&c) > 0.399f && sr_chess_dominance_threshold(&c) < 0.401f);
+  sr_game_destroy(g);
+}
+
 void suite_play(void) {
   SR_RUN(test_headlines);
   SR_RUN(test_patron_warning);
@@ -355,4 +566,8 @@ void suite_play(void) {
   SR_RUN(test_terminal_jobs);
   SR_RUN(test_discovery);
   SR_RUN(test_hunters);
+  SR_RUN(test_street_cred_curve);
+  SR_RUN(test_living_costs);
+  SR_RUN(test_blackops_and_rewards);
+  SR_RUN(test_reachable_dominance);
 }

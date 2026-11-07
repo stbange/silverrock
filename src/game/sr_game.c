@@ -482,11 +482,14 @@ SrResult sr_game_sleep(SrGame *g, int hours, SrSleepPlace place) {
     if (g->player.cred < price) return SR_ERR_DENIED;
     sr_player_tx(&g->player, sr_game_time(g), -price, "capsule night");
   }
+  float missing = g->player.max_health - g->player.health;
   sr_game_skip(g, (int64_t)hours * 3600, true);
   if (hours >= 6) g->player.fatigue = 0;
   int b = sr_city_block_at(g->city, (int32_t)(g->player.pos.x * 100), (int32_t)(g->player.pos.z * 100));
   SrDistrictType dt = b >= 0 ? g->city->districts[g->city->blocks[b].district].type : SR_D_RESIDENTIAL;
   sr_player_wake(&g->player, place, g->seed, sr_game_time(g), dt);
+  float healed = missing - (g->player.max_health - g->player.health);
+  if (place != SR_SLEEP_STREET && healed > 0) sr_game_medical_bill(g, healed, SR_MED_SLEEP_PER_HP);
   g->autosave_requests++;
   sr_game_toast(g, "You wake up. Still night.");
   return SR_OK;
@@ -566,9 +569,10 @@ SrMissionResult sr_game_execute(SrGame *g, int32_t id, SrApproach a) {
   SrJob *j = sr_jobs_get(&g->jobs, id);
   if (!j) return res;
   float before = g->player.health;
+  j->approach = (int8_t)a;
   res = sr_job_execute(g->city, j, &g->player, a, sr_hash_combine(g->seed, g->steps + (uint64_t)sr_game_time(g)));
-  if (g->difficulty == SR_DIFF_STORY) { /* the Story preset never takes more than 60 % in one mission */
-    float floor_hp = before - 0.6f * g->player.max_health;
+  if (g->difficulty != SR_DIFF_HARDCORE) { /* one mission takes at most 70 % (60 % on the Story preset) */
+    float floor_hp = before - (g->difficulty == SR_DIFF_STORY ? 0.6f : 0.7f) * g->player.max_health;
     if (g->player.health < floor_hp) {
       res.damage = before - floor_hp;
       g->player.health = floor_hp;
@@ -653,6 +657,7 @@ void sr_game_flatline(SrGame *g) {
     sr_game_toast(g, "Your second heart kicks in.");
     return;
   }
+  g->flatlines++;
   if (g->site.active) sr_game_leave(g);
   SrFlatline f = sr_flatline(p->medevac, p->cred, g->seed, sr_game_time(g), g->hardcore);
   if (f.delete_save) {
@@ -699,6 +704,18 @@ SrResult sr_game_interact(SrGame *g) {
       }
       return sr_game_enter(g, c.building, SR_ENTRY_FRONT);
     case SR_CTX_CAPSULE: return sr_game_sleep(g, 8, SR_SLEEP_CAPSULE);
+    case SR_CTX_CLINIC: {
+      float missing = g->player.max_health - g->player.health;
+      if (missing < 1.0f) {
+        sr_game_toast(g, "The doc waves you off. Nothing to fix.");
+        return SR_ERR_INVALID;
+      }
+      g->player.health = g->player.max_health;
+      sr_game_medical_bill(g, missing, SR_MED_CLINIC_PER_HP);
+      sr_game_skip(g, 3600, false);
+      sr_game_toast(g, "Stitched, scanned, billed.");
+      return SR_OK;
+    }
     case SR_CTX_FIXER:
       if (sr_game_jobs_open(g, c.building)) return SR_OK;
       sr_game_toast(g, "No work for you today, choom.");

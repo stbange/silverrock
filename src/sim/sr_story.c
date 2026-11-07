@@ -479,7 +479,8 @@ void sr_story_tick(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_t now)
   if (s->act == SR_ACT_KNIGHT) {
     int leader = 0;
     float dom = sr_chess_dominance(ch, c, &leader);
-    if (dom >= SR_DOMINANCE || now - s->act_started >= SR_ACT2_MAX_S) begin_act3(ch, c, pop, leader, now);
+    if (dom >= sr_chess_dominance_threshold(c) || now - s->act_started >= SR_ACT2_MAX_S)
+      begin_act3(ch, c, pop, leader, now);
   }
   if (s->act == SR_ACT_PROMOTION) {
     if (!s->finale_ready && now >= s->finale_at) s->finale_ready = true;

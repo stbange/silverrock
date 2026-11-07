@@ -171,6 +171,7 @@ typedef struct SrGame {
     int32_t payoff;
   } enc;
   int64_t last_raid;
+  int flatlines; /* times the player flatlined */
   /* character creation */
   uint64_t create_seed;
   uint64_t create_look;
@@ -303,6 +304,18 @@ void sr_game_encounter_start(SrGame *g, int faction, bool raid);
 void sr_game_encounter_menu(SrGame *g);
 /* Resolves the waiting encounter with a choice; SR_ERR_DENIED when the payoff cannot be paid. */
 SrResult sr_game_encounter(SrGame *g, SrEncChoice c);
+#define SR_CRED_WEEK_CAP    6
+#define SR_JOB_HEAT_CLEANUP (-100) /* a fixer menu row that buys a Heat clean-up */
+/* Weekly upkeep: 2 % of installed cyberware and the equipped weapon. */
+int32_t sr_game_weekly_upkeep(const SrGame *g);
+/* Rent of the current home: +10 % per Street Cred tier above Runner. */
+int32_t sr_game_rent_for(const SrGame *g);
+#define SR_MED_SLEEP_PER_HP  5  /* bandages and meds for healing in bed */
+#define SR_MED_CLINIC_PER_HP 15 /* a clinic's treatment */
+/* A medical bill per healed health point; what cannot be paid is owed. */
+void sr_game_medical_bill(SrGame *g, float healed_hp, int32_t per_hp);
+/* A fixer lowers the worst Heat by one level for 500 cred per level. */
+SrResult sr_game_heat_cleanup(SrGame *g);
 /* Opens a fixer's offers as a menu; false when there is no work. */
 bool sr_game_jobs_open(SrGame *g, int fixer);
 /* Jobs on the terminal: the handler's work, gang contacts, the public board, then accepted jobs. */

@@ -730,6 +730,17 @@ static void shop_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
   sr_ui_text(ui, x, y, buf, k_cyan, s);
   y += line * 1.5f;
   for (int i = 0; i < mn->count && mn->job_menu; i++) {
+    if (mn->job[i] == SR_JOB_HEAT_CLEANUP) {
+      int worst = 0;
+      for (int f = 1; f < g->city->factions.count; f++)
+        if (g->heat.level[f] > g->heat.level[worst]) worst = f;
+      snprintf(buf, sizeof buf, "Make a call: Heat with %s -1  %d CR", g->city->factions.f[worst].name,
+               500 * g->heat.level[worst]);
+      if (i == mn->sel) sr_ui_rect(ui, x - 4, y - 2, (float)ui->w - 2 * x + 8, line, (SrColor){40, 60, 110, 200});
+      text_fit(ui, x, y, buf, i == mn->sel ? k_amber : k_cyan, s, (float)ui->w - 2 * x);
+      y += line;
+      continue;
+    }
     const SrJob *j = NULL;
     for (int k = 0; k < g->jobs.count; k++)
       if (g->jobs.jobs[k].id == mn->job[i]) j = &g->jobs.jobs[k];

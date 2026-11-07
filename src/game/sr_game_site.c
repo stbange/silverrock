@@ -474,6 +474,12 @@ SrResult sr_game_shop_buy(SrGame *g, int row) {
     return r;
   }
   if (m->encounter) return sr_game_encounter(g, (SrEncChoice)row);
+  if (m->job_menu && m->job[row] == SR_JOB_HEAT_CLEANUP) {
+    SrResult r = sr_game_heat_cleanup(g);
+    if (r == SR_ERR_DENIED) sr_game_toast(g, "That kind of call costs more than you have.");
+    if (r == SR_OK) sr_game_shop_close(g);
+    return r;
+  }
   if (m->job_menu) {
     SrJob *j = sr_jobs_get(&g->jobs, m->job[row]);
     SrResult r = j ? sr_game_accept(g, j->id) : SR_ERR_NOT_FOUND;

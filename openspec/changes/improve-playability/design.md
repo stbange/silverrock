@@ -70,12 +70,13 @@ The 0–100 scale and the tier thresholds stay. Only how Street Cred is gained a
 
 | Source | Change |
 |---|---|
-| A clean job (no alarm, no kills) at the player's top tier | +1 |
-| A high-profile target (a megacorp facility or HQ, or the job made the news) | +1 extra |
-| A failed job, or one attributed to the player | −1 |
+| A completed job at the player's top tier | +1 |
+| A high-profile target (a megacorp facility or HQ) | +1 extra |
+| A netrunner's job (its Matrix plan counts) | +1 extra |
+| A failed job | −1 |
 | Idle above Runner (no job for 7 days) | −1 per week |
 
-- **Weekly cap:** at most +4 per in-game week.
+- **Weekly cap:** at most +6 per in-game week (+4 left Knight out of reach in the playtests).
 - **Story gates:**
   - Knight needs Act II and patron trust of at least 40; until then Street Cred stops at 69.
   - Legend needs Act III or a completed ending; until then it stops at 89.
@@ -98,25 +99,31 @@ The 0–100 scale and the tier thresholds stay. Only how Street Cred is gained a
 
 **Costs that come with events:**
 
-- **Medical bills** after a mission that left the player injured: 15 cred per HP below maximum,
-  charged when the player sleeps or visits a clinic.
+- **Healing and medical bills.** Sleep heals 60 % of the missing health at home (40 % in a capsule,
+  15 % on the street) and costs 5 cred per healed point; a clinic charges 15 per point. Fed players
+  also mend 1 % an hour. A bill takes at most half of the player's cash; the rest is owed and
+  collected with the weekly costs. (Without healing, the first playtests died 30–100 times a run.)
 - **Heat clean-up:** a fixer can lower Heat by one level for 500 × the level in cred.
 
 **Pay and black ops:**
 
-- T3 pays 1,500–5,000 instead of 3,000–12,000; T4 pays 5,000–15,000 instead of 10,000–50,000.
+- Pay per tier: T1 120–400, T2 250–700, T3 600–1,800, T4 2,000–5,000 (was up to 12,000 and 50,000).
 - Black ops come at most once per in-game week. Half the pay arrives as a reward instead:
   a Board reveal, a Heat wipe with one jurisdiction, or a cyberware voucher.
 
-**Bands.** Until Act II, the median bot holds no more than 8 weeks of living costs. At week 26 it
-holds no more than 150,000 cred. The gig bot keeps the existing starter-economy band.
+- **Bots spend like players.** When cash passes 30 weeks of the next housing tier's rent, the
+  autoplayer moves up a tier, as a player upgrading their home would.
+
+**Bands.** When Act II begins, the median bot holds no more than 12 weeks of living costs. At week 26
+the median bot holds no more than 150,000 cred and no bot more than 200,000. The gig bot keeps the
+existing starter-economy band.
 
 ### D5 — Risk in resolved missions (F5)
 
 `sr_job_execute` stops clamping health at 1 HP. Damage beyond the player's health flatlines them
-through `sr_game_flatline` (clinic or alley, as specified in `combat`). The resolved damage is
-capped at 60 % of maximum health on the Story difficulty preset, so death there needs bad luck
-twice in a row.
+through `sr_game_flatline` (clinic or alley, as specified in `combat`). One resolved mission takes at
+most 70 % of maximum health (60 % on the Story preset, no cap on Hardcore), so death needs bad luck
+twice in a row. The autoplayer rests before a job when below 40 % health.
 
 ### D6 — Hunters (F5)
 
@@ -237,8 +244,8 @@ balance report does:
 | Act III length | at least 14 days |
 | Ending day | 120–200 |
 | Defections per run | at most 1 |
-| Median cash/living costs until Act II | at most 8 |
-| Cash at week 26 | at most 150,000 |
+| Median cash/living costs when Act II begins | at most 12 |
+| Cash at week 26 | median at most 150,000, every run at most 200,000 |
 | Flatlines over 16 runs | at least 1 (risk exists) |
 | Reachable-play bots reaching an ending | at least 7 of 8 |
 

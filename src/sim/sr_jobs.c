@@ -24,7 +24,7 @@ const char *sr_approach_name(SrApproach a) {
 }
 
 void sr_tier_pay_range(int tier, int32_t *lo, int32_t *hi) {
-  static const int32_t ranges[5][2] = {{40, 200}, {200, 800}, {800, 3000}, {3000, 12000}, {10000, 50000}};
+  static const int32_t ranges[5][2] = {{40, 200}, {120, 400}, {250, 700}, {600, 1800}, {2000, 5000}};
   tier = SR_CLAMP(tier, 0, 4);
   *lo = ranges[tier][0];
   *hi = ranges[tier][1];
@@ -86,6 +86,7 @@ bool sr_job_generate(const SrCity *c, SrJobType type, uint64_t key, int64_t t, S
   j->client_faction = -1;
   j->target_faction = -1;
   j->framed = -1;
+  j->approach = -1;
   j->offered = t;
   j->dest_building = -1;
   const SrFactions *fs = &c->factions;
@@ -529,8 +530,7 @@ int32_t sr_job_complete(SrJob *j, SrPlayer *p, int64_t t, SrEventLog *log, const
   j->paid += pay;
   j->state = SR_JS_COMPLETED;
   sr_progress_add_xp(&p->prog, 60 * (j->tier + 1));
-  /* Street Cred grows only with work at the edge of what you can do */
-  if (j->tier >= sr_max_tier_for_cred(p->prog.street_cred)) sr_progress_add_cred(&p->prog, j->tier + 1);
+  /* Street Cred is awarded by the game layer for notable work (weekly cap, story gates) */
   sr_progress_standing(&p->prog, j->client_faction, 5, true);
   SrEventType et = j->type == SR_JT_SABOTAGE                               ? SR_EV_SABOTAGE
                    : j->type == SR_JT_THEFT || j->type == SR_JT_STEAL_DATA ? SR_EV_THEFT

@@ -625,6 +625,7 @@ SrAutoplayStats sr_autoplay(SrGame *g, SrStrategy s, int days, int max_tier) {
   memset(&st, 0, sizeof st);
   g->crowd_enabled = false;
   int64_t start_cash = g->player.cred;
+  int flat0 = g->flatlines;
   int missed_before = 0;
   int64_t end = sr_game_time(g) + (int64_t)days * SR_DAY_S;
   int iterations = 0;
@@ -638,7 +639,11 @@ SrAutoplayStats sr_autoplay(SrGame *g, SrStrategy s, int days, int max_tier) {
     int64_t t = sr_game_time(g);
     if (p->missed > missed_before) st.missed_rent++;
     missed_before = p->missed;
-    if (p->satiety < 45.0f) {
+    bool broke = p->cred < 15; /* no money for food: work first */
+    /* doing well: move to a better place, as players do (the rent is the price of comfort) */
+    const SrHousingDef *next = sr_housing_def(p->tier + 1);
+    if (next && !p->evicted && p->cred > 30LL * next->rent && sr_game_move_home(g, p->tier + 1) == SR_OK) continue;
+    if (p->satiety < 45.0f && !broke) {
       int food;
       if (find_open_food(g, &food)) {
         travel(g, food);
@@ -700,6 +705,13 @@ SrAutoplayStats sr_autoplay(SrGame *g, SrStrategy s, int days, int max_tier) {
       if (!took) sr_game_skip(g, 2 * 3600, false);
       continue;
     }
+    if (!job->executed && p->health < p->max_health * 0.4f && !p->evicted) { /* patch up before going in */
+      travel(g, p->home);
+      sr_game_sleep(g, 8, SR_SLEEP_HOME);
+      st.sleeps++;
+      last_sleep = sr_game_time(g);
+      continue;
+    }
     if (!job->executed) {
       SrApproach a = SR_AP_HAMMER;
       approach_for(s, job, &a);
@@ -733,6 +745,7 @@ SrAutoplayStats sr_autoplay(SrGame *g, SrStrategy s, int days, int max_tier) {
     }
   }
   st.days = days;
+  st.flatlines = g->flatlines - flat0;
   st.starving_hours = g->player.starving_hours;
   st.spent = start_cash + st.earned - g->player.cred;
   return st;

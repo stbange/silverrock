@@ -155,6 +155,10 @@ void sr_player_minute(SrPlayer *p, bool sleeping) {
     p->fatigue += 100.0f / (18.0f * 60.0f);
     if (p->fatigue > 100) p->fatigue = 100;
   }
+  if (p->satiety >= 40.0f && p->health < p->max_health) { /* fed bodies mend slowly: 1 % an hour */
+    p->health += p->max_health * 0.01f / 60.0f;
+    if (p->health > p->max_health) p->health = p->max_health;
+  }
   if (p->satiety <= 0.0f) {
     p->starving_hours += 1.0f / 60.0f;
     float floor = p->max_health * 0.25f;
@@ -199,6 +203,7 @@ SrResult sr_player_sell(SrPlayer *p, const SrCity *c, int building, int idx, int
   it.count = 1;
   if (!sr_vendor_buys(c, building, &it)) return SR_ERR_DENIED;
   int32_t price = sr_price_at(c, building, &it) * 4 / 10;
+  if (it.kind == SR_IK_PAYDATA) price = price * 3 / 2; /* fences pay well for fresh files */
   if (it.flags & SR_IF_STOLEN) price = price * 6 / 10;
   if (price < 1) price = 1;
   int before = p->inv.count;
@@ -276,6 +281,9 @@ SrResult sr_player_sleep_allowed(const SrPlayer *p, int hostiles) {
 }
 
 void sr_player_wake(SrPlayer *p, SrSleepPlace place, uint64_t seed, int64_t t, SrDistrictType district) {
+  /* a night's sleep heals part of the damage: most at home, least on the street */
+  float share = place == SR_SLEEP_HOME ? 0.6f : place == SR_SLEEP_CAPSULE ? 0.4f : 0.15f;
+  if (p->health > 0 && p->health < p->max_health) p->health += (p->max_health - p->health) * share;
   if (place != SR_SLEEP_STREET) return;
   int chance = district == SR_D_UNDERCITY || district == SR_D_BARRENS ? 450 : 250;
   SrRng r = sr_rng_stream(seed, "robbery", (uint64_t)(t / SR_DAY_S), (uint64_t)district);

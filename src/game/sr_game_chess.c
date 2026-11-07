@@ -11,6 +11,7 @@
 static int64_t now_of(const SrGame *g) { return sr_game_time(g); }
 static void sync_world(SrGame *g, int64_t t);
 static void hunters(SrGame *g, int64_t t);
+static void living_costs(SrGame *g, int64_t t);
 
 void sr_game_chess_init(SrGame *g) {
   sr_chess_init(&g->chess, g->city, sr_hash_combine(g->seed, 0xC4E55u), g->patron_choice, now_of(g));
@@ -176,6 +177,11 @@ bool sr_game_jobs_open(SrGame *g, int fixer) {
   m->building = fixer;
   m->job_menu = true;
   for (int i = 0; i < n && i < SR_MENU_MAX; i++) m->job[m->count++] = ids[i];
+  for (int f = 0; f < g->city->factions.count; f++)
+    if (g->heat.level[f] > 0) { /* the fixer can make a call about the Heat */
+      m->job[m->count++] = SR_JOB_HEAT_CLEANUP;
+      break;
+    }
   g->screen = SR_SCREEN_SHOP;
   g->confirm_job = -1;
   return true;
@@ -201,6 +207,8 @@ int sr_game_terminal_jobs(const SrGame *g, int32_t *out, int max) {
 int sr_game_handler_offers(SrGame *g) {
   SrStory *s = &g->chess.story;
   if (!sr_story_t4_allowed(s, sr_cred_tier(g->player.prog.street_cred))) return 0;
+  int32_t day = (int32_t)(now_of(g) / 86400) + 1; /* stored +1: 0 means never */
+  if (g->chess.camp.last_blackop_day > 0 && day - g->chess.camp.last_blackop_day < 7) return 0; /* weekly */
   for (int i = 0; i < g->jobs.count; i++) /* one black op at a time */
     if (g->jobs.jobs[i].tier == 4 &&
         (g->jobs.jobs[i].state == SR_JS_OFFERED || g->jobs.jobs[i].state == SR_JS_ACCEPTED))
@@ -221,7 +229,7 @@ int sr_game_handler_offers(SrGame *g) {
   j.tier = 4;
   int32_t lo, hi;
   sr_tier_pay_range(4, &lo, &hi);
-  j.pay = lo + (int32_t)(sr_mix64(key + 1u) % (uint64_t)(hi - lo));
+  j.pay = (lo + (int32_t)(sr_mix64(key + 1u) % (uint64_t)(hi - lo))) / 2; /* the other half is a favour */
   j.upfront = j.pay / 4;
   j.source = SR_SRC_CONTACT;
   j.client_building = g->player.home;
@@ -229,8 +237,74 @@ int sr_game_handler_offers(SrGame *g) {
   snprintf(j.title, sizeof j.title, "Black op: %s at %s", sr_job_type_name(type), g->city->factions.f[rival].name);
   SrJob *p = sr_jobs_push(&g->jobs, &j);
   if (!p) return 0; /* GCOVR_EXCL_LINE reason: the board always has room for one more */
-  handler_says(g, "Something deniable for you. Black-op rates. Check your jobs.");
+  g->chess.camp.last_blackop_day = day;
+  handler_says(g, "Something deniable for you. Half in cred, half in favours. Check your jobs.");
   return 1;
+}
+
+/* Street Cred for notable work: a job at the edge of what the player can do, a high-profile target,
+ * a netrunner's Matrix plan; failures cost. At most SR_CRED_WEEK_CAP a week, and the story gates
+ * Knight (Act II) and Legend (Act III or an ending). */
+static void award_cred(SrGame *g, const SrJob *j, bool done, int64_t t) {
+  SrCampaign *cp = &g->chess.camp;
+  SrProgress *pr = &g->player.prog;
+  int gain;
+  if (!done) {
+    gain = -1;
+  } else {
+    gain = j->tier >= sr_max_tier_for_cred(pr->street_cred) ? 1 : 0;
+    bool high = j->target_faction >= 0 && j->target_faction < g->city->factions.corp_count;
+    if (gain > 0 && high) gain++;
+    if (gain > 0 && j->approach == SR_AP_RUNNER) gain++; /* the Matrix plan counts too */
+  }
+  int32_t week = (int32_t)(t / SR_WEEK_S);
+  if (cp->cred_week != week) cp->cred_week = week, cp->cred_gained = 0;
+  if (gain > 0) {
+    gain = SR_MIN(gain, SR_CRED_WEEK_CAP - cp->cred_gained);
+    if (gain <= 0) return;
+    int cap = g->chess.story.act >= SR_ACT_PROMOTION || g->chess.story.ending != SR_END_NONE ? 100
+              : g->chess.story.act >= SR_ACT_KNIGHT                                          ? 89
+                                                                                             : 69;
+    gain = SR_MIN(gain, cap - pr->street_cred);
+    if (gain <= 0) return;
+    cp->cred_gained = (int8_t)(cp->cred_gained + gain);
+  }
+  if (sr_progress_add_cred(pr, gain)) {
+    char msg[96];
+    snprintf(msg, sizeof msg, "Street Cred tier: %s", sr_cred_tier_name(sr_cred_tier(pr->street_cred)));
+    sr_game_toast(g, msg);
+  }
+}
+
+/* Half a black op's pay comes as a favour. */
+static void blackop_reward(SrGame *g, const SrJob *j, int64_t t) {
+  uint64_t h = sr_mix64(sr_hash_combine(g->chess.seed, (uint64_t)j->id));
+  char msg[112];
+  switch (h % 3u) {
+    case 0: {
+      int f = j->target_faction >= 0 ? j->target_faction : 0;
+      sr_chess_reveal_faction(&g->chess, f);
+      snprintf(msg, sizeof msg, "As promised: everything we have on %s. Check your Board.",
+               g->city->factions.f[f].name);
+      break;
+    }
+    case 1: {
+      int worst = 0;
+      for (int f = 1; f < g->city->factions.count; f++)
+        if (g->heat.level[f] > g->heat.level[worst]) worst = f;
+      g->heat.level[worst] = 0;
+      snprintf(msg, sizeof msg, "We made a call. %s has forgotten your face.", g->city->factions.f[worst].name);
+      break;
+    }
+    default: {
+      SrItem it = sr_item_simple(SR_IK_CYBER, (int)((h >> 8) % 8u), 1);
+      sr_inv_add(&g->player.inv, it);
+      snprintf(msg, sizeof msg, "A gift from our clinic. Have it installed somewhere discreet.");
+      break;
+    }
+  }
+  handler_story(g, msg);
+  (void)t;
 }
 
 /* Books job outcomes: contracts, trust, the test gig, insider suspicion. */
@@ -255,6 +329,23 @@ static void book_jobs(SrGame *g, int64_t t) {
       sr_chess_resolve(ch, g->city, g->pop, &g->events, k, done, true, t);
     }
     sr_story_job_done(ch, g->city, j->client_faction, j->target_faction, done, evidence, j->framed >= 0, t);
+    award_cred(g, j, done, t);
+    if (done) {
+      ch->camp.last_job_at = t;
+      bool clean = j->alarms == 0 && j->kills == 0 && j->approach != SR_AP_HAMMER;
+      if (clean) { /* quiet work pays: a bonus, less Heat, the patron's appreciation */
+        int32_t bonus = j->pay / 5;
+        sr_player_tx(&g->player, t, bonus, "clean work bonus");
+        int jur = sr_game_jurisdiction(g, j->target_building);
+        if (g->heat.level[jur] > 0) g->heat.level[jur]--;
+        if (j->client_faction == ch->story.patron && ch->story.retainer) sr_story_trust(&ch->story, 2);
+      }
+      if (j->client_building != g->player.home) { /* the fixer keeps a cut */
+        int32_t cut = SR_MIN(j->paid / 10, (int32_t)SR_MAX(0, g->player.cred));
+        sr_player_tx(&g->player, t, -cut, "fixer's cut");
+      }
+      if (j->tier == 4) blackop_reward(g, j, t);
+    }
     if (done && j->id == ch->story.test_job) {
       sr_story_test_done(&ch->story, t);
       ch->story.test_job = -2; /* used */
@@ -323,6 +414,7 @@ void sr_game_chess_minute(SrGame *g, int64_t t) {
   if (ch->story.cast[SR_CAST_HANDLER].generation != handlers_before && ch->story.cast[SR_CAST_HANDLER].alive)
     handler_story(g, "Your old handler is gone. I'm taking over. Nothing changes.");
   if (t % 3600 == 0) {
+    living_costs(g, t);
     post_contracts(g, t);
     sync_world(g, t);
     story_messages(g);
@@ -335,6 +427,68 @@ void sr_game_chess_minute(SrGame *g, int64_t t) {
   }
   curfew_checks(g, t);
   hunters(g, t);
+}
+
+/* ---- living costs ----------------------------------------------------------------------------- */
+
+int32_t sr_game_weekly_upkeep(const SrGame *g) {
+  const SrPlayer *p = &g->player;
+  int64_t value = 0;
+  for (int i = 0; i < p->cyber_count; i++) value += sr_item_base_price(&p->cyber[i]);
+  if (p->equipped >= 0 && p->equipped < p->inv.count) value += sr_item_base_price(&p->inv.items[p->equipped]);
+  return (int32_t)(value * 2 / 100);
+}
+
+int32_t sr_game_rent_for(const SrGame *g) {
+  const SrHousingDef *h = sr_housing_def(g->player.tier);
+  int32_t base = h ? h->rent : g->player.rent;
+  int over = (int)sr_cred_tier(g->player.prog.street_cred) - (int)SR_CRED_RUNNER;
+  return base * (100 + 10 * SR_MAX(0, over)) / 100; /* the landlord knows who you are */
+}
+
+/* Charges a bill, taking at most half of the player's cash; the rest is owed. */
+static void charge(SrGame *g, int32_t amount, const char *what, int64_t t) {
+  int32_t paid = (int32_t)SR_MIN((int64_t)amount, SR_MAX(0, g->player.cred / 2));
+  if (paid > 0) sr_player_tx(&g->player, t, -paid, what);
+  g->chess.camp.medical_debt += amount - paid; /* the rest is owed */
+}
+
+static void living_costs(SrGame *g, int64_t t) {
+  SrPlayer *p = &g->player;
+  SrCampaign *cp = &g->chess.camp;
+  if (!p->evicted) p->rent = sr_game_rent_for(g);
+  if (cp->upkeep_due == 0) cp->upkeep_due = p->rent_due;
+  if (p->rent_due != cp->upkeep_due) { /* rent was charged: the weekly costs go with it */
+    cp->upkeep_due = p->rent_due;
+    int32_t debt = cp->medical_debt;
+    cp->medical_debt = 0;
+    int32_t upkeep = sr_game_weekly_upkeep(g);
+    if (upkeep > 0) charge(g, upkeep, "upkeep", t);
+    if (debt > 0) charge(g, debt, "medical debt", t);
+  }
+  /* idle above Runner: the street forgets */
+  if (p->prog.street_cred >= 25 && t - cp->last_job_at >= SR_WEEK_S && t - cp->last_decay_at >= SR_WEEK_S) {
+    cp->last_decay_at = t;
+    sr_progress_add_cred(&p->prog, -1);
+  }
+}
+
+void sr_game_medical_bill(SrGame *g, float healed_hp, int32_t per_hp) {
+  if (healed_hp <= 0) return;
+  charge(g, (int32_t)(healed_hp * (float)per_hp), "medical bill", now_of(g));
+}
+
+SrResult sr_game_heat_cleanup(SrGame *g) {
+  int worst = 0;
+  for (int f = 1; f < g->city->factions.count; f++)
+    if (g->heat.level[f] > g->heat.level[worst]) worst = f;
+  if (g->heat.level[worst] <= 0) return SR_ERR_INVALID;
+  int32_t price = 500 * g->heat.level[worst];
+  if (g->player.cred < price) return SR_ERR_DENIED;
+  sr_player_tx(&g->player, now_of(g), -price, "heat clean-up");
+  g->heat.level[worst]--;
+  sr_game_toast(g, "A few calls, a few favours. Heat drops a level.");
+  return SR_OK;
 }
 
 /* ---- hunters --------------------------------------------------------------------------------- */

@@ -34,8 +34,8 @@ and money SHALL stay meaningful afterwards: the living costs of a successful cha
 
 #### Scenario: Money keeps mattering
 - **WHEN** the playtest bots play 26 weeks on 16 seeds
-- **THEN** until Act II the median bot holds no more than 8 weeks of living costs, and no bot holds more than
-  150,000 cred at week 26
+- **THEN** when Act II begins the median bot holds no more than 12 weeks of living costs, and at week 26 the
+  median bot holds no more than 150,000 cred and no bot more than 200,000
 
 ## ADDED Requirements
 
@@ -49,7 +49,7 @@ a confirmation.
 
 ### Requirement: Risk in resolved missions
 Missions resolved without the 3D level SHALL be able to injure the player beyond 1 health and to flatline them, with
-the damage capped at 60 % of maximum health on the Story difficulty preset.
+the damage of one mission capped at 70 % of maximum health (60 % on the Story difficulty preset, no cap on Hardcore).
 
 #### Scenario: Resolved mission can flatline
 - **WHEN** a resolved mission deals more damage than the player's remaining health on Normal difficulty

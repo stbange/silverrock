@@ -4,7 +4,7 @@
 
 ### Requirement: Street Cred
 Street Cred SHALL range from 0 to 100 in the tiers Nobody, Pawn, Runner, Operator, Knight and Legend, grow with notable
-deeds rather than job volume (at most 4 points per in-game week), decay by one point per idle week above Runner, and
+deeds rather than job volume (at most 6 points per in-game week), decay by one point per idle week above Runner, and
 change how citizens react to the player. Tier Knight SHALL require Act II and patron trust of at least 40, and tier
 Legend SHALL require Act III or a completed ending.
 
@@ -13,8 +13,8 @@ Legend SHALL require Act III or a completed ending.
 - **THEN** the tier changes, the player is notified and higher job tiers become available accordingly
 
 #### Scenario: Weekly cap
-- **WHEN** the player completes ten clean top-tier jobs in one in-game week
-- **THEN** Street Cred rises by no more than 4 that week
+- **WHEN** the player completes ten top-tier jobs in one in-game week
+- **THEN** Street Cred rises by no more than 6 that week
 
 #### Scenario: Idle decay
 - **WHEN** a player at tier Operator completes no job for seven in-game days

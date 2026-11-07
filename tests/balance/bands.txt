@@ -1,19 +1,21 @@
 # Balance bands for `sr_headless --balance SEEDS --bands tests/balance/bands.txt`.
 # Per-seed averages over the first 28 in-game days; a value outside [min, max] fails the run.
+# Earnings were lowered by the playability pass (improve-playability D4): money should still matter
+# in month two. The long-run bands live in tests/balance/playtest_bands.txt.
 # strategy   metric        min     max
 gig          earned        1000    8000
 gig          jobs          8       40
 gig          failed        0       2
-ghost        earned        12000   70000
+ghost        earned        5000    30000
 ghost        jobs          25      80
 ghost        failed        0       6
-face         earned        12000   70000
+face         earned        5000    30000
 face         jobs          25      80
 face         failed        0       6
-hammer       earned        12000   70000
+hammer       earned        5000    30000
 hammer       jobs          25      80
 hammer       failed        0       12
-netrunner    earned        6000    50000
+netrunner    earned        3000    25000
 netrunner    jobs          15      70
 netrunner    failed        0       6
 # every strategy: share of seeds that missed a rent payment

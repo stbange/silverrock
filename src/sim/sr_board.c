@@ -49,7 +49,7 @@ static void add_res(SrChess *ch, const SrCity *c, int f, SrResource r, int delta
 }
 
 /* Long-run level each resource reverts to. */
-static int16_t base_level(const SrCity *c, int f, SrResource r) {
+static int16_t base_level(const SrChess *ch, const SrCity *c, int f, SrResource r) {
   const SrFaction *fa = &c->factions.f[f];
   static const int16_t corp[SR_RES_COUNT] = {90, 45, 35, 45, 50, 50};
   static const int16_t gang[SR_RES_COUNT] = {25, 15, 50, 25, 15, 30};
@@ -57,6 +57,7 @@ static int16_t base_level(const SrCity *c, int f, SrResource r) {
   int16_t v = fa->kind == SR_FK_CORP ? corp[r] : fa->kind == SR_FK_GANG ? gang[r] : other[r];
   if (r == SR_RES_NETDEF && fa->kind == SR_FK_CORP && (fa->sector1 == SR_SEC_NET || fa->sector2 == SR_SEC_NET)) v += 25;
   if (r == SR_RES_FORCE && fa->kind == SR_FK_POLICE) v += 30;
+  if (r == SR_RES_CAPITAL) v = (int16_t)(v + ch->camp.capital_bonus[f]); /* what takeovers won stays won */
   return v;
 }
 
@@ -77,7 +78,7 @@ void sr_chess_init(SrChess *ch, SrCity *c, uint64_t seed, int patron_choice, int
   for (int f = 0; f < c->factions.count; f++) {
     SrFactionSim *s = &ch->f[f];
     for (int k = 0; k < SR_RES_COUNT; k++)
-      s->res[k] = (int16_t)(base_level(c, f, (SrResource)k) + sr_rng_range(&r, -8, 8));
+      s->res[k] = (int16_t)(base_level(ch, c, f, (SrResource)k) + sr_rng_range(&r, -8, 8));
     clamp_res(ch, c, f);
     s->retaliate_against = -1;
     const SrFaction *fa = &c->factions.f[f];
@@ -177,6 +178,11 @@ int sr_chess_city_hall(const SrCity *c) {
   for (int b = 0; b < c->building_count; b++)
     if (c->buildings[b].poi == SR_POI_CITY_HALL) return b;
   return -1; /* GCOVR_EXCL_LINE reason: every city has a city hall (generation invariant) */
+}
+
+float sr_chess_dominance_threshold(const SrCity *c) {
+  float t = 2.2f / (float)SR_MAX(1, c->factions.corp_count);
+  return SR_CLAMP(t, 0.25f, SR_DOMINANCE);
 }
 
 int sr_chess_gang_of(const SrCity *c, int district) {
@@ -484,6 +490,8 @@ static void apply_success(SrChess *ch, SrCity *c, SrPopulation *pop, SrEventLog 
       break;
     case SR_OP_TAKEOVER:
       if (op->building >= 0 && op->building != c->factions.f[t].hq_building) set_owner(ch, c, op->building, cl);
+      if (cl >= 0 && cl < SR_MAX_FACTIONS)
+        ch->camp.capital_bonus[cl] = (int16_t)SR_MIN(80, ch->camp.capital_bonus[cl] + 8);
       add_res(ch, c, t, SR_RES_CAPITAL, -8);
       add_res(ch, c, cl, SR_RES_CAPITAL, 6);
       if (is_corp(c, t)) ch->market.shock[t] -= 60;
@@ -746,7 +754,7 @@ static void gang_rebirth(SrChess *ch, SrCity *c, SrEventLog *log, int64_t now) {
     snprintf(fa->name, sizeof fa->name, "%s", s->name);
     fa->hue = (uint8_t)((fa->hue + 7u) % 24u);
     fa->turf = (uint16_t)(1u << pick);
-    for (int k = 0; k < SR_RES_COUNT; k++) s->res[k] = base_level(c, g, (SrResource)k);
+    for (int k = 0; k < SR_RES_COUNT; k++) s->res[k] = base_level(ch, c, g, (SrResource)k);
     ch->turf_version++;
     char msg[72];
     snprintf(msg, sizeof msg, "New gang %s claims %s", fa->name, c->districts[pick].name);
@@ -771,7 +779,7 @@ void sr_chess_tick(SrChess *ch, SrCity *c, SrPopulation *pop, SrEventLog *log, i
   for (int f = 0; f < c->factions.count; f++) { /* mean-reverting income */
     if (ch->f[f].dissolved) continue;
     for (int k = 0; k < SR_RES_COUNT; k++) {
-      int16_t base = base_level(c, f, (SrResource)k);
+      int16_t base = base_level(ch, c, f, (SrResource)k);
       ch->f[f].res[k] = (int16_t)(ch->f[f].res[k] + (base - ch->f[f].res[k]) / 8 + sr_rng_range(&r, -2, 2));
     }
     clamp_res(ch, c, f);

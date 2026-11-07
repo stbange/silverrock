@@ -26,7 +26,7 @@
 #define SR_MAX_ARC_BEATS  6
 #define SR_MAX_HISTORY    96
 #define SR_COUNCIL_SEATS  9
-#define SR_DOMINANCE      0.40f /* share of all megacorp resources that triggers the endgame */
+#define SR_DOMINANCE      0.40f /* largest share of all megacorp resources that triggers the endgame */
 #define SR_GANG_REBIRTH_S (3 * SR_WEEK_S)
 #define SR_PRICE_MIN      5  /* cred per share */
 #define SR_INSIDER_QTY    50 /* trades at least this large draw attention */
@@ -314,6 +314,15 @@ typedef struct SrCampaign {
   uint8_t defections;                   /* voluntary defections so far (one per campaign) */
   int32_t demand_day[SR_MAX_DISTRICTS]; /* last day an operation was started on demand there (+1) */
   SrSuspect suspects[SR_MAX_SUSPECTS];
+  int16_t capital_bonus[SR_MAX_FACTIONS]; /* long-run capital won by takeovers (+8 each, at most 80) */
+  /* the player's economy and reputation */
+  int32_t cred_week;   /* in-game week of cred_gained */
+  int8_t cred_gained;  /* Street Cred gained that week (capped) */
+  int64_t last_job_at; /* last completed job (idle decay above Runner) */
+  int64_t last_decay_at;
+  int32_t medical_debt; /* bills not paid yet: collected with the weekly costs */
+  int64_t upkeep_due;   /* rent due date the weekly costs were last charged for */
+  int32_t last_blackop_day;
   int discoveries; /* betrayals the patron found out about */
   int8_t hunter;   /* faction whose hunters are coming for the player, -1 none */
   int64_t hunt_at; /* when they strike (the next time the player is reachable) */
@@ -379,6 +388,8 @@ void sr_chess_resolve(SrChess *ch, SrCity *c, SrPopulation *pop, SrEventLog *log
 int sr_chess_security(const SrChess *ch, int building);  /* added facility security */
 int sr_chess_price_pct(const SrChess *ch, int district); /* 100 = normal */
 float sr_chess_dominance(const SrChess *ch, const SrCity *c, int *leader);
+/* Share that triggers the endgame: clamp(2.2 / megacorps, 25 %, 40 %). */
+float sr_chess_dominance_threshold(const SrCity *c);
 int sr_chess_gang_of(const SrCity *c, int district); /* controlling gang or -1 */
 int sr_chess_city_hall(const SrCity *c);             /* the city hall building */
 void sr_chess_reveal(SrChess *ch, int a, int b, SrLinkType t);
