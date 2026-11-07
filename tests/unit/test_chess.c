@@ -732,7 +732,7 @@ static void test_acts_and_defection(void) {
   SR_CHECK_EQ(st->hostile, old);
   SR_CHECK(strcmp(handler, st->cast[SR_CAST_HANDLER].name) != 0);
   SR_CHECK_EQ(sr_game_accept_offer(g), SR_ERR_INVALID);
-  sr_story_defect(st, g->city, -1, 0); /* ignored */
+  SR_CHECK(!sr_story_defect(&g->chess, g->city, -1, 0)); /* ignored */
   SR_CHECK_EQ(st->patron, rival);
   sr_game_destroy(g);
 }

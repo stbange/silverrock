@@ -97,10 +97,11 @@ static int outlet_against(const SrChess *ch, const SrCity *c, int subject) {
 void sr_news_plant(SrChess *ch, const SrCity *c, int subject, int seat, int64_t now) {
   char head[64];
   if (seat >= 0 && seat < ch->pol.seat_count)
-    snprintf(head, sizeof head, "Leaked: %s on %s's payroll", ch->pol.seats[seat].name,
-             subject >= 0 ? c->factions.f[subject].name : "a corp");
+    sr_headline(head, sizeof head, "Leaked: %1 on %2 payroll", ch->pol.seats[seat].name,
+                subject >= 0 ? c->factions.f[subject].name : "a corp", NULL);
   else
-    snprintf(head, sizeof head, "Leaked files shame %s", subject >= 0 ? c->factions.f[subject].name : "the city");
+    sr_headline(head, sizeof head, "Leaked files shame %1", subject >= 0 ? c->factions.f[subject].name : "the city",
+                NULL, NULL);
   sr_news_queue(ch, outlet_against(ch, c, subject), subject, seat, true, true, head, now + 3600);
 }
 
@@ -157,21 +158,15 @@ void sr_news_tick(SrChess *ch, const SrCity *c, const SrEventLog *log, int64_t n
       int outlet = c->factions.media_count > 0
                        ? c->factions.media_first + (int)((uint64_t)d->count % (uint64_t)c->factions.media_count)
                        : -1;
+      /* an owned outlet never names its owner as the culprit */
+      int shown = outlet >= 0 && perp >= 0 && c->factions.f[outlet].owner == perp ? -1 : perp;
       char head[64];
-      if (outlet >= 0 && subject >= 0 && c->factions.f[outlet].owner == subject)
-        snprintf(head, sizeof head, "Cowardly attack on %s", faction_name(c, subject));
-      else if (perp == -2)
-        snprintf(head, sizeof head, "%s - shadowrunner blamed", e->text);
-      else if (perp >= 0 && perp != subject && (outlet < 0 || c->factions.f[outlet].owner != perp))
-        snprintf(head, sizeof head, "%s - %s suspected", e->text, faction_name(c, perp));
-      else
-        snprintf(head, sizeof head, "%s", e->text);
-      head[63] = 0;
+      sr_news_event_headline(head, sizeof head, c, e, outlet, shown);
       sr_news_publish(ch, c, outlet, subject, e->district, perp, e->type, false, head, now);
       /* an investigation follows corporate violence: a scandal that can be killed before it runs */
       if (perp >= 0 && perp < c->factions.corp_count && perp != subject) {
         char inv[64];
-        snprintf(inv, sizeof inv, "Investigation: %s behind attacks", faction_name(c, perp));
+        sr_headline(inv, sizeof inv, "Investigation: %1 behind attacks", faction_name(c, perp), NULL, NULL);
         sr_news_queue(ch, outlet_against(ch, c, perp), perp, -1, true, false, inv, now + 12 * 3600);
       }
     }

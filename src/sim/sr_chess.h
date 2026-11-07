@@ -293,6 +293,15 @@ typedef struct SrStory {
   SrCast cast[SR_CAST_COUNT];
 } SrStory;
 
+/* ---- campaign state added after M5 (its own save section; the M5 blobs stay unchanged) -------- */
+
+#define SR_TRUST_DEFECT 25 /* trust with a new patron after a defection */
+
+typedef struct SrCampaign {
+  uint16_t blacklist; /* megacorps the player betrayed: no offers, never the patron again */
+  uint8_t defections; /* voluntary defections so far (one per campaign) */
+} SrCampaign;
+
 /* ---- the whole corporate game ---------------------------------------------------------------- */
 
 typedef struct SrChess {
@@ -317,6 +326,7 @@ typedef struct SrChess {
   SrMarket market;
   SrNewsDesk news;
   SrStory story;
+  SrCampaign camp;
   int32_t street_cred; /* the player's, set by the game before advancing */
   int ticks;
   int history_count;
@@ -406,6 +416,14 @@ bool sr_news_reported(const SrNewsDesk *d, int subject, bool scandal_only);
 /* Whether an independent outlet (the pirate feed or an unowned station) reported a scandal about subject. */
 bool sr_news_independent_scandal(const SrNewsDesk *d, const SrCity *c, int subject);
 
+/* ---- headlines (sr_news_text.c) ---- */
+/* Fills a template (%1 %2 %3) and fits it to 63 characters: long names fall back to their first
+ * word, and a headline that is still too long ends at a whole word. */
+void sr_headline(char *out, size_t cap, const char *tmpl, const char *a, const char *b, const char *c);
+/* The headline an outlet (-1 the pirate feed) writes about a world event, naming the culprit `perp`
+ * (-2 the runner, -1 nobody). */
+void sr_news_event_headline(char *out, size_t cap, const SrCity *c, const SrWorldEvent *e, int outlet, int perp);
+
 /* ---- story (sr_story.c) ---- */
 #define SR_ACT2_MAX_S (12 * SR_WEEK_S) /* Act II lasts at most this long */
 #define SR_FINALE_S   (2 * SR_WEEK_S)
@@ -423,7 +441,9 @@ void sr_story_test_done(SrStory *s, int64_t now);
 void sr_story_accept_retainer(SrStory *s, int64_t now);
 /* A job the player finished: trust for the patron's work, betrayal when attributed against it. */
 void sr_story_job_done(SrChess *ch, SrCity *c, int client, int target, bool success, bool attributed, int64_t now);
-void sr_story_defect(SrStory *s, const SrCity *c, int corp, int64_t now);
+/* Defects to a rival megacorp; refused for a blacklisted one. Returns true when it happened. */
+bool sr_story_defect(SrChess *ch, const SrCity *c, int corp, int64_t now);
+bool sr_story_blacklisted(const SrChess *ch, int corp);
 SrScenario sr_story_pick_scenario(const SrChess *ch, const SrCity *c, int leader, int *other);
 /* Endings the player can choose at the climax (bit per SrEnding). */
 unsigned sr_story_endings(const SrStory *s);

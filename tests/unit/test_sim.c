@@ -854,18 +854,34 @@ static void test_player_create(void) {
   SrEventLog log;
   sr_events_init(&log);
   int before = p.msg_count;
-  sr_player_rent_tick(&p, p.rent_due - 2 * SR_DAY_S, &log);
-  SR_CHECK_EQ(p.msg_count, before + 1);
+  sr_player_rent_tick(&p, p.rent_due - 2 * SR_DAY_S, &log); /* one reminder a week: the day before */
+  SR_CHECK_EQ(p.msg_count, before);
   sr_player_rent_tick(&p, p.rent_due - SR_DAY_S, &log);
-  SR_CHECK_EQ(p.msg_count, before + 2);
+  SR_CHECK_EQ(p.msg_count, before + 1);
   int64_t due = p.rent_due, cash = p.cred;
   sr_player_rent_tick(&p, due, &log);
   SR_CHECK_EQ(p.cred, cash - p.rent);
   SR_CHECK_EQ(p.rent_due, due + SR_WEEK_S);
   SR_CHECK_EQ(p.missed, 0);
   SR_CHECK_EQ(sr_player_unread(&p), p.msg_count);
-  for (int i = 0; i < 40; i++) sr_player_message(&p, "spam", "x", 0);
+  SR_SPEC("player-life", "Repeated message merged");
+  int n0 = p.msg_count;
+  sr_player_message(&p, "Handler", "Same line", 1000);
+  sr_player_message(&p, "Handler", "Same line", 2000);
+  SR_CHECK_EQ(p.msg_count, n0 + 1);
+  SR_CHECK_EQ(p.msgs[p.msg_count - 1].repeat, 2);
+  sr_player_message(&p, "Handler", "Same line", 2000 + 2 * SR_DAY_S); /* a day later: a new message */
+  SR_CHECK_EQ(p.msg_count, n0 + 2);
+  sr_player_story_message(&p, "Handler", "Pinned story", 5000);
+  for (int i = 0; i < 100; i++) {
+    char t[16];
+    snprintf(t, sizeof t, "spam %d", i);
+    sr_player_message(&p, "spam", t, 0);
+  }
   SR_CHECK_EQ(p.msg_count, SR_MAX_MESSAGES);
+  bool kept = false;
+  for (int i = 0; i < p.msg_count; i++) kept |= p.msgs[i].pinned && strcmp(p.msgs[i].text, "Pinned story") == 0;
+  SR_CHECK(kept); /* story messages survive an overflowing inbox */
   for (int i = 0; i < 80; i++) sr_player_tx(&p, 0, 0, "x");
   SR_CHECK_EQ(p.tx_count, SR_MAX_TX);
 }

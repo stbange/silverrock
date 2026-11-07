@@ -30,9 +30,22 @@ const SrHousingDef *sr_housing_def(int tier) { return tier >= 0 && tier < SR_HOU
 
 int64_t sr_rent_due_for(int64_t t) { return (t / SR_WEEK_S + 1) * SR_WEEK_S - 60; }
 
-void sr_player_message(SrPlayer *p, const char *from, const char *text, int64_t t) {
-  if (p->msg_count == SR_MAX_MESSAGES) {
-    memmove(&p->msgs[0], &p->msgs[1], sizeof(SrMessage) * (SR_MAX_MESSAGES - 1));
+static void add_message(SrPlayer *p, const char *from, const char *text, int64_t t, bool pinned) {
+  /* the same message from the same sender within a day is merged */
+  for (int i = p->msg_count - 1; i >= 0 && i >= p->msg_count - 8; i--) {
+    SrMessage *m = &p->msgs[i];
+    if (t - m->time <= SR_DAY_S && strcmp(m->from, from) == 0 && strcmp(m->text, text) == 0) {
+      if (m->repeat < 255) m->repeat++;
+      m->time = t;
+      m->read = false;
+      m->pinned |= pinned;
+      return;
+    }
+  }
+  if (p->msg_count == SR_MAX_MESSAGES) { /* drop the oldest ordinary message */
+    int k = 0;
+    while (k < p->msg_count - 1 && p->msgs[k].pinned) k++;
+    memmove(&p->msgs[k], &p->msgs[k + 1], sizeof(SrMessage) * (size_t)(SR_MAX_MESSAGES - 1 - k));
     p->msg_count--;
   }
   SrMessage *m = &p->msgs[p->msg_count++];
@@ -40,6 +53,16 @@ void sr_player_message(SrPlayer *p, const char *from, const char *text, int64_t 
   sr_strlcpy(m->text, text, sizeof m->text);
   m->time = t;
   m->read = false;
+  m->pinned = pinned;
+  m->repeat = 1;
+}
+
+void sr_player_message(SrPlayer *p, const char *from, const char *text, int64_t t) {
+  add_message(p, from, text, t, false);
+}
+
+void sr_player_story_message(SrPlayer *p, const char *from, const char *text, int64_t t) {
+  add_message(p, from, text, t, true);
 }
 
 int sr_player_unread(const SrPlayer *p) {
@@ -194,10 +217,6 @@ SrResult sr_player_sell(SrPlayer *p, const SrCity *c, int building, int idx, int
 
 void sr_player_rent_tick(SrPlayer *p, int64_t t, SrEventLog *log) {
   while (t >= p->rent_due - 2 * SR_DAY_S) {
-    if (!(p->reminders & 1) && t >= p->rent_due - 2 * SR_DAY_S) {
-      p->reminders |= 1;
-      sr_player_message(p, "Landlord", "Reminder: rent is due in two days.", p->rent_due - 2 * SR_DAY_S);
-    }
     if (!(p->reminders & 2) && t >= p->rent_due - SR_DAY_S) {
       p->reminders |= 2;
       sr_player_message(p, "Landlord", "Rent is due tomorrow night.", p->rent_due - SR_DAY_S);

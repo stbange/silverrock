@@ -159,6 +159,7 @@ typedef struct SrGame {
   int8_t patron_choice; /* new game: chosen patron corp, -1 random */
   int64_t curfew_stop_at;
   int term_tab, term_sel, term_axis_x, term_axis_y;
+  int32_t confirm_job; /* job whose patron warning was shown; accepting it again goes ahead */
   /* character creation */
   uint64_t create_seed;
   uint64_t create_look;
@@ -279,6 +280,8 @@ void sr_game_chess_minute(SrGame *g, int64_t t);
 /* After loading: replays recorded city changes and refreshes derived state. */
 void sr_game_chess_loaded(SrGame *g);
 int sr_game_police(const SrGame *g);
+/* The job hits the patron or a faction the patron funds or owns. */
+bool sr_game_job_against_patron(const SrGame *g, const SrJob *j);
 int sr_game_jurisdiction(const SrGame *g, int building);
 /* District price index in percent (shortages after sabotage). */
 int sr_game_price_pct(const SrGame *g, int building);

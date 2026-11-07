@@ -454,8 +454,7 @@ SrMissionResult sr_job_execute(const SrCity *c, SrJob *j, SrPlayer *p, SrApproac
   res.camera = cams > 0 && res.alarm;
   /* skills grow with real use */
   sr_progress_use_skill(&p->prog, used, res.success ? SR_USE_SUCCESS : SR_USE_HOSTILE, 10 + 5 * j->tier);
-  p->health -= res.damage;
-  if (p->health < 1.0f) p->health = 1.0f; /* the game layer handles flatlining from combat */
+  p->health -= res.damage; /* may reach zero: the game layer flatlines the player */
   sr_job_apply_result(j, p, &res);
   return res;
 }

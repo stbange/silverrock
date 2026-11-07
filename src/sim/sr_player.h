@@ -9,7 +9,7 @@
 #include "sim/sr_population.h"
 #include "sim/sr_progress.h"
 
-#define SR_MAX_MESSAGES 32
+#define SR_MAX_MESSAGES 64
 #define SR_MAX_TX       64
 #define SR_LATE_FEE     50
 #define SR_MAX_CYBER    8
@@ -55,6 +55,8 @@ typedef struct SrMessage {
   char text[112];
   int64_t time;
   bool read;
+  bool pinned;    /* story messages stay when the inbox overflows */
+  uint8_t repeat; /* the same message again within a day: shown once with a count */
 } SrMessage;
 
 typedef struct SrTx {
@@ -146,6 +148,8 @@ SrTrip sr_metro_trip(const SrCity *c, int from_station, int to_station, int64_t 
 SrTrip sr_cab_trip(const SrCity *c, int from_building, int to_building);
 
 void sr_player_message(SrPlayer *p, const char *from, const char *text, int64_t t);
+/* A story message: pinned, never dropped before ordinary messages. */
+void sr_player_story_message(SrPlayer *p, const char *from, const char *text, int64_t t);
 int sr_player_unread(const SrPlayer *p);
 
 #endif

@@ -24,6 +24,7 @@ const char *sr_result_name(SrResult r) {
     case SR_ERR_VERSION: return "version";
     case SR_ERR_DENIED: return "denied";
     case SR_ERR_NOT_FOUND: return "not found";
+    case SR_ERR_CONFIRM: return "confirm";
   }
   return "unknown";
 }

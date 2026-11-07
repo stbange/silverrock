@@ -435,7 +435,11 @@ static void terminal_home(SrUi *ui, const SrGame *g, float x, float y, float lin
   sr_ui_text(ui, x, y, "MESSAGES", k_amber, s);
   y += line;
   for (int i = g->player.msg_count - 1; i >= 0 && y < (float)ui->h * 0.6f; i--) {
-    snprintf(buf, sizeof buf, "%s: %s", g->player.msgs[i].from, g->player.msgs[i].text);
+    const SrMessage *mg = &g->player.msgs[i];
+    if (mg->repeat > 1)
+      snprintf(buf, sizeof buf, "%s: %s (x%d)", mg->from, mg->text, mg->repeat);
+    else
+      snprintf(buf, sizeof buf, "%s: %s", mg->from, mg->text);
     buf[SR_CLAMP((ui->w - 2 * (int)x) / (6 * s), 1, 199)] = '\0';
     sr_ui_text(ui, x, y, buf, green, s);
     y += line;

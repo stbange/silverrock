@@ -97,11 +97,13 @@ int sr_politics_elect(SrChess *ch, const SrCity *c, int seat, int64_t now) {
   st->resign_at = 0;
   p->last_share[seat >= SR_COUNCIL_SEATS ? SR_COUNCIL_SEATS : seat] = won;
   p->elections_held++;
-  char head[64];
+  char head[64], num[8], pct[8];
+  snprintf(num, sizeof num, "%d", seat + 1);
+  snprintf(pct, sizeof pct, "%d%%", (int)(won * 100.0f + 0.5f));
   if (seat >= SR_COUNCIL_SEATS)
-    snprintf(head, sizeof head, "%s elected mayor with %d%%", st->name, (int)(won * 100.0f + 0.5f));
+    sr_headline(head, sizeof head, "%1 elected mayor with %2", st->name, pct, NULL);
   else
-    snprintf(head, sizeof head, "Council seat %d: %s wins, %d%%", seat + 1, st->name, (int)(won * 100.0f + 0.5f));
+    sr_headline(head, sizeof head, "Council seat %3: %1 wins with %2", st->name, pct, num);
   sr_news_publish(ch, c, outlet_for(c, winner), winner, -1, -1, SR_NEWS_ELECTION, false, head, now);
   sr_chess_note(ch, now, head);
   return winner;
@@ -117,7 +119,7 @@ void sr_politics_expose(SrChess *ch, const SrCity *c, int seat, int64_t now) {
   int corp = st->bribed >= 0 ? st->bribed : st->backer;
   if (corp >= 0) ch->f[corp].res[SR_RES_IMAGE] = (int16_t)SR_MAX(0, ch->f[corp].res[SR_RES_IMAGE] - 10);
   char head[64];
-  snprintf(head, sizeof head, "Councillor %s caught taking bribes", st->name);
+  sr_headline(head, sizeof head, "Councillor %1 caught taking bribes", st->name, NULL, NULL);
   sr_news_publish(ch, c, -1, corp, -1, -1, SR_NEWS_SCANDAL, true, head, now);
 }
 
@@ -158,12 +160,12 @@ static void policies(SrChess *ch, const SrCity *c, const SrEventLog *log, int64_
     bool on = (p->curfew >> d) & 1u;
     if (!on && v >= 2 && lean >= 0) {
       p->curfew = (uint16_t)(p->curfew | (1u << d));
-      snprintf(head, sizeof head, "Curfew declared in %s", c->districts[d].name);
+      sr_headline(head, sizeof head, "Curfew declared in %1", c->districts[d].name, NULL, NULL);
       sr_news_publish(ch, c, outlet_for(c, -1), -1, d, -1, SR_NEWS_POLICY, false, head, now);
       sr_chess_note(ch, now, head);
     } else if (on && (v == 0 || lean < 0)) {
       p->curfew = (uint16_t)(p->curfew & ~(1u << d));
-      snprintf(head, sizeof head, "Curfew lifted in %s", c->districts[d].name);
+      sr_headline(head, sizeof head, "Curfew lifted in %1", c->districts[d].name, NULL, NULL);
       sr_news_publish(ch, c, outlet_for(c, -1), -1, d, -1, SR_NEWS_POLICY, false, head, now);
       sr_chess_note(ch, now, head);
     }
@@ -172,7 +174,7 @@ static void policies(SrChess *ch, const SrCity *c, const SrEventLog *log, int64_
   for (int k = 0; k < c->factions.corp_count; k++)
     if (sr_politics_seats_of(p, k) >= majority && p->police_contract != k) {
       p->police_contract = (int8_t)k;
-      snprintf(head, sizeof head, "Police contract awarded to %s", c->factions.f[k].name);
+      sr_headline(head, sizeof head, "Police contract awarded to %1", c->factions.f[k].name, NULL, NULL);
       sr_news_publish(ch, c, outlet_for(c, k), k, -1, -1, SR_NEWS_POLICY, false, head, now);
       sr_chess_note(ch, now, head);
     }
@@ -194,7 +196,7 @@ void sr_politics_tick(SrChess *ch, SrCity *c, SrEventLog *log, int64_t now) {
     SrSeat *st = &p->seats[s];
     if (!st->exposed || now < st->resign_at) continue;
     char head[64];
-    snprintf(head, sizeof head, "Councillor %s resigns", st->name);
+    sr_headline(head, sizeof head, "Councillor %1 resigns", st->name, NULL, NULL);
     sr_news_publish(ch, c, outlet_for(c, st->backer), st->backer, -1, -1, SR_NEWS_RESIGN, false, head, now);
     sr_chess_note(ch, now, head);
     st->exposed = false;

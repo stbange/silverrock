@@ -148,6 +148,7 @@ static bool get_player(SrReader *r, SrPlayer *p, uint32_t version, const SrCity 
     sr_get_str(r, p->msgs[i].text, sizeof p->msgs[i].text);
     p->msgs[i].time = sr_get_i64(r);
     p->msgs[i].read = sr_get_u8(r) != 0;
+    p->msgs[i].repeat = 1;
   }
   p->msg_count = nm;
   if (p->home < 0 || p->home >= c->building_count) return false;

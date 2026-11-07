@@ -14,7 +14,8 @@ typedef enum SrResult {
   SR_ERR_CORRUPT = 4,
   SR_ERR_VERSION = 5,
   SR_ERR_DENIED = 6,
-  SR_ERR_NOT_FOUND = 7
+  SR_ERR_NOT_FOUND = 7,
+  SR_ERR_CONFIRM = 8 /* the action needs a second confirmation (a warning was shown) */
 } SrResult;
 
 #define SR_ARRAY_LEN(a)     (sizeof(a) / sizeof((a)[0]))

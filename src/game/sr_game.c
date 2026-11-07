@@ -538,6 +538,15 @@ int sr_game_fixer(SrGame *g, int fixer, int out_ids[4]) {
 SrResult sr_game_accept(SrGame *g, int32_t id) {
   SrJob *j = sr_jobs_get(&g->jobs, id);
   if (!j) return SR_ERR_NOT_FOUND;
+  if (j->state == SR_JS_OFFERED && sr_game_job_against_patron(g, j) && g->confirm_job != id) {
+    g->confirm_job = id; /* warn first: the next accept goes ahead */
+    char from[24];
+    snprintf(from, sizeof from, "%s", g->chess.story.cast[SR_CAST_HANDLER].name);
+    sr_player_message(&g->player, from, "That job hits our people. Take it and we will hear about it.",
+                      sr_game_time(g));
+    sr_game_toast(g, "PATRON TARGET: accept again to take it anyway.");
+    return SR_ERR_CONFIRM;
+  }
   SrResult r = sr_job_accept(j, &g->player, sr_game_time(g));
   if (r != SR_OK) return r;
   g->active_job = id;
@@ -559,8 +568,17 @@ SrMissionResult sr_game_execute(SrGame *g, int32_t id, SrApproach a) {
   memset(&res, 0, sizeof res);
   SrJob *j = sr_jobs_get(&g->jobs, id);
   if (!j) return res;
+  float before = g->player.health;
   res = sr_job_execute(g->city, j, &g->player, a, sr_hash_combine(g->seed, g->steps + (uint64_t)sr_game_time(g)));
+  if (g->difficulty == SR_DIFF_STORY) { /* the Story preset never takes more than 60 % in one mission */
+    float floor_hp = before - 0.6f * g->player.max_health;
+    if (g->player.health < floor_hp) {
+      res.damage = before - floor_hp;
+      g->player.health = floor_hp;
+    }
+  }
   sr_game_skip(g, res.seconds, false);
+  if (g->player.health <= 0) sr_game_flatline(g); /* a resolved mission can kill */
   if (res.alarm || res.kills) {
     SrCrime cr;
     memset(&cr, 0, sizeof cr);

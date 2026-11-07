@@ -15,6 +15,7 @@ void sr_game_chess_init(SrGame *g) {
   sr_chess_init(&g->chess, g->city, sr_hash_combine(g->seed, 0xC4E55u), g->patron_choice, now_of(g));
   g->chess.news.events_seen = g->events.count;
   g->curfew_stop_at = 0;
+  g->confirm_job = -1;
   g->term_tab = SR_TAB_HOME;
   g->term_sel = 0;
 }
@@ -23,6 +24,17 @@ void sr_game_chess_loaded(SrGame *g) {
   sr_chess_apply_changes(&g->chess, g->city);
   g->chess.news.events_seen = g->events.count; /* the event log was rebuilt */
   sync_world(g, now_of(g));
+}
+
+bool sr_game_job_against_patron(const SrGame *g, const SrJob *j) {
+  int p = g->chess.story.patron, t = j->target_faction;
+  if (p < 0 || t < 0 || !g->chess.story.retainer) return false;
+  if (t == p) return true;
+  for (int i = 0; i < g->chess.link_count; i++) { /* the patron's gangs and stations */
+    const SrLink *l = &g->chess.links[i];
+    if (l->a == p && l->b == t && (l->type == SR_LINK_FUNDS || l->type == SR_LINK_OWNS)) return true;
+  }
+  return false;
 }
 
 int sr_game_police(const SrGame *g) { return sr_politics_police(&g->chess.pol, g->city); }
@@ -46,6 +58,13 @@ static void handler_says(SrGame *g, const char *text) {
   char from[24];
   snprintf(from, sizeof from, "%s", g->chess.story.cast[SR_CAST_HANDLER].name);
   sr_player_message(&g->player, from, text, now_of(g));
+}
+
+/* Story beats from the handler stay in the inbox. */
+static void handler_story(SrGame *g, const char *text) {
+  char from[24];
+  snprintf(from, sizeof from, "%s", g->chess.story.cast[SR_CAST_HANDLER].name);
+  sr_player_story_message(&g->player, from, text, now_of(g));
 }
 
 /* ---- contracts as jobs ---------------------------------------------------------------------- */
@@ -197,7 +216,7 @@ static void story_messages(SrGame *g) {
   SrStory *s = &g->chess.story;
   static const char *const offer = "We liked your work. A retainer: steady pay, better jobs. Accept on the terminal.";
   if (s->offer_open && !s->retainer && !s->offer_told) {
-    handler_says(g, offer);
+    handler_story(g, offer);
     s->offer_told = true;
   }
 }
@@ -210,7 +229,7 @@ void sr_game_chess_minute(SrGame *g, int64_t t) {
   sr_chess_advance(ch, g->city, g->pop, &g->events, t);
   sr_news_tick(ch, g->city, &g->events, t); /* within the hour of an event */
   if (ch->story.cast[SR_CAST_HANDLER].generation != handlers_before && ch->story.cast[SR_CAST_HANDLER].alive)
-    handler_says(g, "Your old handler is gone. I'm taking over. Nothing changes.");
+    handler_story(g, "Your old handler is gone. I'm taking over. Nothing changes.");
   if (t % 3600 == 0) {
     post_contracts(g, t);
     sync_world(g, t);
@@ -228,15 +247,18 @@ SrResult sr_game_accept_retainer(SrGame *g) {
   sr_story_accept_retainer(s, now_of(g));
   char msg[112];
   snprintf(msg, sizeof msg, "Welcome to %s. Don't make me regret it.", g->city->factions.f[s->patron].blackops);
-  handler_says(g, msg);
+  handler_story(g, msg);
   return SR_OK;
 }
 
 SrResult sr_game_accept_offer(SrGame *g) {
   SrStory *s = &g->chess.story;
   if (s->rival_offer < 0) return SR_ERR_INVALID;
-  sr_story_defect(s, g->city, s->rival_offer, now_of(g));
-  handler_says(g, "You made the right call. Your old friends will not see it that way.");
+  if (!sr_story_defect(&g->chess, g->city, s->rival_offer, now_of(g))) {
+    s->rival_offer = -1;  /* GCOVR_EXCL_LINE reason: offers never come from blacklisted corps */
+    return SR_ERR_DENIED; /* GCOVR_EXCL_LINE */
+  }
+  handler_story(g, "You made the right call. Your old friends will not see it that way.");
   return SR_OK;
 }
 

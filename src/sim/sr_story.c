@@ -216,9 +216,18 @@ void sr_story_beat_done(SrChess *ch, SrCity *c, int idx, bool success, int64_t n
 
 /* ---- trust, betrayal, defection ---------------------------------------------------------------- */
 
+bool sr_story_blacklisted(const SrChess *ch, int corp) {
+  return corp >= 0 && corp < 16 && (ch->camp.blacklist >> corp) & 1u;
+}
+
+static void blacklist(SrChess *ch, int corp) {
+  if (corp >= 0 && corp < 16) ch->camp.blacklist = (uint16_t)(ch->camp.blacklist | (1u << corp));
+}
+
 static void turn_hostile(SrChess *ch, const SrCity *c, int64_t now) {
   SrStory *s = &ch->story;
   if (s->patron < 0) return;
+  blacklist(ch, s->patron);
   s->hostile = s->patron;
   s->patron = -1;
   s->retainer = false;
@@ -242,13 +251,18 @@ void sr_story_job_done(SrChess *ch, SrCity *c, int client, int target, bool succ
   if (client == s->patron) sr_story_trust(s, success ? (attributed ? 3 : 6) : -8);
 }
 
-void sr_story_defect(SrStory *s, const SrCity *c, int corp, int64_t now) {
-  if (corp < 0 || corp >= c->factions.corp_count || corp == s->patron) return;
-  if (s->patron >= 0) s->hostile = s->patron;
+bool sr_story_defect(SrChess *ch, const SrCity *c, int corp, int64_t now) {
+  SrStory *s = &ch->story;
+  if (corp < 0 || corp >= c->factions.corp_count || corp == s->patron || sr_story_blacklisted(ch, corp)) return false;
+  if (s->patron >= 0) { /* a voluntary defection: the old patron turns and never takes the player back */
+    ch->camp.defections++;
+    blacklist(ch, s->patron);
+    s->hostile = s->patron;
+  }
   s->patron = (int8_t)corp;
   s->retainer = true;
   s->rival_offer = -1;
-  s->trust = SR_TRUST_ACT2;
+  s->trust = SR_TRUST_DEFECT;
   s->next_hunt = now;
   s->cast[SR_CAST_HANDLER].generation++;
   s->cast[SR_CAST_HANDLER].alive = true;
@@ -260,6 +274,7 @@ void sr_story_defect(SrStory *s, const SrCity *c, int corp, int64_t now) {
     s->act = SR_ACT_PAWN;
     s->act_started = now;
   }
+  return true;
 }
 
 /* ---- cast ---------------------------------------------------------------------------------- */
@@ -394,13 +409,16 @@ void sr_story_tick(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_t now)
     s->hunts++;
     s->next_hunt = now + SR_WEEK_S;
   }
-  /* counter-offers: rivals court the player in Act II, or once the patron turned */
-  if ((s->act == SR_ACT_KNIGHT || s->hostile >= 0) && s->rival_offer < 0 && now >= s->next_counter &&
+  /* counter-offers: rivals court the player in Act II (one voluntary defection per campaign), or
+   * once the patron turned; a megacorp the player betrayed never offers again */
+  bool courted = (s->act == SR_ACT_KNIGHT && ch->camp.defections == 0) || s->patron < 0;
+  if (courted && (s->act >= SR_ACT_PAWN || s->hostile >= 0) && s->rival_offer < 0 && now >= s->next_counter &&
       c->factions.corp_count > 1) {
     int k = (int)(sr_mix64(sr_hash_combine(ch->seed, (uint64_t)now)) % (uint64_t)c->factions.corp_count);
-    for (int tries = 0; tries < c->factions.corp_count && (k == s->patron || k == s->hostile); tries++)
+    for (int tries = 0;
+         tries < c->factions.corp_count && (k == s->patron || k == s->hostile || sr_story_blacklisted(ch, k)); tries++)
       k = (k + 1) % c->factions.corp_count;
-    if (k != s->patron && k != s->hostile) s->rival_offer = (int8_t)k;
+    if (k != s->patron && k != s->hostile && !sr_story_blacklisted(ch, k)) s->rival_offer = (int8_t)k;
     s->next_counter = now + 2 * SR_WEEK_S;
   }
   /* the director keeps 1-3 arcs going */
