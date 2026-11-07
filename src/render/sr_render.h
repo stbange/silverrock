@@ -346,7 +346,7 @@ typedef struct SrSceneCache {
   SrVec3 sil_at;                     /* where the silhouettes were built */
   float sil_fog_end;
   /* wet streets (sr_wet_mesh.c) and the props of the blocks around the camera */
-  SrMesh wet;
+  SrMesh wet, fronts;
   struct {
     int block;
     int n;
@@ -357,6 +357,13 @@ typedef struct SrSceneCache {
   float mist;      /* ground mist this frame */
   int reflections; /* reflections drawn this frame */
 } SrSceneCache;
+
+/* Buildings (sr_facade_mesh.c). */
+void sr_build_box_facade(SrMesh *m, const SrFacade *f, float x0, float z0, float x1, float z1, float ybot, float ytop,
+                         bool with_base, uint8_t blank);
+void sr_build_crown(SrMesh *m, const SrFacade *f, float x0, float z0, float x1, float z1, float h);
+void sr_build_poi_fronts(const SrCity *c, const SrDeltas *d, SrVec3 eye, int64_t t, SrMesh *out);
+void sr_build_door(SrMesh *m, float cx, float z, SrColor frame);
 
 /* Props of a block, cached (for sprites and lights around the camera). */
 const SrStreetProp *sr_scene_props(SrSceneCache *s, const SrCity *c, int block, int *n);

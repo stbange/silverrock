@@ -234,8 +234,8 @@ static const char *k_world_fs =
     "    vec3 k = vec3(floor(uv), t.r * 255.0 + v_seed * 37.0);\n"
     "    float h = hash3(k), h2 = hash3(k + vec3(7.1, 3.3, 1.7));\n"
     "    if (h < share) {\n"
-    "      vec3 lc = h2 < 0.45 ? vec3(1.0, 0.76, 0.46) : h2 < 0.75 ? vec3(0.70, 0.84, 1.0)\n"
-    "              : h2 < 0.9 ? vec3(0.35, 0.5, 1.0) * (0.7 + 0.3 * sin(u_time * (9.0 + h2 * 30.0)))\n"
+    "      vec3 lc = h2 < 0.6 ? vec3(1.0, 0.76, 0.46) : h2 < 0.86 ? vec3(0.70, 0.84, 1.0)\n"
+    "              : h2 < 0.95 ? vec3(0.35, 0.5, 1.0) * (0.7 + 0.3 * sin(u_time * (9.0 + h2 * 30.0)))\n"
     "              : vec3(1.0, 0.45, 0.8);\n"
     "      c = vec4(lc * (0.5 + 0.3 * t.g), 1.0);\n" /* peaks at 0.8: windows never clip to white */
     "      em = 0.6;\n"

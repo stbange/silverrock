@@ -345,3 +345,164 @@ uint64_t sr_dressing_digest(const SrCity *c) {
   }
   return h;
 }
+
+/* ---- facades ------------------------------------------------------------------------------------ */
+
+/* Window module weights per district type. */
+static const int8_t k_win_weights[SR_D_COUNT][SR_WIN_COUNT] = {
+    /* office balcony hive curtain brick shuttered boarded clerestory */
+    {3, 0, 0, 6, 0, 0, 0, 0}, /* spire */
+    {3, 0, 0, 1, 3, 0, 0, 0}, /* civic */
+    {3, 2, 1, 1, 1, 2, 0, 0}, /* commercial */
+    {1, 2, 2, 0, 1, 2, 0, 0}, /* entertainment */
+    {0, 4, 2, 0, 1, 2, 0, 0}, /* residential */
+    {0, 1, 0, 0, 4, 3, 1, 0}, /* old quarter */
+    {1, 0, 0, 0, 1, 0, 2, 4}, /* industrial */
+    {0, 0, 0, 0, 0, 1, 3, 3}, /* docks */
+    {3, 0, 0, 3, 0, 0, 0, 0}, /* campus */
+    {0, 0, 2, 0, 0, 3, 3, 0}, /* undercity */
+    {0, 0, 0, 0, 0, 1, 6, 0}, /* barrens */
+};
+
+/* Ground-floor weights per district type (for buildings that are not places). */
+static const int8_t k_base_weights[SR_D_COUNT][SR_BASE_COUNT] = {
+    /* shopfront shutter lobby dock stall posters */
+    {2, 0, 6, 0, 0, 1}, /* spire */
+    {1, 1, 5, 0, 0, 2}, /* civic */
+    {6, 2, 1, 0, 2, 1}, /* commercial */
+    {5, 3, 1, 0, 2, 2}, /* entertainment */
+    {2, 3, 4, 0, 1, 2}, /* residential */
+    {5, 2, 0, 0, 5, 1}, /* old quarter */
+    {0, 2, 0, 6, 0, 2}, /* industrial */
+    {0, 2, 0, 6, 0, 2}, /* docks */
+    {1, 0, 6, 0, 0, 1}, /* campus */
+    {2, 5, 0, 1, 3, 3}, /* undercity */
+    {0, 4, 0, 1, 1, 5}, /* barrens */
+};
+
+static uint64_t bhash(const SrCity *c, const SrBuilding *b, uint32_t salt) {
+  return sr_mix64(c->seed ^ ((uint64_t)b->id * 0xD6E8FEB86659FD93ull) ^ ((uint64_t)salt << 40));
+}
+
+static int base_for_poi(int poi) {
+  switch (poi) {
+    case SR_POI_CITY_HALL:
+    case SR_POI_CORP_HQ:
+    case SR_POI_CORP_FACILITY:
+    case SR_POI_POLICE:
+    case SR_POI_MEDIA:
+    case SR_POI_HOME:
+    case SR_POI_CLINIC:
+    case SR_POI_CAPSULE: return SR_BASE_LOBBY;
+    case SR_POI_GANG_HIDEOUT: return SR_BASE_SHUTTER;
+    case SR_POI_FOOD: return SR_BASE_STALL;
+    default: return SR_BASE_SHOPFRONT;
+  }
+}
+
+static int use_for(int winmod, SrDistrictType t, uint64_t h) {
+  switch (winmod) {
+    case SR_WIN_OFFICE:
+    case SR_WIN_CURTAIN:
+      return (t == SR_D_RESIDENTIAL || t == SR_D_ENTERTAINMENT) && (h & 1u) ? SR_FUSE_HOME : SR_FUSE_OFFICE;
+    case SR_WIN_CLERESTORY: return SR_FUSE_INDUSTRIAL;
+    case SR_WIN_BOARDED: return (h % 4u) == 0 ? SR_FUSE_HOME : SR_FUSE_VACANT;
+    default: return SR_FUSE_HOME;
+  }
+}
+
+/* Faces with a neighbour closer than 6 m become blank walls. */
+static uint8_t blank_faces(const SrCity *c, const SrBuilding *b) {
+  const SrBlock *k = &c->blocks[b->block];
+  uint8_t bits = 0;
+  for (int i = 0; i < k->building_count; i++) {
+    const SrBuilding *o = &c->buildings[k->first_building + i];
+    if (o == b) continue;
+    bool zover = o->y0 < b->y1 && b->y0 < o->y1, xover = o->x0 < b->x1 && b->x0 < o->x1;
+    if (zover && b->x0 - o->x1 >= 0 && b->x0 - o->x1 < 600) bits |= 1u;
+    if (zover && o->x0 - b->x1 >= 0 && o->x0 - b->x1 < 600) bits |= 2u;
+    if (xover && b->y0 - o->y1 >= 0 && b->y0 - o->y1 < 600) bits |= 4u;
+    if (xover && o->y0 - b->y1 >= 0 && o->y0 - b->y1 < 600) bits |= 8u;
+  }
+  return bits;
+}
+
+static void facade_raw(const SrCity *c, const SrBuilding *b, SrFacade *f, int bump) {
+  SrDistrictType t = c->districts[c->blocks[b->block].district].type;
+  uint64_t h = bhash(c, b, 1);
+  memset(f, 0, sizeof *f);
+  int w = pick(k_win_weights[t], SR_WIN_COUNT, h);
+  for (int k = 0; k < bump; k++) { /* next allowed module, so neighbours differ */
+    do { w = (w + 1) % SR_WIN_COUNT; } while (k_win_weights[t][w] == 0);
+  }
+  f->winmod = (uint8_t)w;
+  f->base = (uint8_t)(b->poi != SR_POI_NONE ? base_for_poi(b->poi) : pick(k_base_weights[t], SR_BASE_COUNT, h >> 12));
+  f->use = (uint8_t)use_for(w, t, h >> 20);
+  f->seed = (uint8_t)(h >> 26 & 63u);
+  float hgt = (float)b->height_cm / 100.0f;
+  f->crown = (uint8_t)(hgt > 120.0f && (h >> 32) % 3u == 0    ? SR_CROWN_NEON
+                       : w == SR_WIN_BRICK                    ? SR_CROWN_CORNICE
+                       : t == SR_D_BARRENS || t == SR_D_DOCKS ? SR_CROWN_NONE
+                                                              : SR_CROWN_PARAPET);
+  f->floor_h = 3.2f + (float)(h >> 36 & 7u) * 0.14f;
+  f->uv_u = (float)(h >> 40 & 15u) * 0.25f;
+  f->uv_v = (float)(h >> 44 & 3u) * 0.25f;
+  /* tint: a light base, warmed or cooled by the district, varied per building */
+  static const uint8_t k_tint[SR_D_COUNT][3] = {{150, 165, 185}, {165, 165, 172}, {170, 160, 165}, {165, 150, 170},
+                                                {150, 168, 168}, {180, 160, 140}, {170, 160, 145}, {150, 160, 172},
+                                                {160, 175, 165}, {130, 145, 130}, {150, 140, 130}};
+  for (int k = 0; k < 3; k++) f->tint[k] = (uint8_t)(k_tint[t][k] - 14 + (int)(h >> (48 + k * 5) & 31u));
+  f->blank = blank_faces(c, b);
+  f->shape = SR_SHAPE_BOX; /* shapes and roofs: sr_facade_for */
+  f->roof = SR_ROOF_FLAT;
+}
+
+void sr_facade_for(const SrCity *c, int building, SrFacade *out) {
+  const SrBuilding *b = &c->buildings[building];
+  const SrBlock *k = &c->blocks[b->block];
+  /* buildings earlier on the block come first: re-roll the window module until no earlier
+   * building shares both module and ground floor */
+  int bump = 0;
+  for (; bump < SR_WIN_COUNT; bump++) {
+    facade_raw(c, b, out, bump);
+    bool clash = false;
+    for (int i = 0; i < k->building_count && !clash; i++) {
+      int o = k->first_building + i;
+      if (o >= building) break;
+      SrFacade f;
+      sr_facade_for(c, o, &f);
+      clash = f.winmod == out->winmod && f.base == out->base;
+    }
+    if (!clash) break;
+  }
+  if (bump == SR_WIN_COUNT) facade_raw(c, b, out, 0); /* a district with one module: the ground floor differs */
+  if (bump == SR_WIN_COUNT) out->base = (uint8_t)((out->base + 1 + (b->id % 3u)) % SR_BASE_COUNT);
+  out->shape = SR_SHAPE_BOX;
+  out->roof = SR_ROOF_FLAT;
+}
+
+uint64_t sr_facade_digest(const SrCity *c) {
+  uint64_t h = 0;
+  for (int i = 0; i < c->building_count; i++) {
+    SrFacade f;
+    sr_facade_for(c, i, &f);
+    uint8_t q[16] = {f.winmod,
+                     f.base,
+                     f.crown,
+                     f.use,
+                     f.shape,
+                     f.roof,
+                     f.blank,
+                     f.seed,
+                     f.tint[0],
+                     f.tint[1],
+                     f.tint[2],
+                     f.steps,
+                     (uint8_t)(f.floor_h * 50.0f),
+                     (uint8_t)(f.uv_u * 4.0f),
+                     (uint8_t)(f.uv_v * 4.0f),
+                     0};
+    h = sr_hash_bytes(h, q, sizeof q);
+  }
+  return h;
+}

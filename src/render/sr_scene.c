@@ -225,29 +225,6 @@ static SrColor shade(SrColor c, int pct) {
   return (SrColor){(uint8_t)(c.r * pct / 100), (uint8_t)(c.g * pct / 100), (uint8_t)(c.b * pct / 100), c.a};
 }
 
-/* Window use and seed of a building, stored in the vertex pad byte (use << 6 | seed). */
-static uint8_t building_pad(const SrCity *c, const SrBuilding *bd) {
-  SrDistrictType t = c->districts[c->blocks[bd->block].district].type;
-  uint32_t h = (uint32_t)sr_mix64(c->seed ^ ((uint64_t)bd->id * 0x9E3779B97F4A7C15ull));
-  int use = SR_USE_HOME;
-  switch (t) {
-    case SR_D_SPIRE:
-    case SR_D_CIVIC:
-    case SR_D_CAMPUS: use = SR_USE_OFFICE; break;
-    case SR_D_COMMERCIAL:
-    case SR_D_ENTERTAINMENT: use = (h & 1u) ? SR_USE_OFFICE : SR_USE_HOME; break;
-    case SR_D_INDUSTRIAL:
-    case SR_D_DOCKS: use = SR_USE_INDUSTRIAL; break;
-    case SR_D_BARRENS: use = (h % 3u) ? SR_USE_VACANT : SR_USE_HOME; break;
-    default: use = (h % 7u) == 0 ? SR_USE_VACANT : SR_USE_HOME; break;
-  }
-  return (uint8_t)((use << 6) | (int)((h >> 8) & 63u));
-}
-
-static void tag_vertices(SrMesh *m, int from, uint8_t pad) {
-  for (int i = from; i < m->nv; i++) m->v[i].pad = pad;
-}
-
 /* A flat decal from the decal atlas, turned by yaw. */
 static void decal(SrMesh *m, float x, float y, float z, float w, float d, float yaw, int id, SrColor col, int em,
                   int ground) {
@@ -335,26 +312,19 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
     float bx0 = (float)bd->x0 / 100.0f, bz0 = (float)bd->y0 / 100.0f;
     float bx1 = (float)bd->x1 / 100.0f, bz1 = (float)bd->y1 / 100.0f;
     float h = (float)bd->height_cm / 100.0f;
-    static const int facade[4] = {SR_LAYER_WIN_A, SR_LAYER_WIN_B, SR_LAYER_WIN_GLASS, SR_LAYER_WIN_A};
-    int layer = facade[bd->style % 4];
-    SrDistrictType dt = c->districts[b->district].type;
-    if (dt == SR_D_SPIRE || dt == SR_D_CAMPUS) layer = SR_LAYER_WIN_GLASS;
-    if (dt == SR_D_OLDQUARTER && bd->style % 2) layer = SR_LAYER_BRICK;
-    if ((dt == SR_D_INDUSTRIAL || dt == SR_D_DOCKS) && bd->style % 2) layer = SR_LAYER_METAL;
-    /* bright base material lightly tinted by the district; lighting darkens it */
-    SrColor tint = {(uint8_t)((200 + pal->ambient.r) / 2 - bd->style * 4),
-                    (uint8_t)((200 + pal->ambient.g) / 2 - bd->style * 4),
-                    (uint8_t)((200 + pal->ambient.b) / 2 - bd->style * 4), 255};
-    int first_v = m->nv;
+    SrFacade fc;
+    sr_facade_for(c, bi, &fc);
+    SrColor tint = {fc.tint[0], fc.tint[1], fc.tint[2], 255};
     if (bd->poi == SR_POI_CORP_HQ && bd->owner >= 0) {
-      /* landmark tower: stacked tiers by silhouette */
+      /* landmark tower: stacked tiers by silhouette, each with the facade */
       int tiers = 1 + bd->silhouette[0];
       float taper = 0.06f + 0.05f * bd->silhouette[1];
       float lx0 = bx0, lz0 = bz0, lx1 = bx1, lz1 = bz1, y = 0;
       for (int t = 0; t < tiers; t++) {
         float th = h / (float)tiers;
-        sr_mesh_box(m, sr_v3(lx0, y, lz0), sr_v3(lx1, y + th, lz1), tint, layer, 0.08f, 0);
+        sr_build_box_facade(m, &fc, lx0, lz0, lx1, lz1, y, y + th, t == 0, t == 0 ? fc.blank : 0);
         float dx = (lx1 - lx0) * taper, dz = (lz1 - lz0) * taper;
+        sr_build_crown(m, &fc, lx0, lz0, lx1, lz1, y + th); /* each step gets a ledge */
         lx0 += dx;
         lx1 -= dx;
         lz0 += dz;
@@ -362,9 +332,10 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
         y += th;
       }
     } else {
-      sr_mesh_box(m, sr_v3(bx0, 0, bz0), sr_v3(bx1, h, bz1), tint, layer, 0.08f, 0);
+      sr_build_box_facade(m, &fc, bx0, bz0, bx1, bz1, 0.0f, h, true, fc.blank);
+      sr_build_crown(m, &fc, bx0, bz0, bx1, bz1, h);
     }
-    tag_vertices(m, first_v, building_pad(c, bd));
+    if (bd->poi != SR_POI_NONE) sr_build_door(m, (bx0 + bx1) / 2, bz1, neon_for(c, bi));
     if (bd->poi != SR_POI_NONE) {
       /* neon sign with the place's icon over the door (front = +z side) */
       SrColor neon = neon_for(c, bi);
@@ -772,7 +743,8 @@ void sr_scene_free(SrSceneCache *s) {
   sr_mesh_free(&s->air);
   sr_mesh_free(&s->grid);
   sr_mesh_free(&s->host);
-  SrMesh *gloom[] = {&s->sky, &s->deck, &s->deck_glow, &s->halos, &s->near_glow, &s->silhouettes, &s->sun, &s->wet};
+  SrMesh *gloom[] = {&s->sky,         &s->deck, &s->deck_glow, &s->halos, &s->near_glow,
+                     &s->silhouettes, &s->sun,  &s->wet,       &s->fronts};
   for (size_t i = 0; i < sizeof gloom / sizeof gloom[0]; i++) sr_mesh_free(gloom[i]);
   free(s->beacons);
   s->beacons = NULL;
@@ -1034,6 +1006,8 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
       s->deck.v[v].b = (uint8_t)((float)s->deck.v[v].b * tb);
     }
   }
+  sr_build_poi_fronts(c, &g->deltas, p->pos, t, &s->fronts); /* open shops light up their fronts */
+  add_draw(f, &s->fronts, SR_PASS_WORLD, p->pos);
   /* wet streets: reflections, splashes, drips, lamp cones, steam and ripples */
   sr_mesh_clear(&s->wet);
   s->reflections = sr_build_reflections(f->lights, f->nlights, p->pos, w.wetness, 64, &s->wet);

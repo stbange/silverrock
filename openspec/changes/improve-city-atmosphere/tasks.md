@@ -38,11 +38,11 @@ alone refers to a scenario in this change's deltas, and "D1"…"D18" refer to de
 
 ## 4. Facades (about 1 week)
 
-- [ ] 4.1 `src/world/sr_dressing.c` with `sr_facade_for`: base, shaft, crown, usage type, side walls; pinned digest test (spec: "Derived detail keeps the digest")
-- [ ] 4.2 Eight window modules (office strip, balconies, capsule hive, glass curtain, brick with sills, shuttered, boarded-up, clerestory) with glass marked in alpha
-- [ ] 4.3 Per-building UV offset and tint; the variety rule for same-block and across-street neighbours (spec: "Neighbours differ")
-- [ ] 4.4 Lit windows in the shader from usage type, seed and hour; four window colours; dark glass tinted by fog and sky (spec: "Offices go dark at night", "Homes light up in the evening")
-- [ ] 4.5 Blank side walls facing close neighbours, with fire escapes, AC units and pipes
+- [x] 4.1 `src/world/sr_dressing.c` with `sr_facade_for`: base, shaft, crown, usage type, side walls; pinned digest test (spec: "Derived detail keeps the digest")
+- [x] 4.2 Eight window modules (office strip, balconies, capsule hive, glass curtain, brick with sills, shuttered, boarded-up, clerestory) with glass marked in alpha
+- [x] 4.3 Per-building UV offset and tint; the variety rule for same-block and across-street neighbours (spec: "Neighbours differ")
+- [x] 4.4 Lit windows in the shader from usage type, seed and hour; four window colours; dark glass tinted by fog and sky (spec: "Offices go dark at night", "Homes light up in the evening")
+- [x] 4.5 Blank side walls facing close neighbours, with fire escapes, AC units and pipes
 
 ## 5. Silhouettes and roofs (about 1 week)
 

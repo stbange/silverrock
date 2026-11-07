@@ -256,7 +256,7 @@ static void base_module(int k, uint8_t *rgba) {
           break;
         case 1: { /* roller shutter with tags */
           int tag = (int)(h32(layer, x / 10, y / 9) % 9u);
-          int v = 100 + n / 2 + (y % 5 == 0 ? -40 : 0);
+          int v = 72 + n / 2 + (y % 5 == 0 ? -30 : 0);
           if (y > 40 && y < 100 && tag == 0)
             px(rgba, x, y, 200, 60 + n, 160, 255);
           else
@@ -269,7 +269,7 @@ static void base_module(int k, uint8_t *rgba) {
           else if (x % 64 == 32 || x % 64 == 33)
             px(rgba, x, y, 30, 30, 34, 255);
           else
-            px(rgba, x, y, 200 + n / 2, 190 + n / 2, 160 + n / 2, 255);
+            px(rgba, x, y, 120 + n / 2 + (y > 90 ? 20 : 0), 108 + n / 2, 80 + n / 2, 255);
           break;
         case 3: /* loading dock: roll-up door with hazard stripes */
           if (y > 116 && ((x + y) / 6) % 2 == 0)
@@ -279,7 +279,7 @@ static void base_module(int k, uint8_t *rgba) {
           else if (x % 64 < 6 || y < 16)
             px(rgba, x, y, 70 + n, 74 + n, 80 + n, 255);
           else
-            px(rgba, x, y, 128 + n / 2 + (y % 8 == 0 ? -40 : 0), 124 + n / 2, 110 + n / 2, 255);
+            px(rgba, x, y, 88 + n / 2 + (y % 8 == 0 ? -30 : 0), 86 + n / 2, 78 + n / 2, 255);
           break;
         case 4: /* stall front: open counter, hanging goods, warm light */
           if (y > 84)
@@ -295,9 +295,9 @@ static void base_module(int k, uint8_t *rgba) {
           uint32_t hp = h32(layer, x / 24, y / 34);
           bool poster = (hp & 3u) != 0 && x % 24 > 2 && x % 24 < 22 && y % 34 > 3 && y % 34 < 31 && y > 30;
           if (poster)
-            px(rgba, x, y, 80 + (int)(hp % 170u), 80 + (int)((hp >> 8) % 170u), 80 + (int)((hp >> 16) % 170u), 255);
+            px(rgba, x, y, 60 + (int)(hp % 130u), 60 + (int)((hp >> 8) % 130u), 60 + (int)((hp >> 16) % 130u), 255);
           else
-            px(rgba, x, y, 112 + n, 110 + n, 108 + n, 255);
+            px(rgba, x, y, 76 + n, 74 + n, 72 + n, 255);
           break;
         }
       }

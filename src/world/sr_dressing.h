@@ -6,6 +6,70 @@
 
 #include "world/sr_world.h"
 
+/* ---- facades ------------------------------------------------------------------------------------ */
+
+enum {
+  SR_WIN_OFFICE,
+  SR_WIN_BALCONY,
+  SR_WIN_HIVE,
+  SR_WIN_CURTAIN,
+  SR_WIN_BRICK,
+  SR_WIN_SHUTTERED,
+  SR_WIN_BOARDED,
+  SR_WIN_CLERESTORY,
+  SR_WIN_COUNT
+};
+enum { SR_BASE_SHOPFRONT, SR_BASE_SHUTTER, SR_BASE_LOBBY, SR_BASE_DOCK, SR_BASE_STALL, SR_BASE_POSTERS, SR_BASE_COUNT };
+enum { SR_CROWN_PARAPET, SR_CROWN_CORNICE, SR_CROWN_NEON, SR_CROWN_NONE, SR_CROWN_COUNT };
+/* Building uses for window lighting (match the renderer's SR_USE_*). */
+enum { SR_FUSE_OFFICE, SR_FUSE_HOME, SR_FUSE_INDUSTRIAL, SR_FUSE_VACANT };
+/* Shapes, all inside the ground footprint. */
+enum {
+  SR_SHAPE_BOX,
+  SR_SHAPE_PODIUM,
+  SR_SHAPE_SETBACK,
+  SR_SHAPE_CHAMFER,
+  SR_SHAPE_L,
+  SR_SHAPE_SLAB,
+  SR_SHAPE_ROWS,
+  SR_SHAPE_COUNT
+};
+/* Roof kits. */
+enum {
+  SR_ROOF_FLAT,
+  SR_ROOF_TANKS,
+  SR_ROOF_HVAC,
+  SR_ROOF_ANTENNAS,
+  SR_ROOF_HELIPAD,
+  SR_ROOF_NEON_CROWN,
+  SR_ROOF_PITCHED,
+  SR_ROOF_SAWTOOTH,
+  SR_ROOF_CORRUGATED,
+  SR_ROOF_DISHES,
+  SR_ROOF_STACK,
+  SR_ROOF_COUNT
+};
+
+typedef struct SrFacade {
+  uint8_t winmod;   /* SR_WIN_* window module of the shaft */
+  uint8_t base;     /* SR_BASE_* ground floor */
+  uint8_t crown;    /* SR_CROWN_* */
+  uint8_t use;      /* SR_FUSE_* */
+  uint8_t shape;    /* SR_SHAPE_* */
+  uint8_t roof;     /* SR_ROOF_* */
+  uint8_t blank;    /* bit per face (0 -x, 1 +x, 2 -z, 3 +z): blank wall toward a close neighbour */
+  uint8_t seed;     /* 0..63, varies the lit windows */
+  uint8_t tint[3];  /* wall tint */
+  uint8_t steps;    /* setbacks or podium floors */
+  float floor_h;    /* metres per floor (3.2..4.2) */
+  float uv_u, uv_v; /* texture offset, so neighbours' windows never line up */
+} SrFacade;
+
+/* The facade of a building: a pure function of the seed, the building, its district and its
+ * neighbours. Buildings on one block never share both window module and ground floor. */
+void sr_facade_for(const SrCity *c, int building, SrFacade *out);
+uint64_t sr_facade_digest(const SrCity *c);
+
 /* ---- street props ---------------------------------------------------------------------------- */
 
 typedef enum SrStreetPropKind {

@@ -399,6 +399,61 @@ static void test_wet_streets(void) {
   sr_mesh_free(&m);
 }
 
+static void test_facades(void) {
+  SR_SPEC("city-generation", "Derived detail keeps the digest");
+  SR_SPEC("retro-rendering", "Neighbours differ");
+  for (int seed = 1; seed <= 5; seed++) {
+    SrCity *c = sr_city_create((uint64_t)seed * 7919u, NULL);
+    uint64_t before = sr_city_digest(c);
+    uint64_t fd = sr_facade_digest(c), dd = sr_dressing_digest(c);
+    SR_CHECK(sr_city_digest(c) == before); /* derived detail never touches the city */
+    SR_CHECK(fd == sr_facade_digest(c) && dd == sr_dressing_digest(c));
+    if (seed == 1) {
+      printf("  facade digest %016llx, dressing digest %016llx\n", (unsigned long long)fd, (unsigned long long)dd);
+    }
+    int pairs = 0, across = 0;
+    for (int blk = 0; blk < c->grid * c->grid; blk++) {
+      const SrBlock *b = &c->blocks[blk];
+      for (int i = 0; i < b->building_count; i++) {
+        SrFacade fi;
+        sr_facade_for(c, b->first_building + i, &fi);
+        SR_CHECK(fi.winmod < SR_WIN_COUNT && fi.base < SR_BASE_COUNT && fi.use <= SR_FUSE_VACANT);
+        SR_CHECK(fi.floor_h >= 3.2f && fi.floor_h <= 4.2f);
+        for (int j = 0; j < i; j++) { /* same block: never both module and ground floor */
+          SrFacade fj;
+          sr_facade_for(c, b->first_building + j, &fj);
+          SR_CHECK(!(fi.winmod == fj.winmod && fi.base == fj.base));
+          pairs++;
+        }
+        /* across the street to the south: the building facing this one differs */
+        const SrBuilding *bd = &c->buildings[b->first_building + i];
+        int south = blk + c->grid;
+        if (south >= c->grid * c->grid || c->blocks[south].water) continue;
+        const SrBlock *sb = &c->blocks[south];
+        for (int k = 0; k < sb->building_count; k++) {
+          const SrBuilding *o = &c->buildings[sb->first_building + k];
+          if (o->x1 <= bd->x0 || o->x0 >= bd->x1) continue;
+          SrFacade fo;
+          sr_facade_for(c, sb->first_building + k, &fo);
+          bool same_tint = fo.tint[0] == fi.tint[0] && fo.tint[1] == fi.tint[1] && fo.tint[2] == fi.tint[2];
+          SR_CHECK(fo.winmod != fi.winmod || !same_tint || fo.crown != fi.crown);
+          across++;
+        }
+      }
+    }
+    SR_CHECK(pairs > 50 && across > 50);
+    /* close neighbours get blank walls on the facing sides */
+    int blanks = 0;
+    for (int bi = 0; bi < c->building_count; bi++) {
+      SrFacade f;
+      sr_facade_for(c, bi, &f);
+      blanks += f.blank != 0;
+    }
+    SR_CHECK(blanks > 0);
+    sr_city_destroy(c);
+  }
+}
+
 void suite_atmos(void) {
   g_game = sr_game_create();
   sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Atmos");
@@ -410,5 +465,6 @@ void suite_atmos(void) {
   SR_RUN(test_halos);
   SR_RUN(test_deck_and_sky);
   SR_RUN(test_wet_streets);
+  SR_RUN(test_facades);
   sr_game_destroy(g_game);
 }
