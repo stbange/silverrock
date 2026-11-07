@@ -57,6 +57,8 @@ void sr_time_format(int64_t t, char *out, size_t cap);
 
 SrWeather sr_weather_slot(uint64_t seed, int64_t slot);
 SrWeatherState sr_weather_at(uint64_t seed, int64_t t);
+/* A steady weather state (reference views, tests). */
+SrWeatherState sr_weather_fixed(SrWeather w);
 const char *sr_weather_name(SrWeather w);
 float sr_weather_visibility(SrWeather w);
 

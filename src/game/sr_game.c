@@ -95,6 +95,7 @@ SrResult sr_game_new(SrGame *g, uint64_t seed, const SrCityOptions *opt, SrBackg
   g->combat_count = 0;
   g->hostiles_near = 0;
   g->pall_removed = false;
+  g->force_weather = -1;
   g->started = true;
   g->screen = SR_SCREEN_PLAY;
   g->active_job = -1;
@@ -127,6 +128,11 @@ SrResult sr_game_new(SrGame *g, uint64_t seed, const SrCityOptions *opt, SrBackg
 }
 
 int64_t sr_game_time(const SrGame *g) { return sr_clock_seconds(&g->clock); }
+
+SrWeatherState sr_game_weather(const SrGame *g) {
+  if (g->force_weather >= 0) return sr_weather_fixed((SrWeather)g->force_weather);
+  return sr_weather_at(g->seed, sr_game_time(g));
+}
 
 void sr_game_toast(SrGame *g, const char *msg) {
   sr_strlcpy(g->toast, msg, sizeof g->toast);
@@ -321,7 +327,7 @@ void sr_game_step(SrGame *g, const SrActionState *a) {
   sr_game_net_tick(g);
   if (g->crowd_enabled && !g->site.active) {
     if (g->steps % 30 == 1) sr_crowd_refresh(&g->crowd, g->city, g->pop, &g->cam, t, g->max_agents);
-    SrWeatherState w = sr_weather_at(g->seed, t);
+    SrWeatherState w = sr_game_weather(g);
     sr_crowd_update(&g->crowd, g->city, dt, w.rain);
     sr_crowd_traffic(&g->crowd, g->city, &g->cam, g->player.pos, dt);
   }

@@ -78,6 +78,16 @@ SrWeatherState sr_weather_at(uint64_t seed, int64_t t) {
   return s;
 }
 
+SrWeatherState sr_weather_fixed(SrWeather w) {
+  SrWeatherState s;
+  s.from = s.to = (unsigned)w < SR_WX_COUNT ? w : SR_WX_CLEAR;
+  s.blend = 1.0f;
+  s.visibility = sr_weather_visibility(s.to);
+  s.rain = weather_rain(s.to);
+  s.wetness = s.rain > 0.0f ? 0.3f + 0.7f * s.rain : 0.25f;
+  return s;
+}
+
 SrSky sr_sky_at(int64_t t, bool pall_removed) {
   SrSky s;
   if (pall_removed) {

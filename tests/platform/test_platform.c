@@ -1028,6 +1028,226 @@ static void test_headless_app(void) {
   free(h);
 }
 
+/* ---- Reference views of the city's atmosphere (improve-city-atmosphere D15) ------------------ */
+
+typedef enum { AV_STREET, AV_ALLEY, AV_HIGHWAY, AV_ROOF } AtmosKind;
+typedef struct {
+  const char *name;
+  int district; /* SrDistrictType, or -1 for the home district */
+  AtmosKind kind;
+  int hour, minute;
+  int weather; /* SrWeather */
+} AtmosView;
+
+static const AtmosView k_atmos_views[] = {
+    {"spire", SR_D_SPIRE, AV_STREET, 23, 0, SR_WX_DRIZZLE},
+    {"commercial", SR_D_COMMERCIAL, AV_STREET, 23, 0, SR_WX_DRIZZLE},
+    {"entertainment", SR_D_ENTERTAINMENT, AV_STREET, 23, 0, SR_WX_DRIZZLE},
+    {"residential", SR_D_RESIDENTIAL, AV_STREET, 23, 0, SR_WX_DRIZZLE},
+    {"oldquarter", SR_D_OLDQUARTER, AV_STREET, 23, 0, SR_WX_DRIZZLE},
+    {"industrial", SR_D_INDUSTRIAL, AV_STREET, 23, 0, SR_WX_DRIZZLE},
+    {"alley", -1, AV_ALLEY, 23, 0, SR_WX_DRIZZLE},
+    {"highway", -2, AV_HIGHWAY, 23, 0, SR_WX_DOWNPOUR},
+    {"rooftop", -1, AV_ROOF, 23, 0, SR_WX_CLEAR},
+    {"fog", SR_D_RESIDENTIAL, AV_STREET, 1, 0, SR_WX_FOG},
+    {"smog", SR_D_INDUSTRIAL, AV_STREET, 1, 0, SR_WX_SMOG},
+    {"dawn", SR_D_RESIDENTIAL, AV_STREET, 10, 30, SR_WX_CLEAR},
+    {"noon", SR_D_RESIDENTIAL, AV_STREET, 12, 30, SR_WX_CLEAR},
+    {"dusk", SR_D_RESIDENTIAL, AV_STREET, 14, 30, SR_WX_CLEAR},
+};
+#define ATMOS_VIEWS ((int)(sizeof k_atmos_views / sizeof k_atmos_views[0]))
+
+/* A land block of the district type with at least two buildings (the home block for -1, a
+ * highway block for -2); -1 when the city has none. */
+static int atmos_block(const SrCity *c, int type, int home) {
+  if (type == -1) return c->buildings[home].block;
+  int best = -1;
+  for (int b = 0; b < c->grid * c->grid; b++) {
+    const SrBlock *k = &c->blocks[b];
+    if (k->water) continue;
+    if (type == -2 ? !k->highway : ((int)c->districts[k->district].type != type || k->building_count < 2)) continue;
+    int bx = b % c->grid, by = b / c->grid;
+    if (bx < 1 || by < 1 || bx >= c->grid - 1 || by >= c->grid - 1) continue; /* not at the city edge */
+    best = b;
+    break;
+  }
+  return best;
+}
+
+/* Places the camera for a view; false when the city has no such place. */
+static bool atmos_place(SrGame *g, const AtmosView *v) {
+  const SrCity *c = g->city;
+  int blk = atmos_block(c, v->district, g->player.home);
+  if (blk < 0) return false;
+  int32_t ox, oy;
+  sr_city_block_origin(blk, c->grid, &ox, &oy);
+  float x0 = (float)ox / 100.0f, z0 = (float)oy / 100.0f;
+  g->player.pitch = 0.1f;
+  if (v->kind == AV_STREET || v->kind == AV_HIGHWAY) { /* mid-street, looking along it (+x) */
+    g->player.pos = sr_v3(x0 + 24.0f, 1.7f, z0 + 9.0f);
+    g->player.yaw = -SR_PI / 2 + 0.12f;
+  } else if (v->kind == AV_ALLEY) { /* the widest gap between two buildings, home block first */
+    float best = 0;
+    for (int n = 0; n < c->grid * c->grid && best < 4.0f; n++) {
+      const SrBlock *k = &c->blocks[(blk + n) % (c->grid * c->grid)];
+      for (int i = 0; i < k->building_count; i++)
+        for (int j = 0; j < k->building_count; j++) {
+          const SrBuilding *p = &c->buildings[k->first_building + i], *q = &c->buildings[k->first_building + j];
+          float gap = (float)(q->x0 - p->x1) / 100.0f;
+          if (gap > best && q->y0 < p->y1 && p->y0 < q->y1) {
+            best = gap;
+            g->player.pos = sr_v3((float)(p->x1 + q->x0) / 200.0f, 1.7f, (float)SR_MAX(p->y1, q->y1) / 100.0f + 3.0f);
+            g->player.yaw = 0.0f; /* looking into the gap (-z) */
+          }
+        }
+    }
+    if (best <= 0) return false;
+  } else { /* rooftop of the tallest building nearby, looking over the city */
+    const SrBlock *k = &c->blocks[blk];
+    const SrBuilding *top = &c->buildings[k->first_building];
+    for (int i = 1; i < k->building_count; i++)
+      if (c->buildings[k->first_building + i].height_cm > top->height_cm) top = &c->buildings[k->first_building + i];
+    g->player.pos = sr_v3((float)(top->x0 + top->x1) / 200.0f, (float)top->height_cm / 100.0f + 1.7f,
+                          (float)(top->y0 + top->y1) / 200.0f);
+    g->player.yaw = -SR_PI / 2 + 0.4f;
+    g->player.pitch = -0.08f;
+  }
+  return true;
+}
+
+static void atmos_setup(SrApp *a, uint64_t seed) {
+  sr_app_start_game(a, seed);
+  SrGame *g = a->game;
+  g->crowd_enabled = false;
+  sr_game_leave(g);
+  g->settings.internal_res = 1;
+  g->settings.dynamic_res = false;
+  g->settings.dither = g->settings.quantize = true;
+  g->settings.vertex_snap = g->settings.affine = g->settings.crt = false;
+  g->settings.bloom = true;
+  a->fixed_frame_dt = 0.0001;
+}
+
+/* Renders one view at the internal resolution (caller frees); NULL when it does not exist. */
+static uint8_t *atmos_render(SrApp *a, const AtmosView *v, int *w, int *h) {
+  SrGame *g = a->game;
+  if (!atmos_place(g, v)) return NULL;
+  g->force_weather = (int8_t)v->weather;
+  sr_clock_set_seconds(&g->clock, 2 * 86400 + v->hour * 3600 + v->minute * 60);
+  g->steps = 0;
+  for (int i = 0; i < 40; i++) sr_app_iterate(a); /* stream the chunks around the view */
+  return render_internal(a, w, h);
+}
+
+static void png_or_ppm(const char *dir, const char *name, const uint8_t *rgb, int w, int h) {
+  char o[512];
+  snprintf(o, sizeof o, "%s/%s.ppm", dir, name);
+  write_ppm(o, rgb, w, h);
+}
+
+/* SR_ATMOS_SHOTS=dir writes every reference view on three seeds (for the review sheets). */
+static void test_atmosphere_shots(void) {
+  const char *dir = getenv("SR_ATMOS_SHOTS");
+  if (!dir) return;
+  static const uint64_t seeds[3] = {0x5EEDC0DEull, 7919ull * 3, 7919ull * 11};
+  for (int s = 0; s < 3; s++) {
+    atmos_setup(&g_app, seeds[s]);
+    for (int i = 0; i < ATMOS_VIEWS; i++) {
+      int w, h;
+      uint8_t *rgb = atmos_render(&g_app, &k_atmos_views[i], &w, &h);
+      if (!rgb) continue;
+      char name[64];
+      snprintf(name, sizeof name, "s%d_%02d_%s", s + 1, i + 1, k_atmos_views[i].name);
+      png_or_ppm(dir, name, rgb, w, h);
+      free(rgb);
+    }
+  }
+  g_app.game->force_weather = -1;
+}
+
+/* Emissive mask of the current frame: white where an emissive surface or glow was drawn. */
+static uint8_t *atmos_emissive_mask(SrApp *a, int w, int h) {
+  a->frame.debug_emissive = true;
+  sr_glb_render(&a->gfx, &a->frame, NULL, a->win_w, a->win_h, false);
+  a->frame.debug_emissive = false;
+  uint8_t *rgb = (uint8_t *)malloc((size_t)w * h * 3);
+  if (!sr_glb_read_internal(&a->gfx, rgb, w, h)) {
+    free(rgb);
+    return NULL;
+  }
+  return rgb;
+}
+
+static double clipped_share(const uint8_t *rgb, int n) {
+  int c = 0;
+  for (int i = 0; i < n; i++) c += rgb[i * 3] >= 250 && rgb[i * 3 + 1] >= 250 && rgb[i * 3 + 2] >= 250;
+  return (double)c / n;
+}
+
+/* Share of the 1 % most saturated pixels (chroma times value) that lie on emissive surfaces. */
+static double saturated_on_emissive(const uint8_t *rgb, const uint8_t *mask, int n) {
+  int hist[256] = {0};
+  for (int i = 0; i < n; i++) {
+    int mx = SR_MAX(rgb[i * 3], SR_MAX(rgb[i * 3 + 1], rgb[i * 3 + 2]));
+    int mn = SR_MIN(rgb[i * 3], SR_MIN(rgb[i * 3 + 1], rgb[i * 3 + 2]));
+    hist[(mx - mn) * mx / 255]++;
+  }
+  int need = n / 100, cut = 255;
+  for (int acc = 0; cut > 0 && acc + hist[cut] < need; cut--) acc += hist[cut];
+  int top = 0, on = 0;
+  for (int i = 0; i < n; i++) {
+    int mx = SR_MAX(rgb[i * 3], SR_MAX(rgb[i * 3 + 1], rgb[i * 3 + 2]));
+    int mn = SR_MIN(rgb[i * 3], SR_MIN(rgb[i * 3 + 1], rgb[i * 3 + 2]));
+    if ((mx - mn) * mx / 255 < cut || cut == 0) continue;
+    top++;
+    on += mask[i * 3] > 128;
+  }
+  return top ? (double)on / top : 1.0;
+}
+
+/* Image metrics on the night reference views of one seed (D15). */
+static void test_atmosphere_metrics(void) {
+  SR_SPEC("retro-rendering", "No white walls of windows");
+  SR_SPEC("retro-rendering", "Neon is the brightest");
+  SR_SPEC("retro-rendering", "Districts apart by shape and colour");
+  atmos_setup(&g_app, 7919ull * 11);
+  double means[6][3];
+  int nd = 0;
+  for (int i = 0; i < ATMOS_VIEWS; i++) {
+    const AtmosView *v = &k_atmos_views[i];
+    if (v->hour > 9 && v->hour < 16) continue; /* night views only */
+    int w, h;
+    uint8_t *rgb = atmos_render(&g_app, v, &w, &h);
+    if (!rgb) continue;
+    uint8_t *mask = atmos_emissive_mask(&g_app, w, h);
+    double clip = clipped_share(rgb, w * h), sat = mask ? saturated_on_emissive(rgb, mask, w * h) : 0;
+    printf("  %-14s clipped %.2f %%, saturated on emissive %.0f %%\n", v->name, clip * 100, sat * 100);
+    SR_CHECK(clip <= 0.03);
+    SR_CHECK(sat >= 0.8);
+    if (v->kind == AV_STREET && v->weather == SR_WX_DRIZZLE && nd < 6) {
+      for (int k = 0; k < 3; k++) {
+        double sum = 0;
+        for (int p = 0; p < w * h; p++) sum += rgb[p * 3 + k];
+        means[nd][k] = sum / (w * h);
+      }
+      nd++;
+    }
+    free(mask);
+    free(rgb);
+  }
+  double closest = 1e9;
+  for (int a = 0; a < nd; a++)
+    for (int b = 0; b < a; b++) {
+      double d = 0;
+      for (int k = 0; k < 3; k++) d += (means[a][k] - means[b][k]) * (means[a][k] - means[b][k]);
+      closest = SR_MIN(closest, sqrt(d));
+    }
+  printf("  district views: %d, closest mean colours %.1f apart\n", nd, closest);
+  SR_CHECK(nd >= 4);
+  SR_CHECK(closest >= 3.0);
+  g_app.game->force_weather = -1;
+}
+
 void suite_platform(void) {
   snprintf(g_root, sizeof g_root, "%s/sr_platform_test_%d/", SDL_GetHint("TMPDIR") ? SDL_GetHint("TMPDIR") : "/tmp", 1);
   SDL_SetHint("SR_STORAGE_ROOT", g_root);
@@ -1048,6 +1268,8 @@ void suite_platform(void) {
   SR_RUN(test_many_games_keep_rendering);
   SR_RUN(test_seed_screenshots);
   SR_RUN(test_gameplay_screenshots);
+  SR_RUN(test_atmosphere_shots);
+  SR_RUN(test_atmosphere_metrics);
   SR_RUN(test_letterbox_window);
   SR_RUN(test_focus_and_autosave);
   SR_RUN(test_settings_persist);

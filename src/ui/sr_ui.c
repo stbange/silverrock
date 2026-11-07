@@ -55,8 +55,9 @@ void sr_ui_text(SrUi *ui, float x, float y, const char *s, SrColor c, int scale)
 }
 
 void sr_ui_icon(SrUi *ui, float x, float y, float size, int poi, SrColor c) {
-  sr_mesh_quad(&ui->mesh, sr_v3(x, y + size, 0), sr_v3(x + size, y + size, 0), sr_v3(x + size, y, 0), sr_v3(x, y, 0), 0,
-               1, 1, 0, c, SR_LAYER_ICON_FIRST + poi, 255, 0);
+  SrAtlasCell ic = sr_icon_cell(poi);
+  sr_mesh_quad(&ui->mesh, sr_v3(x, y + size, 0), sr_v3(x + size, y + size, 0), sr_v3(x + size, y, 0), sr_v3(x, y, 0),
+               ic.u0, ic.v1, ic.u1, ic.v0, c, ic.layer, 255, 0);
 }
 
 const char *sr_ui_context_label(SrContextKind k) {
@@ -185,7 +186,7 @@ static void hud(SrUi *ui, const SrGame *g, const SrInput *in) {
   int d = sr_city_district_at(g->city, (int32_t)(p->pos.x * 100), (int32_t)(p->pos.z * 100));
   char weather[48];
   snprintf(buf, sizeof buf, "%s", d >= 0 ? g->city->districts[d].name : "Outside the city");
-  snprintf(weather, sizeof weather, "%s", sr_weather_name(sr_weather_at(g->seed, t).to));
+  snprintf(weather, sizeof weather, "%s", sr_weather_name(sr_game_weather(g).to));
   float left_w = (float)ui->w * 0.3f - m;
   if (touch) {
     float ty = by + 3 * (bh + 2) + 6.0f * (float)s;

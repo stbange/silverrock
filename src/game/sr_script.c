@@ -94,7 +94,7 @@ bool sr_game_query(SrGame *g, const char *path, char *out, size_t cap) {
   Q("jobs.completed", "%d", g->jobs.completed)
   Q("jobs.active", "%d", g->active_job)
   Q("events.count", "%d", g->events.count)
-  Q("weather", "%s", sr_weather_name(sr_weather_at(g->seed, t).to))
+  Q("weather", "%s", sr_weather_name(sr_game_weather(g).to))
   Q("sky.daylight", "%s", sr_sky_at(t, g->pall_removed).daylight ? "true" : "false")
   Q("checksum", "%016llx", (unsigned long long)sr_game_checksum(g))
   Q("paused", "%s", g->clock.paused ? "true" : "false")

@@ -43,10 +43,12 @@ static void test_textures_and_font(void) {
   sr_font_cell('?', &qx, &qy);
   SR_CHECK(cx == qx && cy == qy);
   SR_CHECK(sr_font_glyph('\n') == sr_font_glyph('?'));
-  sr_texgen_layer(SR_LAYER_ICON_FIRST + SR_POI_FOOD, px);
-  int lit = 0;
-  for (int i = 0; i < SR_TEX_SIZE * SR_TEX_SIZE; i++) lit += px[i * 4 + 3] > 0;
-  SR_CHECK(lit > 500);
+  SrAtlasCell food = sr_icon_cell(SR_POI_FOOD);
+  sr_texgen_layer(food.layer, px);
+  int lit = 0, x0 = (int)(food.u0 * SR_TEX_SIZE), y0 = (int)(food.v0 * SR_TEX_SIZE);
+  for (int y = y0; y < y0 + 32; y++)
+    for (int x = x0; x < x0 + 32; x++) lit += px[((size_t)y * SR_TEX_SIZE + (size_t)x) * 4 + 3] > 0;
+  SR_CHECK(lit > 120);                     /* the icon fills a good part of its 32 px cell */
   sr_texgen_layer(SR_TEX_LAYERS + 40, px); /* unused layer */
   free(px);
   /* a 2 m sign icon at 10 m covers >= 12 px at 270 px with 70 degrees vertical fov */

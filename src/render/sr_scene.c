@@ -225,6 +225,29 @@ static SrColor shade(SrColor c, int pct) {
   return (SrColor){(uint8_t)(c.r * pct / 100), (uint8_t)(c.g * pct / 100), (uint8_t)(c.b * pct / 100), c.a};
 }
 
+/* Window use and seed of a building, stored in the vertex pad byte (use << 6 | seed). */
+static uint8_t building_pad(const SrCity *c, const SrBuilding *bd) {
+  SrDistrictType t = c->districts[c->blocks[bd->block].district].type;
+  uint32_t h = (uint32_t)sr_mix64(c->seed ^ ((uint64_t)bd->id * 0x9E3779B97F4A7C15ull));
+  int use = SR_USE_HOME;
+  switch (t) {
+    case SR_D_SPIRE:
+    case SR_D_CIVIC:
+    case SR_D_CAMPUS: use = SR_USE_OFFICE; break;
+    case SR_D_COMMERCIAL:
+    case SR_D_ENTERTAINMENT: use = (h & 1u) ? SR_USE_OFFICE : SR_USE_HOME; break;
+    case SR_D_INDUSTRIAL:
+    case SR_D_DOCKS: use = SR_USE_INDUSTRIAL; break;
+    case SR_D_BARRENS: use = (h % 3u) ? SR_USE_VACANT : SR_USE_HOME; break;
+    default: use = (h % 7u) == 0 ? SR_USE_VACANT : SR_USE_HOME; break;
+  }
+  return (uint8_t)((use << 6) | (int)((h >> 8) & 63u));
+}
+
+static void tag_vertices(SrMesh *m, int from, uint8_t pad) {
+  for (int i = from; i < m->nv; i++) m->v[i].pad = pad;
+}
+
 static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) {
   const SrBlock *b = &c->blocks[blk];
   int32_t ox, oy;
@@ -283,6 +306,7 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
     SrColor tint = {(uint8_t)((200 + pal->ambient.r) / 2 - bd->style * 4),
                     (uint8_t)((200 + pal->ambient.g) / 2 - bd->style * 4),
                     (uint8_t)((200 + pal->ambient.b) / 2 - bd->style * 4), 255};
+    int first_v = m->nv;
     if (bd->poi == SR_POI_CORP_HQ && bd->owner >= 0) {
       /* landmark tower: stacked tiers by silhouette */
       int tiers = 1 + bd->silhouette[0];
@@ -301,6 +325,7 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
     } else {
       sr_mesh_box(m, sr_v3(bx0, 0, bz0), sr_v3(bx1, h, bz1), tint, layer, 0.08f, 0);
     }
+    tag_vertices(m, first_v, building_pad(c, bd));
     if (bd->poi != SR_POI_NONE) {
       /* neon sign with the place's icon over the door (front = +z side) */
       SrColor neon = neon_for(c, bi);
@@ -310,9 +335,10 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
       sr_mesh_quad(m, sr_v3(cx - w, 3.2f, bz1 + 0.15f), sr_v3(cx + w, 3.2f, bz1 + 0.15f),
                    sr_v3(cx + w, 5.4f, bz1 + 0.15f), sr_v3(cx - w, 5.4f, bz1 + 0.15f), 0, 1, 1, 0, neon, SR_LAYER_SIGN,
                    em, 0);
+      SrAtlasCell ic = sr_icon_cell(bd->poi);
       sr_mesh_quad(m, sr_v3(cx - 1.0f, 3.3f, bz1 + 0.2f), sr_v3(cx + 1.0f, 3.3f, bz1 + 0.2f),
-                   sr_v3(cx + 1.0f, 5.3f, bz1 + 0.2f), sr_v3(cx - 1.0f, 5.3f, bz1 + 0.2f), 0, 1, 1, 0, neon,
-                   SR_LAYER_ICON_FIRST + bd->poi, em, 0);
+                   sr_v3(cx + 1.0f, 5.3f, bz1 + 0.2f), sr_v3(cx - 1.0f, 5.3f, bz1 + 0.2f), ic.u0, ic.v1, ic.u1, ic.v0,
+                   neon, ic.layer, em, 0);
       /* awning: shelter from the rain */
       sr_mesh_quad(m, sr_v3(cx - w - 1, 3.0f, bz1 + 2.0f), sr_v3(cx + w + 1, 3.0f, bz1 + 2.0f),
                    sr_v3(cx + w + 1, 3.0f, bz1), sr_v3(cx - w - 1, 3.0f, bz1), 0, 0, 1, 1, shade(neon, 40),
@@ -650,10 +676,11 @@ void sr_build_landmarks(const SrCity *c, float time_s, SrMesh *out) {
     float s = 10.0f, dx = cosf(ang) * s, dz = sinf(ang) * s;
     SrColor col = sr_corp_color(c->factions.f[f].hue);
     /* rotating double-sided holo-logo */
+    SrAtlasCell ic = sr_icon_cell(SR_POI_CORP_HQ);
     sr_mesh_quad(out, sr_v3(x - dx, y - s, z - dz), sr_v3(x + dx, y - s, z + dz), sr_v3(x + dx, y + s, z + dz),
-                 sr_v3(x - dx, y + s, z - dz), 0, 1, 1, 0, col, SR_LAYER_ICON_FIRST + SR_POI_CORP_HQ, 255, 0);
+                 sr_v3(x - dx, y + s, z - dz), ic.u0, ic.v1, ic.u1, ic.v0, col, ic.layer, 255, 0);
     sr_mesh_quad(out, sr_v3(x + dx, y - s, z + dz), sr_v3(x - dx, y - s, z - dz), sr_v3(x - dx, y + s, z - dz),
-                 sr_v3(x + dx, y + s, z + dz), 0, 1, 1, 0, col, SR_LAYER_ICON_FIRST + SR_POI_CORP_HQ, 255, 0);
+                 sr_v3(x + dx, y + s, z + dz), ic.u0, ic.v1, ic.u1, ic.v0, col, ic.layer, 255, 0);
   }
 }
 
@@ -762,7 +789,7 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   f->eye = p->pos;
   f->view = sr_m4_fps_view(p->pos, p->yaw, p->pitch);
   f->proj = sr_m4_perspective(70.0f * SR_PI / 180.0f, aspect > 0 ? aspect : 16.0f / 9.0f, 0.1f, 4000.0f);
-  SrWeatherState w = sr_weather_at(g->seed, t);
+  SrWeatherState w = sr_game_weather(g);
   SrSky sky = sr_sky_at(t, g->pall_removed);
   int district = sr_city_district_at(c, (int32_t)(p->pos.x * 100), (int32_t)(p->pos.z * 100));
   const SrPalette *pal = sr_palette(district >= 0 ? c->districts[district].type : SR_D_RESIDENTIAL);
@@ -777,10 +804,14 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   f->sky[0] = sky.r * 0.5f + f->fog[0] * 0.5f;
   f->sky[1] = sky.g * 0.5f + f->fog[1] * 0.5f;
   f->sky[2] = sky.b * 0.5f + f->fog[2] * 0.5f;
-  f->ambient[0] = pal->ambient.r / 255.0f * sky.ambient;
-  f->ambient[1] = pal->ambient.g / 255.0f * sky.ambient;
-  f->ambient[2] = pal->ambient.b / 255.0f * sky.ambient;
+  /* 35 % less ambient than M1: walls stay darker than the neon on them */
+  f->ambient[0] = pal->ambient.r / 255.0f * sky.ambient * 0.65f;
+  f->ambient[1] = pal->ambient.g / 255.0f * sky.ambient * 0.65f;
+  f->ambient[2] = pal->ambient.b / 255.0f * sky.ambient * 0.65f;
   f->daylight = sky.daylight;
+  f->time_s = (float)sr_time_of_day(t) + (float)(g->steps % 60) / 60.0f;
+  f->hour = (float)sr_time_of_day(t) / 3600.0f;
+  for (int u = 0; u < 4; u++) f->win_share[u] = sr_window_share(u, f->hour);
   f->fog_end = SR_MIN(w.visibility, (float)(s->view_chunks + 1) * SR_CHUNK_BLOCKS * SR_BLOCK_CM / 100.0f);
   f->fog_start = f->fog_end * 0.25f;
   f->wetness = w.wetness;
@@ -857,7 +888,7 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   }
   add_draw(f, &s->characters, g->thermal ? SR_PASS_XRAY : SR_PASS_WORLD, p->pos);
   if (w.rain > 0.05f) {
-    sr_build_rain(p->pos, w.rain, s->frame_no, c, &s->rain);
+    sr_build_rain(p->pos, w.rain, g->steps, c, &s->rain); /* game time: same time, same drops */
     add_draw(f, &s->rain, SR_PASS_WORLD, p->pos);
   }
   sr_build_aerodynes(&g->air, (double)g->steps / 60.0, p->pos, 600.0f, &s->air);

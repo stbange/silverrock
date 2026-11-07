@@ -118,6 +118,7 @@ typedef struct SrGame {
   SrDifficulty difficulty;
   bool hardcore;
   bool pall_removed;
+  int8_t force_weather; /* -1: the seed's weather; else a fixed SrWeather (reference views) */
   bool started;
   SrScreen screen;
   bool resume_needs_confirm;
@@ -187,6 +188,8 @@ void sr_game_step(SrGame *g, const SrActionState *a);
 /* Skips in-game time minute by minute (sleep, travel, waiting). */
 void sr_game_skip(SrGame *g, int64_t seconds, bool sleeping);
 int64_t sr_game_time(const SrGame *g);
+/* The weather now: the seed's weather, or the forced one. */
+SrWeatherState sr_game_weather(const SrGame *g);
 uint64_t sr_game_checksum(const SrGame *g);
 void sr_game_toast(SrGame *g, const char *msg);
 void sr_game_focus(SrGame *g, bool focused);

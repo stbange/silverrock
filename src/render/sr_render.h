@@ -8,7 +8,7 @@
 #include "game/sr_game.h"
 
 #define SR_TEX_SIZE            128
-#define SR_TEX_LAYERS          32
+#define SR_TEX_LAYERS          64
 #define SR_MAX_LIGHTS_PER_DRAW 8
 #define SR_MAX_FRAME_LIGHTS    96
 #define SR_MAX_DRAWS           256
@@ -28,8 +28,69 @@ enum {
   SR_LAYER_SIGN,
   SR_LAYER_FONT,
   SR_LAYER_WATER,
-  SR_LAYER_ICON_FIRST /* one icon per SrPoi */
+  SR_LAYER_WINMOD_FIRST = 12, /* 8 window modules (sr_facade): office, balcony, hive, curtain, ... */
+  SR_LAYER_BASE_FIRST = 20,   /* 6 ground-floor modules: shopfront, shutter, lobby, dock, stall, posters */
+  SR_LAYER_TRIM_FIRST = 26,   /* 6 roof and trim materials: tiles, corrugated, parapet, cornice, gravel, helipad */
+  SR_LAYER_ICONS = 32,        /* 2 atlas layers: one 32 px icon per SrPoi */
+  SR_LAYER_SPRITES = 34,      /* 4 atlas layers of 16 sprites (SrSpriteId) */
+  SR_LAYER_DECALS = 38,       /* 4 atlas layers of 16 decals (SrDecalId) */
+  SR_LAYER_ADS = 42,          /* 4 layers of billboard and poster content */
+  SR_LAYER_SCRIPT = 46,       /* 64 neon script glyphs */
+  SR_LAYER_NOISE = 47,        /* cloud noise for the Pall */
+  SR_LAYER_RESERVED = 48      /* 48..63 free for M6 */
 };
+
+/* A cell of a 4x4 atlas layer (32 px cells); v0 is the top edge, v1 the bottom. */
+typedef struct SrAtlasCell {
+  int layer;
+  float u0, v0, u1, v1;
+} SrAtlasCell;
+SrAtlasCell sr_atlas_cell(int first_layer, int cell);
+SrAtlasCell sr_icon_cell(int poi);
+
+/* Sprites of the sprite atlas (16 per layer). */
+typedef enum SrSpriteId {
+  SR_SPR_GLOW = 0, /* soft round glow */
+  SR_SPR_POOL,     /* light pool on the ground */
+  SR_SPR_HALO,     /* soft halo of a light in wet air */
+  SR_SPR_CONE,     /* searchlight or lamp cone */
+  SR_SPR_STEAM,    /* 4 frames */
+  SR_SPR_SPLASH = SR_SPR_STEAM + 4,
+  SR_SPR_SMOKE = SR_SPR_SPLASH + 4,
+  SR_SPR_SPARK = SR_SPR_SMOKE + 4, /* 4 frames */
+  SR_SPR_DRIP = SR_SPR_SPARK + 4,
+  SR_SPR_LITTER,                   /* 4 variants */
+  SR_SPR_BIRD = SR_SPR_LITTER + 4, /* 2 frames */
+  SR_SPR_DRONE = SR_SPR_BIRD + 2,
+  SR_SPR_FLARE,
+  SR_SPR_RIPPLE,                     /* 3 frames */
+  SR_SPR_STREAK = SR_SPR_RIPPLE + 3, /* reflection streak */
+  SR_SPR_HOLO,                       /* holo-ad frame */
+  SR_SPR_TREE,                       /* glowing tree */
+  SR_SPR_COUNT
+} SrSpriteId;
+
+/* Decals of the decal atlas (flat on the ground or a wall). */
+typedef enum SrDecalId {
+  SR_DECAL_MANHOLE = 0,
+  SR_DECAL_DRAIN,
+  SR_DECAL_CROSSWALK,
+  SR_DECAL_ARROW,
+  SR_DECAL_CRACK, /* 2 variants */
+  SR_DECAL_STAIN = SR_DECAL_CRACK + 2,
+  SR_DECAL_PUDDLE = SR_DECAL_STAIN + 2,
+  SR_DECAL_STOPLINE = SR_DECAL_PUDDLE + 2,
+  SR_DECAL_TAG,                       /* 6 graffiti tags */
+  SR_DECAL_POSTER = SR_DECAL_TAG + 6, /* 4 posters */
+  SR_DECAL_WANTED = SR_DECAL_POSTER + 4,
+  SR_DECAL_COUNT
+} SrDecalId;
+
+/* Advert layouts: 2x2 cells of 64 px per layer (8 layouts, vandalism overlays, LED strips). */
+enum { SR_AD_LAYOUTS = 8, SR_AD_VANDAL = 8, SR_AD_LED = 12, SR_AD_BULBS = 13, SR_AD_PLAIN = 14 };
+SrAtlasCell sr_ad_cell(int first_layer, int cell);
+/* One of the 64 glyphs of the neon script. */
+SrAtlasCell sr_script_cell(int glyph);
 
 typedef struct SrVertex {
   float x, y, z;
@@ -162,9 +223,32 @@ bool sr_point_covered(const SrCity *c, SrVec3 p);
 void sr_build_skyline(const SrCity *c, SrMesh *out);
 void sr_build_landmarks(const SrCity *c, float time_s, SrMesh *out);
 
+/* Sprites (sr_sprite.c): quads that face the camera or lie flat. */
+typedef struct SrBillboard {
+  SrVec3 eye, right, up;
+} SrBillboard;
+SrBillboard sr_billboard(SrVec3 eye, float yaw, float pitch);
+typedef enum SrSpriteMode {
+  SR_SPRITE_UPRIGHT, /* turns about the vertical axis; pos is the bottom centre */
+  SR_SPRITE_FACING,  /* faces the camera fully; pos is the centre */
+  SR_SPRITE_DECAL    /* lies flat at pos.y, turned by yaw; pos is the centre */
+} SrSpriteMode;
+void sr_mesh_sprite(SrMesh *m, const SrBillboard *bb, SrVec3 pos, float w, float h, int sprite, SrSpriteMode mode,
+                    float yaw, SrColor col, int emissive);
+/* Animation frame for game time t (deterministic). */
+int sr_anim_frame(double t, float fps, int frames, uint32_t seed);
+/* Building use for window lighting (vertex pad byte: use << 6 | seed). */
+enum { SR_USE_OFFICE = 0, SR_USE_HOME, SR_USE_INDUSTRIAL, SR_USE_VACANT };
+/* Share of lit windows for a building use at an hour (0..24). Mirrored by the shader via u_share. */
+float sr_window_share(int usage, float hour);
+/* How much of a glow survives the fog at view depth z (1 near, 0 beyond the fog end). Mirrors the shader. */
+float sr_glow_fade(float view_z, float fog_start, float fog_end);
+
 /* Frame description */
-/* XRAY: no depth test and no fog (thermal signatures through walls and smoke). */
-typedef enum SrPass { SR_PASS_WORLD, SR_PASS_NOFOG, SR_PASS_XRAY } SrPass;
+/* XRAY: no depth test and no fog (thermal signatures through walls and smoke).
+ * GLOW: additive, no depth write, faded by fog. HALO: additive, no depth write, no fog (lights
+ * seen through fog, their strength is set on the CPU). */
+typedef enum SrPass { SR_PASS_WORLD, SR_PASS_NOFOG, SR_PASS_XRAY, SR_PASS_GLOW, SR_PASS_HALO } SrPass;
 
 typedef struct SrDraw {
   SrMesh *mesh;
@@ -182,6 +266,10 @@ typedef struct SrFrame {
   float sky[3];
   float wetness;
   bool daylight;
+  float time_s;        /* game time of day in seconds (animation) */
+  float hour;          /* 0..24 */
+  float win_share[4];  /* lit window share per building use (sr_window_share) */
+  bool debug_emissive; /* tests: draw emissive surfaces white, everything else black */
   int nlights;
   SrLight lights[SR_MAX_FRAME_LIGHTS];
   int ndraws;

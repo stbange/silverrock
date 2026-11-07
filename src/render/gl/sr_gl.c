@@ -59,6 +59,7 @@
   X(void, Uniform1f, (GLint, GLfloat))                                                                                 \
   X(void, Uniform2f, (GLint, GLfloat, GLfloat))                                                                        \
   X(void, Uniform3f, (GLint, GLfloat, GLfloat, GLfloat))                                                               \
+  X(void, Uniform4f, (GLint, GLfloat, GLfloat, GLfloat, GLfloat))                                                      \
   X(void, Uniform3fv, (GLint, GLsizei, const GLfloat *))                                                               \
   X(void, Uniform4fv, (GLint, GLsizei, const GLfloat *))                                                               \
   X(void, UniformMatrix4fv, (GLint, GLsizei, GLboolean, const GLfloat *))                                              \
@@ -134,6 +135,8 @@ static const char *k_world_vs =
     "flat out float v_wire;\n"
     "out float v_fogz;\n"
     "out float v_em;\n"
+    "flat out float v_usage;\n"
+    "flat out float v_seed;\n"
     "void main() {\n"
     "  vec3 p = a_pos;\n"
     "  vec3 base = a_color.rgb;\n"
@@ -167,38 +170,71 @@ static const char *k_world_vs =
     "  v_layer = a_extra.x;\n"
     "  v_wire = a_extra.z;\n"
     "  v_fogz = -(u_view * vec4(p, 1.0)).z;\n"
+    "  v_usage = floor(a_extra.w / 64.0);\n"
+    "  v_seed = mod(a_extra.w, 64.0);\n"
     "}\n";
 
-static const char *k_world_fs = "uniform highp sampler2DArray u_tex;\n"
-                                "uniform vec3 u_fog;\n"
-                                "uniform vec2 u_fogr;\n"
-                                "in vec4 v_color;\n"
-                                "in vec3 v_uvw;\n"
-                                "flat in float v_layer;\n"
-                                "flat in float v_wire;\n"
-                                "in float v_fogz;\n"
-                                "in float v_em;\n"
-                                "out vec4 o_color;\n"
-                                "void main() {\n"
-                                "  if (v_wire > 1.5) {\n" /* Matrix wireframe: quad edges glow, faces stay dim */
-                                "    vec2 q = v_uvw.xy / v_uvw.z;\n"
-                                "    float e = min(min(q.x, 1.0 - q.x), min(q.y, 1.0 - q.y));\n"
-                                "    float line = 1.0 - smoothstep(0.015, 0.06, e);\n"
-                                "    if (v_wire > 2.5 && line < 0.05) discard;\n" /* hollow: edges only */
-                                "    vec3 wc = v_color.rgb * (0.1 + 1.5 * line);\n"
-                                "    float wf = clamp((v_fogz - u_fogr.x) / (u_fogr.y - u_fogr.x), 0.0, 1.0);\n"
-                                "    o_color = vec4(mix(wc, u_fog, wf), 1.0);\n"
-                                "    return;\n"
-                                "  }\n"
-                                "  vec4 t = texture(u_tex, vec3(v_uvw.xy / v_uvw.z, v_layer));\n"
-                                "  if (t.a < 0.5) discard;\n"
-                                "  vec4 c = t * v_color;\n"
-                                "  float lum = max(t.r, max(t.g, t.b));\n"
-                                "  c.rgb += t.rgb * step(0.78, lum) * step(t.b, 0.99) * 1.1;\n"
-                                "  float f = clamp((v_fogz - u_fogr.x) / (u_fogr.y - u_fogr.x), 0.0, 1.0);\n"
-                                "  f *= 1.0 - 0.7 * v_em;\n" /* neon glows through fog: same formula as sr_fog_factor */
-                                "  o_color = vec4(mix(c.rgb, u_fog, f), c.a);\n"
-                                "}\n";
+static const char *k_world_fs =
+    "uniform highp sampler2DArray u_tex;\n"
+    "uniform vec3 u_fog;\n"
+    "uniform vec2 u_fogr;\n"
+    "uniform vec4 u_share;\n" /* lit window share per building use */
+    "uniform float u_time;\n"
+    "uniform int u_glow;\n"  /* 1: additive glow, faded by fog */
+    "uniform int u_debug;\n" /* 1: emissive mask (tests) */
+    "in vec4 v_color;\n"
+    "in vec3 v_uvw;\n"
+    "flat in float v_layer;\n"
+    "flat in float v_wire;\n"
+    "in float v_fogz;\n"
+    "in float v_em;\n"
+    "flat in float v_usage;\n"
+    "flat in float v_seed;\n"
+    "out vec4 o_color;\n"
+    "float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }\n"
+    "void main() {\n"
+    "  float f = clamp((v_fogz - u_fogr.x) / (u_fogr.y - u_fogr.x), 0.0, 1.0);\n"
+    "  if (v_wire > 1.5) {\n" /* Matrix wireframe: quad edges glow, faces stay dim */
+    "    vec2 q = v_uvw.xy / v_uvw.z;\n"
+    "    float e = min(min(q.x, 1.0 - q.x), min(q.y, 1.0 - q.y));\n"
+    "    float line = 1.0 - smoothstep(0.015, 0.06, e);\n"
+    "    if (v_wire > 2.5 && line < 0.05) discard;\n" /* hollow: edges only */
+    "    vec3 wc = v_color.rgb * (0.1 + 1.5 * line);\n"
+    "    o_color = vec4(u_debug == 1 ? vec3(0.0) : mix(wc, u_fog, f), 1.0);\n"
+    "    return;\n"
+    "  }\n"
+    "  vec2 uv = v_uvw.xy / v_uvw.z;\n"
+    "  vec4 t = texture(u_tex, vec3(uv, v_layer));\n"
+    "  if (u_glow == 1) {\n" /* soft sprites: alpha is the strength, light only adds */
+    "    vec3 g = t.rgb * v_color.rgb * (t.a * v_color.a * (1.0 - f));\n"
+    "    o_color = vec4(u_debug == 1 ? vec3(step(0.02, t.a * (1.0 - f))) : g, 1.0);\n"
+    "    return;\n"
+    "  }\n"
+    "  if (t.a < 0.5) discard;\n"
+    "  vec4 c = t * v_color;\n"
+    "  float em = v_em;\n"
+    "  if (t.a > 0.7 && t.a < 0.86) {\n" /* glass: lit or dark by building use, hour and window */
+    "    float share = v_usage < 0.5 ? u_share.x : v_usage < 1.5 ? u_share.y : v_usage < 2.5 ? u_share.z : u_share.w;\n"
+    "    vec3 k = vec3(floor(uv), t.r * 255.0 + v_seed * 37.0);\n"
+    "    float h = hash3(k), h2 = hash3(k + vec3(7.1, 3.3, 1.7));\n"
+    "    if (h < share) {\n"
+    "      vec3 lc = h2 < 0.45 ? vec3(1.0, 0.76, 0.46) : h2 < 0.75 ? vec3(0.70, 0.84, 1.0)\n"
+    "              : h2 < 0.9 ? vec3(0.35, 0.5, 1.0) * (0.7 + 0.3 * sin(u_time * (9.0 + h2 * 30.0)))\n"
+    "              : vec3(1.0, 0.45, 0.8);\n"
+    "      c = vec4(lc * (0.5 + 0.3 * t.g), 1.0);\n" /* peaks at 0.8: windows never clip to white */
+    "      em = 0.6;\n"
+    "    } else {\n"
+    "      c = vec4(vec3(0.03, 0.035, 0.05) + u_fog * 0.12 + v_color.rgb * 0.04, 1.0);\n"
+    "      em = 0.0;\n"
+    "    }\n"
+    "  }\n"
+    "  if (u_debug == 1) {\n"
+    "    o_color = vec4(vec3(step(0.3, em)), 1.0);\n"
+    "    return;\n"
+    "  }\n"
+    "  f *= 1.0 - 0.7 * em;\n" /* neon glows through fog: same formula as sr_fog_factor */
+    "  o_color = vec4(mix(c.rgb, u_fog, f), c.a);\n"
+    "}\n";
 
 static const char *k_post_vs = "layout(location=0) in vec2 a_pos;\n"
                                "out vec2 v_uv;\n"
@@ -240,7 +276,7 @@ static const char *k_blur_fs = "uniform sampler2D u_tex;\n"
                                "  if (u_bright == 1) {\n"
                                "    vec3 c = texture(u_tex, v_uv).rgb;\n"
                                "    float l = max(c.r, max(c.g, c.b));\n"
-                               "    o_color = vec4(c * smoothstep(0.7, 1.0, l), 1.0);\n"
+                               "    o_color = vec4(c * smoothstep(0.82, 1.0, l), 1.0);\n"
                                "    return;\n"
                                "  }\n"
                                "  vec3 s = texture(u_tex, v_uv).rgb * 0.2270270;\n"
@@ -455,6 +491,10 @@ bool sr_glb_init(SrGlBackend *b, bool gles) {
   b->u_fog = pGetUniformLocation(p, "u_fog");
   b->u_fogr = pGetUniformLocation(p, "u_fogr");
   b->u_inst = pGetUniformLocation(p, "u_inst");
+  b->u_share = pGetUniformLocation(p, "u_share");
+  b->u_time = pGetUniformLocation(p, "u_time");
+  b->u_glow = pGetUniformLocation(p, "u_glow");
+  b->u_debug = pGetUniformLocation(p, "u_debug");
   p = b->prog_post;
   b->p_tex = pGetUniformLocation(p, "u_tex");
   b->p_dither = pGetUniformLocation(p, "u_dither");
@@ -633,8 +673,13 @@ static void scene_pass(SrGlBackend *b, const SrFrame *f, unsigned fbo, int iw, i
   pUniform2f(b->u_snap, f->vertex_snap ? (float)iw * 0.5f : 0.0f, f->vertex_snap ? (float)ih * 0.5f : 0.0f);
   pUniform1i(b->u_affine, f->affine ? 1 : 0);
   pUniform3f(b->u_fog, f->fog[0], f->fog[1], f->fog[2]);
+  pUniform4f(b->u_share, f->win_share[0], f->win_share[1], f->win_share[2], f->win_share[3]);
+  pUniform1f(b->u_time, f->time_s);
+  pUniform1i(b->u_glow, 0);
+  pUniform1i(b->u_debug, f->debug_emissive ? 1 : 0);
   for (int i = 0; i < f->ndraws; i++) {
     const SrDraw *d = &f->draws[i];
+    if (d->pass == SR_PASS_GLOW || d->pass == SR_PASS_HALO) continue; /* after the solid geometry */
     if (d->pass == SR_PASS_WORLD)
       pUniform2f(b->u_fogr, f->fog_start, f->fog_end);
     else
@@ -651,6 +696,23 @@ static void scene_pass(SrGlBackend *b, const SrFrame *f, unsigned fbo, int iw, i
     set_lights(b, f, &crowd);
     draw_instances(b, f);
   }
+  /* glows: additive light that never hides what is behind it */
+  pBlendFunc(GL_ONE, GL_ONE);
+  pDepthMask(GL_FALSE);
+  pUniform1i(b->u_glow, 1);
+  pUniform1i(b->u_nl, 0);
+  for (int i = 0; i < f->ndraws; i++) {
+    const SrDraw *d = &f->draws[i];
+    if (d->pass != SR_PASS_GLOW && d->pass != SR_PASS_HALO) continue;
+    if (d->pass == SR_PASS_GLOW)
+      pUniform2f(b->u_fogr, f->fog_start, f->fog_end);
+    else
+      pUniform2f(b->u_fogr, 1e6f, 2e6f);
+    draw_mesh(b, d->mesh);
+  }
+  pUniform1i(b->u_glow, 0);
+  pDepthMask(GL_TRUE);
+  pBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
 /* Small target for the meat-cam (the body's surroundings during a dive). */
@@ -761,6 +823,9 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
     pUniform2f(b->u_snap, 0, 0);
     pUniform1i(b->u_affine, 0);
     pUniform2f(b->u_fogr, 1e6f, 2e6f);
+    pUniform4f(b->u_share, 0, 0, 0, 0);
+    pUniform1i(b->u_glow, 0);
+    pUniform1i(b->u_debug, 0);
     draw_mesh(b, &ui->mesh);
   }
   pBindVertexArray(0);

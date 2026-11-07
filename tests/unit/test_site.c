@@ -1103,7 +1103,10 @@ static void test_interior_render_and_ui(void) {
   sr_ui_begin(&ui, 1280, 720, 2);
   sr_ui_build(&ui, g, &in, false);
   int icons = 0;
-  for (int v = 0; v < ui.mesh.nv; v++) icons += ui.mesh.v[v].layer == SR_LAYER_ICON_FIRST + SR_POI_FOOD;
+  SrAtlasCell food_icon = sr_icon_cell(SR_POI_FOOD);
+  for (int v = 0; v < ui.mesh.nv; v++)
+    icons += ui.mesh.v[v].layer == food_icon.layer &&
+             (fabsf(ui.mesh.v[v].u - food_icon.u0) < 1e-4f || fabsf(ui.mesh.v[v].u - food_icon.u1) < 1e-4f);
   SR_CHECK(icons >= 4); /* the interact button shows the icon */
   SR_CHECK_EQ(sr_ui_context_icon(g, &g->ctx), SR_POI_FOOD);
   for (int k = SR_CTX_FOOD; k < SR_CTX_COUNT; k++) {
