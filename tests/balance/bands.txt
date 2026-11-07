@@ -21,4 +21,4 @@ netrunner    failed        0       6
 # every strategy: share of seeds that missed a rent payment
 *            missed_share  0       0.10
 # approach strategies (ghost, face, hammer, netrunner): best / median earnings, so no approach dominates
-*            dominance     0       1.8
+*            dominance     0       1.3

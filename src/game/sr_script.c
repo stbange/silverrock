@@ -423,6 +423,7 @@ static SrResult command(ScriptState *st, char *line, char *out, size_t cap) {
       return SR_OK;
     }
     if (strcmp(tok[1], "frame") == 0 && n >= 4) return sr_game_frame(g, id, atoi(tok[3]));
+    if (strcmp(tok[1], "abandon") == 0 && n >= 3) return sr_game_abandon(g, id);
   }
   if (strcmp(cmd, "enter") == 0 && n >= 2) {
     int b = strcmp(tok[1], "home") == 0 ? g->player.home : atoi(tok[1]);

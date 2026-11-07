@@ -54,7 +54,8 @@ static bool get_inv(SrReader *r, SrInventory *inv) {
   return !r->failed;
 }
 
-static void put_player(SrWriter *w, const SrPlayer *p, uint32_t version) {
+/* pos: where the player is saved standing (outside a site, at its front door). */
+static void put_player(SrWriter *w, const SrPlayer *p, SrVec3 pos, uint32_t version) {
   sr_put_str(w, p->name);
   sr_put_str(w, p->pronouns);
   sr_put_bytes(w, &p->look, sizeof p->look); /* all uint8 fields */
@@ -73,9 +74,9 @@ static void put_player(SrWriter *w, const SrPlayer *p, uint32_t version) {
   sr_put_u8(w, p->missed);
   sr_put_u8(w, p->evicted);
   sr_put_u8(w, p->reminders);
-  sr_put_f32(w, p->pos.x);
-  sr_put_f32(w, p->pos.y);
-  sr_put_f32(w, p->pos.z);
+  sr_put_f32(w, pos.x);
+  sr_put_f32(w, pos.y);
+  sr_put_f32(w, pos.z);
   sr_put_f32(w, p->yaw);
   sr_put_f32(w, p->pitch);
   put_inv(w, &p->stash);
@@ -86,6 +87,10 @@ static void put_player(SrWriter *w, const SrPlayer *p, uint32_t version) {
     sr_put_str(w, p->msgs[i].text);
     sr_put_i64(w, p->msgs[i].time);
     sr_put_u8(w, p->msgs[i].read);
+    if (version >= 5) { /* v5: merged repeats and pinned story messages */
+      sr_put_u8(w, p->msgs[i].repeat);
+      sr_put_u8(w, p->msgs[i].pinned);
+    }
   }
   if (version < 2) return; /* version 1 (M2) ends here */
   sr_put_f32(w, p->armor);
@@ -113,9 +118,7 @@ static void put_player(SrWriter *w, const SrPlayer *p, uint32_t version) {
 
 static bool get_player(SrReader *r, SrPlayer *p, uint32_t version, const SrCity *c) {
   /* migration defaults for fields that version 1 did not have */
-  SrPlayer fresh;
-  sr_player_create(&fresh, c, "", SR_BG_STREET_KID, 0);
-  *p = fresh;
+  sr_player_create(p, c, "", SR_BG_STREET_KID, 0); /* no copy: the player is large for a web stack */
   p->msg_count = 0;
   sr_get_str(r, p->name, sizeof p->name);
   sr_get_str(r, p->pronouns, sizeof p->pronouns);
@@ -149,6 +152,10 @@ static bool get_player(SrReader *r, SrPlayer *p, uint32_t version, const SrCity 
     p->msgs[i].time = sr_get_i64(r);
     p->msgs[i].read = sr_get_u8(r) != 0;
     p->msgs[i].repeat = 1;
+    if (version >= 3) {
+      p->msgs[i].repeat = sr_get_u8(r);
+      p->msgs[i].pinned = sr_get_u8(r) != 0;
+    }
   }
   p->msg_count = nm;
   if (p->home < 0 || p->home >= c->building_count) return false;
@@ -327,6 +334,15 @@ static void put_chess(SrWriter *w, const SrGame *g) {
   end(s);
 }
 
+/* v5: the campaign state added by the playability pass. */
+static void put_campaign(SrWriter *w, const SrGame *g) {
+  SecCtx s = begin(w, SR_SEC_CAMPAIGN, 1);
+  put_blob(w, &g->chess.camp, sizeof g->chess.camp);
+  sr_put_i64(w, g->last_raid);
+  sr_put_i32(w, g->flatlines);
+  end(s);
+}
+
 static bool get_board(SrReader *s, SrGame *g) {
   SrChess *ch = &g->chess;
   ch->seed = sr_get_u64(s);
@@ -376,10 +392,9 @@ SrResult sr_save_write(const SrGame *g, SrWriter *w, uint32_t version, int64_t c
   sr_put_i64(w, g->last_minute);
   sr_put_u64(w, g->steps);
   end(s);
-  s = begin(w, SR_SEC_PLAYER, version >= 2 ? 2 : 1);
-  SrPlayer outside = g->player; /* inside a building or on a roof: saved standing at its front door */
-  outside.pos = sr_game_outside_pos(g);
-  put_player(w, &outside, version);
+  s = begin(w, SR_SEC_PLAYER, version >= 5 ? 3 : version >= 2 ? 2 : 1);
+  /* inside a building or on a roof: saved standing at its front door */
+  put_player(w, &g->player, sr_game_outside_pos(g), version);
   end(s);
   s = begin(w, SR_SEC_NPCS, 1);
   int base = 0;
@@ -399,7 +414,7 @@ SrResult sr_save_write(const SrGame *g, SrWriter *w, uint32_t version, int64_t c
   for (int i = base; i < g->pop->count; i++) sr_put_bytes(w, &g->pop->npcs[i], sizeof(SrNpc));
   end(s);
   if (version >= 2) {
-    s = begin(w, SR_SEC_JOBS, version >= 4 ? 2 : 1);
+    s = begin(w, SR_SEC_JOBS, version >= 5 ? 3 : version >= 4 ? 2 : 1);
     sr_put_u16(w, (uint16_t)g->jobs.count);
     sr_put_i32(w, g->jobs.next_id);
     sr_put_i32(w, g->jobs.completed);
@@ -410,6 +425,10 @@ SrResult sr_save_write(const SrGame *g, SrWriter *w, uint32_t version, int64_t c
       if (version >= 4) { /* framing and whether the corporate game booked the outcome */
         sr_put_u8(w, (uint8_t)g->jobs.jobs[i].framed);
         sr_put_u8(w, g->jobs.jobs[i].booked);
+      }
+      if (version >= 5) { /* the approach used, and whether the player walked away */
+        sr_put_u8(w, (uint8_t)g->jobs.jobs[i].approach);
+        sr_put_u8(w, g->jobs.jobs[i].abandoned);
       }
     }
     end(s);
@@ -490,6 +509,7 @@ SrResult sr_save_write(const SrGame *g, SrWriter *w, uint32_t version, int64_t c
     end(s);
   }
   if (version >= 4) put_chess(w, g);
+  if (version >= 5) put_campaign(w, g);
   s = begin(w, SR_SEC_DELTAS, 1);
   sr_put_u16(w, (uint16_t)g->deltas.count);
   for (int i = 0; i < g->deltas.count; i++) {
@@ -608,9 +628,14 @@ SrResult sr_save_read(SrGame *g, const void *data, size_t len) {
         for (int i = 0; i < n; i++) {
           get_job(&s, &g->jobs.jobs[i]);
           g->jobs.jobs[i].framed = -1;
+          g->jobs.jobs[i].approach = -1;
           if (sver >= 2) {
             g->jobs.jobs[i].framed = (int8_t)sr_get_u8(&s);
             g->jobs.jobs[i].booked = sr_get_u8(&s) != 0;
+            if (sver >= 3) {
+              g->jobs.jobs[i].approach = (int8_t)sr_get_u8(&s);
+              g->jobs.jobs[i].abandoned = sr_get_u8(&s) != 0;
+            }
           } else {
             g->jobs.jobs[i].booked = true; /* older saves: outcomes before the corporate game */
           }
@@ -714,6 +739,11 @@ SrResult sr_save_read(SrGame *g, const void *data, size_t len) {
       case SR_SEC_MARKET: get_blob(&s, &g->chess.market, sizeof g->chess.market); break;
       case SR_SEC_NEWS: get_blob(&s, &g->chess.news, sizeof g->chess.news); break;
       case SR_SEC_STORY: get_blob(&s, &g->chess.story, sizeof g->chess.story); break;
+      case SR_SEC_CAMPAIGN:
+        get_blob(&s, &g->chess.camp, sizeof g->chess.camp);
+        g->last_raid = sr_get_i64(&s);
+        g->flatlines = sr_get_i32(&s);
+        break;
       case SR_SEC_DELTAS: {
         int n = sr_get_u16(&s);
         for (int i = 0; i < n; i++) {

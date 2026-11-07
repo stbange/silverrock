@@ -25,6 +25,8 @@ jobs:
         run: |
           set -o pipefail
           ./build/n/sr_headless --campaign 20 | tee campaign.txt
+      - name: Playtests, 16 characters x 26 weeks, gated by playtest bands
+        run: bash tests/balance/run_playtests.sh ./build/n/sr_headless playtests
       - name: Corporate game soak, 52 weeks on 10 seeds (histories for review)
         run: ./build/n/sr_headless --soak 10 > soak.txt
       - name: Fuzz parsers and name generators with libFuzzer (10 minutes)
@@ -34,4 +36,4 @@ jobs:
           mkdir -p corpus && ./fuzz corpus -max_total_time=600 -artifact_prefix=crash-
       - uses: actions/upload-artifact@v4
         if: always()
-        with: { name: nightly, path: "balance.txt\ncampaign.txt\nsoak.txt\ncrash-*" }
+        with: { name: nightly, path: "balance.txt\ncampaign.txt\nsoak.txt\nplaytests\ncrash-*" }

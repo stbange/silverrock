@@ -565,6 +565,7 @@ int sr_jobs_tick(SrJobBoard *b, SrPlayer *p, int64_t t, SrEventLog *log) {
 
 SrResult sr_job_abandon(SrJob *j, SrPlayer *p, int64_t t, SrEventLog *log) {
   if (j->state != SR_JS_ACCEPTED) return SR_ERR_INVALID;
+  j->abandoned = true;
   j->deadline = t - 1;
   SrJobBoard tmp;
   tmp.count = 1;

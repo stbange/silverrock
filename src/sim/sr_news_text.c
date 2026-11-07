@@ -117,14 +117,18 @@ void sr_news_event_headline(char *out, size_t cap, const SrCity *c, const SrWorl
   }
   /* the culprit, as far as the evidence goes (gang news names the gangs already) */
   bool gang_news = e->type == SR_EV_GUNFIRE || e->type == SR_EV_KILLING;
-  if (perp == -2 && !gang_news) {
-    sr_headline(out, cap, voice == VOICE_PIRATE ? "%1 - a runner did it" : "%1; runner blamed", base, NULL, NULL);
-    if (strstr(out, "runner") == NULL) sr_headline(out, cap, "Runner hits %1 in %2", sub, place, NULL);
+  char tail[128];
+  if (perp == -2 && !gang_news) { /* the culprit added only when it fits; else lead with it */
+    snprintf(tail, sizeof tail, voice == VOICE_PIRATE ? "%s - a runner did it" : "%s; runner blamed", base);
+    if (strlen(tail) <= 63)
+      snprintf(out, cap, "%s", tail);
+    else
+      sr_headline(out, cap, "Runner hits %1 in %2", sub, place, NULL);
   } else if (perp >= 0 && perp != subject && !gang_news) {
-    char tmpl[64];
-    snprintf(tmpl, sizeof tmpl, "%%1; %s", voice == VOICE_PIRATE ? "%2 behind it?" : "%2 suspected");
-    sr_headline(out, cap, tmpl, base, who, NULL);
-    if (strstr(out, "suspected") == NULL && strstr(out, "behind it") == NULL) /* no room: lead with the culprit */
+    snprintf(tail, sizeof tail, voice == VOICE_PIRATE ? "%s; %s behind it?" : "%s; %s suspected", base, who);
+    if (strlen(tail) <= 63)
+      snprintf(out, cap, "%s", tail);
+    else
       sr_headline(out, cap, "%2 suspected in %1 attack", sub, who, NULL);
   } else {
     snprintf(out, cap, "%s", base);

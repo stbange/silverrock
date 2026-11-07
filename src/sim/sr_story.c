@@ -247,7 +247,8 @@ void sr_story_beat_done(SrChess *ch, SrCity *c, int idx, bool success, bool offs
   if (idx < 0 || idx >= SR_MAX_ARCS || !ch->story.arcs[idx].active) return;
   SrArc *a = &ch->story.arcs[idx];
   if (success) a->path = (uint8_t)(a->path | (1u << a->beat));
-  if (offscreen) { /* the player let it go: tell them how it went */
+  bool theirs = ch->story.patron >= 0 && (a->a == ch->story.patron || a->b == ch->story.patron);
+  if (offscreen && theirs) { /* the player let the patron's beat go: tell them how it went */
     char line[112];
     sr_story_skipped_text(line, sizeof line, success, a->a >= 0 ? c->factions.f[a->a].name : "someone",
                           a->b >= 0 ? c->factions.f[a->b].name : "someone");
@@ -601,8 +602,9 @@ void sr_story_tick(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_t now)
     sr_chess_note(ch, now, "Act II begins");
   }
   /* stuck at Pawn: the handler shows the way */
-  if (s->act == SR_ACT_PAWN && !cp->nudged && tier <= SR_CRED_PAWN && now - s->act_started >= 2 * SR_WEEK_S &&
-      s->patron >= 0 && s->retainer) {
+  int64_t since = SR_MAX(s->act_started, cp->last_real_job);
+  if (s->act == SR_ACT_PAWN && !cp->nudged && tier <= SR_CRED_PAWN && now - since >= 2 * SR_WEEK_S && s->patron >= 0 &&
+      s->retainer) { /* two weeks of nothing but street gigs */
     cp->nudged = true;
     sr_story_say(ch, SR_CAST_HANDLER, sr_story_nudge_text());
     int rival = rival_of(c, s->patron, (uint64_t)now);

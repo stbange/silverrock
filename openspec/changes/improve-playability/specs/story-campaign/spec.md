@@ -75,7 +75,8 @@ further offers come only while the current patron is hostile.
 The game SHALL instantiate story arcs from templates with the current factions, keep one arc active in Act I and up
 to two in Act II, space beats at least three in-game days apart, announce every beat through a cast member's message
 that names the people, place and stakes, branch each arc on the outcome of its beats, continue an arc when the player
-skips a beat and report what happened, and record acts, beats and trust changes in a story log on the terminal.
+skips a beat and report what happened when the beat was the patron's, and record acts, beats and trust changes in a
+story log on the terminal.
 
 #### Scenario: Arc instantiation
 - **WHEN** an arc template is instantiated
@@ -142,9 +143,9 @@ limited to what the user interface offers.
 ## ADDED Requirements
 
 ### Requirement: A nudge for stalled players
-A player still at tier Pawn after 14 days in Act I SHALL get a guided T1 contract from the handler, together with an
-explanation of what Act II needs.
+A player at tier Pawn who has done nothing but street gigs (T0) for 14 days in Act I SHALL get a guided T1 contract
+from the handler, together with an explanation of what Act II needs.
 
 #### Scenario: Stalled at Pawn
-- **WHEN** the player has been at tier Pawn in Act I for 14 in-game days
+- **WHEN** the player has been at tier Pawn in Act I for 14 in-game days without completing a job above T0
 - **THEN** the handler offers a T1 contract and says that Act II needs tier Runner and trust of 40

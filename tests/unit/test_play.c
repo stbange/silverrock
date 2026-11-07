@@ -1,5 +1,6 @@
 /* Playability pass after M5 (improve-playability): every scenario of that change. */
 #include "core/sr_rng.h"
+#include "game/sr_save.h"
 #include "game/sr_script.h"
 #include "sr_test.h"
 #include "ui/sr_ui.h"
@@ -688,14 +689,38 @@ static void test_set_piece(void) {
   SR_CHECK_EQ(g->chess.pol.police_contract, 2); /* the king's colours on the streets */
   SR_CHECK(inbox_has(g, "picked a king"));
   sr_game_destroy(g);
-  /* walking away from the set piece crowns the rival */
+  /* walking away from the set piece crowns the rival (R on the Jobs tab) */
   g = game(53);
   st = &g->chess.story;
-  st->act = SR_ACT_PROMOTION;
-  st->scenario_other = 3;
-  sr_story_set_piece_abandoned(&g->chess, g->city, sr_game_time(g));
-  SR_CHECK_EQ(st->ending, SR_END_KINGMAKER);
-  SR_CHECK_EQ(g->chess.camp.king, 3);
+  st->offer_open = true;
+  sr_game_accept_retainer(g);
+  g->player.prog.street_cred = 75;
+  st->act = SR_ACT_KNIGHT;
+  st->act_started = sr_game_time(g) - SR_ACT2_MAX_S;
+  sr_game_skip(g, SR_TICK_S, false);
+  for (int d = 0; d < 40 && g->chess.camp.set_piece == 0; d++) sr_game_skip(g, 86400, false);
+  sr_game_skip(g, 3600, false);
+  spo = sr_chess_op(&g->chess, g->chess.camp.set_piece);
+  k = spo ? sr_chess_contract(&g->chess, spo->contract) : NULL;
+  j = k ? sr_jobs_get(&g->jobs, k->job_id) : NULL;
+  SR_CHECK(j != NULL);
+  if (j) {
+    SR_CHECK_EQ(sr_game_accept(g, j->id), SR_OK);
+    g->screen = SR_SCREEN_TERMINAL;
+    g->term_tab = SR_TAB_JOBS;
+    int32_t ids[32];
+    int nj = sr_game_terminal_jobs(g, ids, 32);
+    for (int i = 0; i < nj; i++)
+      if (ids[i] == j->id) g->term_sel = i;
+    memset(&a, 0, sizeof a);
+    a.pressed[SR_ACT_RELOAD] = true;
+    sr_game_step(g, &a);
+    SR_CHECK(j->abandoned);
+    sr_game_skip(g, 120, false);
+    SR_CHECK_EQ(st->ending, SR_END_KINGMAKER);
+    SR_CHECK_EQ(g->chess.camp.king, st->scenario_other);
+  }
+  SR_CHECK_EQ(sr_game_abandon(g, -7), SR_ERR_NOT_FOUND);
   sr_story_set_piece_abandoned(&g->chess, g->city, sr_game_time(g)); /* already over */
   sr_game_destroy(g);
 }
@@ -765,6 +790,59 @@ static void test_notoriety(void) {
   sr_game_destroy(g);
 }
 
+/* ---- phase 5 --------------------------------------------------------------------------------- */
+
+static void test_save_v5(void) {
+  SrGame *g = game(57);
+  SrChess *ch = &g->chess;
+  ch->camp.blacklist = 0x5;
+  ch->camp.defections = 1;
+  ch->camp.medical_debt = 321;
+  ch->camp.king = 2;
+  sr_story_log(ch, sr_game_time(g), "Saved line");
+  sr_player_story_message(&g->player, "Handler", "Pinned before saving", sr_game_time(g));
+  sr_player_message(&g->player, "Spam", "Twice", sr_game_time(g));
+  sr_player_message(&g->player, "Spam", "Twice", sr_game_time(g));
+  int ids[SR_FIXER_OFFERS];
+  int n = sr_game_fixer(g, g->city->factions.fixer_building[0], ids);
+  SR_CHECK(n > 0);
+  SrJob *j = sr_jobs_get(&g->jobs, ids[0]);
+  j->approach = SR_AP_FACE;
+  g->flatlines = 2;
+  SrMemStore mem;
+  SrStorage st;
+  sr_memstore_init(&mem, &st);
+  SR_CHECK_EQ(sr_save_to(g, &st, "v5.srsv", 0), SR_OK);
+  SrGame *l = sr_game_create();
+  SR_CHECK_EQ(sr_load_from(l, &st, "v5.srsv"), SR_OK);
+  SR_CHECK_EQ(l->chess.camp.blacklist, 0x5);
+  SR_CHECK_EQ(l->chess.camp.defections, 1);
+  SR_CHECK_EQ(l->chess.camp.medical_debt, 321);
+  SR_CHECK_EQ(l->chess.camp.king, 2);
+  SR_CHECK_STR(sr_story_log_entry(&l->chess, 0)->text, "Saved line");
+  SR_CHECK_EQ(l->flatlines, 2);
+  SR_CHECK_EQ(sr_jobs_get(&l->jobs, ids[0])->approach, SR_AP_FACE);
+  const SrMessage *last = &l->player.msgs[l->player.msg_count - 1];
+  SR_CHECK_EQ(last->repeat, 2);
+  SR_CHECK(l->player.msgs[l->player.msg_count - 2].pinned);
+  /* a version 4 save: the campaign state starts fresh */
+  SrWriter w;
+  sr_writer_init(&w);
+  SR_CHECK_EQ(sr_save_write(g, &w, 4, 0), SR_OK);
+  SrGame *m = sr_game_create();
+  SR_CHECK_EQ(sr_save_read(m, w.data, w.len), SR_OK);
+  SR_CHECK_EQ(m->chess.camp.blacklist, 0);
+  SR_CHECK_EQ(m->chess.camp.king, -1);
+  SR_CHECK_EQ(m->chess.camp.hunter, -1);
+  SR_CHECK_EQ(m->player.msgs[m->player.msg_count - 1].repeat, 1);
+  SR_CHECK_EQ(sr_jobs_get(&m->jobs, ids[0])->approach, -1);
+  sr_writer_free(&w);
+  sr_memstore_free(&mem);
+  sr_game_destroy(m);
+  sr_game_destroy(l);
+  sr_game_destroy(g);
+}
+
 void suite_play(void) {
   SR_RUN(test_headlines);
   SR_RUN(test_patron_warning);
@@ -782,4 +860,5 @@ void suite_play(void) {
   SR_RUN(test_set_piece);
   SR_RUN(test_nudge_and_epilogue);
   SR_RUN(test_notoriety);
+  SR_RUN(test_save_v5);
 }

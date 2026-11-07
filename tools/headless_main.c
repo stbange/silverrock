@@ -175,6 +175,9 @@ typedef struct Playtest {
   int idle_days, jobs, failed, contract_jobs, news_player, msgs;
   int64_t cash_min, cash_max, cash_end;
   int ending, act;
+  int flatlines, defections;
+  int act2_cash;  /* cash when Act II began, -1 never */
+  int act2_costs; /* weekly living costs then */
 } Playtest;
 
 static void pt_event(FILE *ev, int day, const char *what) {
@@ -214,6 +217,7 @@ static Playtest playtest(uint64_t seed, const char *strategy, int bg, int weeks,
   memset(&r, 0, sizeof r);
   for (int i = 0; i < 6; i++) r.first_tier_day[i] = -1;
   r.retainer_day = r.act2_day = r.act3_day = r.ending_day = r.evicted_day = r.first_flatline_day = -1;
+  r.act2_cash = -1;
   char path[512];
   snprintf(path, sizeof path, "%s/%s.csv", dir, name);
   FILE *csv = fopen(path, "w");
@@ -235,7 +239,7 @@ static Playtest playtest(uint64_t seed, const char *strategy, int bg, int weeks,
                  "satiety,missed_rent,evicted,messages,news,ops,arcs_started,arcs_finished,ending,flatlines,"
                  "portfolio\n");
   r.cash_min = r.cash_max = g->player.cred;
-  int last_tier = -1, last_act = 0, last_jobs = 0, last_flat = 0, msgs0 = g->player.msg_count;
+  int last_tier = -1, last_act = 0, last_jobs = 0, msgs0 = g->player.msg_count;
   bool was_evicted = false;
   int hostile_seen = -1;
   for (int day = 1; day <= weeks * 7; day++) {
@@ -247,29 +251,34 @@ static Playtest playtest(uint64_t seed, const char *strategy, int bg, int weeks,
     if (st.jobs_done == 0) r.idle_days++;
     pt_story_choices(g, ev, day);
     if (g->player.cred < 0) g->player.cred = 0;
+    int gday = (int)(sr_game_time(g) / 86400) + 1; /* game days: an autoplayed day can run past midnight */
     /* events */
     SrStory *sy = &g->chess.story;
     int ct = (int)sr_cred_tier(g->player.prog.street_cred);
     if (ct != last_tier) {
-      if (r.first_tier_day[ct] < 0) r.first_tier_day[ct] = day;
+      if (r.first_tier_day[ct] < 0) r.first_tier_day[ct] = gday;
       char b[64];
       snprintf(b, sizeof b, "Street Cred tier %s (%d)", sr_cred_tier_name((SrCredTier)ct), g->player.prog.street_cred);
       pt_event(ev, day, b);
       last_tier = ct;
     }
-    if (sy->retainer && r.retainer_day < 0) r.retainer_day = day;
+    if (sy->retainer && r.retainer_day < 0) r.retainer_day = gday;
     if (sy->act != last_act) {
       char b[64];
       snprintf(b, sizeof b, "act %d begins (trust %d)", sy->act, sy->trust);
       pt_event(ev, day, b);
-      if (sy->act == SR_ACT_KNIGHT) r.act2_day = day;
+      if (sy->act == SR_ACT_KNIGHT) {
+        r.act2_day = (int)(sy->act_started / 86400) + 1;
+        r.act2_cash = (int)SR_MIN(g->player.cred, 2000000000LL);
+        r.act2_costs = sr_game_rent_for(g) + sr_game_weekly_upkeep(g) + 350; /* rent, upkeep, food */
+      }
       if (sy->act == SR_ACT_PROMOTION) {
-        r.act3_day = day;
+        r.act3_day = (int)(sy->act_started / 86400) + 1; /* exact: when the act began */
         snprintf(b, sizeof b, "scenario %s around %s", sr_scenario_name((SrScenario)sy->scenario),
                  sy->scenario_corp >= 0 ? c->factions.f[sy->scenario_corp].name : "-");
         pt_event(ev, day, b);
       }
-      if (sy->act == SR_ACT_EPILOGUE) r.ending_day = day;
+      if (sy->act == SR_ACT_EPILOGUE) r.ending_day = (int)(g->chess.camp.ending_at / 86400) + 1;
       last_act = sy->act;
     }
     if (sy->hostile != hostile_seen && sy->hostile >= 0) {
@@ -283,8 +292,9 @@ static Playtest playtest(uint64_t seed, const char *strategy, int bg, int weeks,
       if (r.evicted_day < 0) r.evicted_day = day;
     }
     was_evicted = g->player.evicted;
-    if (st.flatlines > last_flat || st.flatlines > 0) {
+    if (st.flatlines > 0) {
       pt_event(ev, day, "flatlined");
+      r.flatlines += st.flatlines;
       if (r.first_flatline_day < 0) r.first_flatline_day = day;
     }
     if (r.jobs - last_jobs >= 1 && day % 7 == 0) {
@@ -307,12 +317,12 @@ static Playtest playtest(uint64_t seed, const char *strategy, int bg, int weeks,
               sy->arcs_started, sy->arcs_finished, sy->ending, st.flatlines,
               (long long)sr_market_portfolio(&g->chess.market, c));
     last_jobs = r.jobs;
-    last_flat = st.flatlines;
   }
   for (int i = 0; i < sr_news_size(&g->chess.news); i++)
-    r.news_player += strstr(sr_news_latest(&g->chess.news, i)->headline, "shadowrunner") != NULL;
+    r.news_player += sr_news_latest(&g->chess.news, i)->perpetrator == -2;
   r.msgs = g->player.msg_count - msgs0;
   r.cash_end = g->player.cred;
+  r.defections = g->chess.camp.defections;
   r.ending = g->chess.story.ending;
   r.act = g->chess.story.act;
   if (ev) {
@@ -333,14 +343,30 @@ static Playtest playtest(uint64_t seed, const char *strategy, int bg, int weeks,
   return r;
 }
 
-static int playtests(int n, const char *dir) {
-  static const char *const strategies[] = {"story", "ghost", "face", "hammer", "netrunner", "story", "gig", "story"};
+static int cmp_int(const void *a, const void *b) { return *(const int *)a - *(const int *)b; }
+
+static double median_of(int *v, int n) {
+  if (n == 0) return -1;
+  qsort(v, (size_t)n, sizeof *v, cmp_int);
+  return n % 2 ? v[n / 2] : (v[n / 2 - 1] + v[n / 2]) / 2.0;
+}
+
+/* Runs the playtests; with bands, checks lines "metric min max" and returns the violations. */
+static int playtests(int n, const char *dir, const char *bands) {
+  /* half follow the story through the API too, half do only what the user interface offers */
+  static const char *const strategies[16] = {"story", "ghost",     "story", "face",     "story", "hammer",
+                                             "story", "netrunner", "story", "ghost",    "story", "face",
+                                             "gig",   "hammer",    "gig",   "netrunner"};
   printf("run,seed,strategy,background,tier_pawn,tier_runner,tier_operator,tier_knight,retainer,act2,act3,ending_day,"
          "ending,jobs,failed,idle_days,contract_jobs,cash_min,cash_max,cash_end,evicted_day,flatline_day,"
          "news_about_player,messages\n");
-  for (int k = 0; k < n; k++) {
+  int runner[64], knight[64], act3_len[64], ending_day[64], cash26[64], act2_weeks[64];
+  int nr = 0, nk = 0, na3 = 0, ne = 0, nc = 0, nw = 0, flatlines = 0, max_defect = 0, reach = 0, reach_end = 0;
+  static const char *const approaches[5] = {"story", "ghost", "face", "hammer", "netrunner"};
+  int app_knight[5][16], app_n[5] = {0};
+  for (int k = 0; k < n && k < 64; k++) {
     uint64_t seed = 3000u + (uint64_t)k * 7717u;
-    const char *strat = strategies[k % 8];
+    const char *strat = strategies[k % 16];
     int bg = k % SR_BG_COUNT;
     char name[64];
     snprintf(name, sizeof name, "run%02d_%s", k + 1, strat);
@@ -351,8 +377,74 @@ static int playtests(int n, const char *dir) {
            sr_ending_name((SrEnding)r.ending), r.jobs, r.failed, r.idle_days, r.contract_jobs, (long long)r.cash_min,
            (long long)r.cash_max, (long long)r.cash_end, r.evicted_day, r.first_flatline_day, r.news_player, r.msgs);
     fflush(stdout);
+    bool gig = strcmp(strat, "gig") == 0;
+    if (!gig) {
+      if (r.first_tier_day[2] > 0) runner[nr++] = r.first_tier_day[2];
+      if (r.first_tier_day[4] > 0) knight[nk++] = r.first_tier_day[4];
+      cash26[nc++] = (int)SR_MIN(r.cash_end, 2000000000LL);
+      if (r.act2_cash >= 0) act2_weeks[nw++] = r.act2_cash / SR_MAX(1, r.act2_costs);
+    }
+    for (int a = 0; a < 5; a++)
+      if (strcmp(strat, approaches[a]) == 0 && r.first_tier_day[4] > 0 && app_n[a] < 16)
+        app_knight[a][app_n[a]++] = r.first_tier_day[4];
+    if (r.act3_day > 0 && r.ending_day > 0) act3_len[na3++] = r.ending_day - r.act3_day;
+    if (r.ending_day > 0) ending_day[ne++] = r.ending_day;
+    flatlines += r.flatlines;
+    max_defect = SR_MAX(max_defect, r.defections);
+    bool reachable = !gig && strcmp(strat, "story") != 0;
+    reach += reachable;
+    reach_end += reachable && r.ending_day > 0;
   }
-  return 0;
+  int act3_min = na3 ? act3_len[0] : -1, end_min = ne ? ending_day[0] : -1, end_max = -1, cash_max = -1;
+  for (int i = 0; i < na3; i++) act3_min = SR_MIN(act3_min, act3_len[i]);
+  for (int i = 0; i < ne; i++) end_min = SR_MIN(end_min, ending_day[i]), end_max = SR_MAX(end_max, ending_day[i]);
+  for (int i = 0; i < nc; i++) cash_max = SR_MAX(cash_max, cash26[i]);
+  double fastest = -1, slowest = -1; /* each approach's median day to Knight */
+  for (int a = 0; a < 5; a++) {
+    if (app_n[a] == 0) continue;
+    double md = median_of(app_knight[a], app_n[a]);
+    if (fastest < 0 || md < fastest) fastest = md;
+    if (md > slowest) slowest = md;
+  }
+  struct {
+    const char *name;
+    double value;
+  } m[] = {{"approach_knight_spread", fastest > 0 ? slowest / fastest : -1},
+           {"runner_day_median", median_of(runner, nr)},
+           {"knight_day_median", median_of(knight, nk)},
+           {"act3_days_min", act3_min},
+           {"ending_day_min", end_min},
+           {"ending_day_max", end_max},
+           {"defections_max", max_defect},
+           {"act2_cash_weeks_median", median_of(act2_weeks, nw)},
+           {"cash26_median", median_of(cash26, nc)},
+           {"cash26_max", cash_max},
+           {"flatlines_total", flatlines},
+           {"reachable_endings", reach_end},
+           {"reachable_runs", reach}};
+  fprintf(stderr, "playtest summary:\n");
+  for (size_t i = 0; i < sizeof m / sizeof m[0]; i++) fprintf(stderr, "  %-24s %.1f\n", m[i].name, m[i].value);
+  if (!bands) return 0;
+  char *text = read_file(bands);
+  if (!text) {
+    fprintf(stderr, "cannot read bands %s\n", bands);
+    return 1;
+  }
+  int bad = 0, lines = 0;
+  for (char *line = strtok(text, "\n"); line; line = strtok(NULL, "\n")) {
+    char key[48];
+    double lo, hi;
+    if (line[0] == '#' || sscanf(line, "%47s %lf %lf", key, &lo, &hi) != 3) continue;
+    lines++;
+    for (size_t i = 0; i < sizeof m / sizeof m[0]; i++)
+      if (strcmp(key, m[i].name) == 0 && (m[i].value < lo || m[i].value > hi)) {
+        fprintf(stderr, "BAND FAIL %s = %.1f outside [%.1f, %.1f]\n", key, m[i].value, lo, hi);
+        bad++;
+      }
+  }
+  free(text);
+  fprintf(stderr, "playtest bands: %d lines checked, %d violations\n", lines, bad);
+  return bad;
 }
 
 int main(int argc, char **argv) {
@@ -391,13 +483,19 @@ int main(int argc, char **argv) {
       if (campaign(atoi(argv[++i])) != 0) return 1;
     } else if (strcmp(argv[i], "--playtest") == 0 && i + 2 < argc) {
       int n = atoi(argv[++i]);
-      playtests(n, argv[++i]);
+      const char *dir = argv[++i];
+      const char *bands = NULL;
+      if (i + 2 < argc && strcmp(argv[i + 1], "--bands") == 0) {
+        bands = argv[i + 2];
+        i += 2;
+      }
+      if (playtests(n, dir, bands) != 0) return 1;
     } else if (strcmp(argv[i], "--soak") == 0 && i + 1 < argc) {
       soak(atoi(argv[++i]));
     } else {
       fprintf(stderr,
               "usage: %s [--script file.scn]... [--sweep N] [--balance SEEDS [--bands FILE]] [--campaign SEEDS] "
-              "[--soak SEEDS] [--playtest RUNS DIR]\n",
+              "[--soak SEEDS] [--playtest RUNS DIR [--bands FILE]]\n",
               argv[0]);
       return 2;
     }

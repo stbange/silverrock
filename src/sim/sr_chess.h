@@ -329,9 +329,10 @@ typedef struct SrCampaign {
   SrSuspect suspects[SR_MAX_SUSPECTS];
   int16_t capital_bonus[SR_MAX_FACTIONS]; /* long-run capital won by takeovers (+8 each, at most 80) */
   /* the player's economy and reputation */
-  int32_t cred_week;   /* in-game week of cred_gained */
-  int8_t cred_gained;  /* Street Cred gained that week (capped) */
-  int64_t last_job_at; /* last completed job (idle decay above Runner) */
+  int32_t cred_week;     /* in-game week of cred_gained */
+  int8_t cred_gained;    /* Street Cred gained that week (capped) */
+  int64_t last_job_at;   /* last completed job (idle decay above Runner) */
+  int64_t last_real_job; /* last completed job above T0 (a stalled player only runs errands) */
   int64_t last_decay_at;
   int32_t medical_debt; /* bills not paid yet: collected with the weekly costs */
   int64_t upkeep_due;   /* rent due date the weekly costs were last charged for */

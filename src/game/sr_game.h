@@ -213,6 +213,8 @@ SrResult sr_game_walk_to(SrGame *g, int building);
 int sr_game_fixer(SrGame *g, int fixer_building, int out_ids[SR_FIXER_OFFERS]);
 SrResult sr_game_accept(SrGame *g, int32_t job);
 SrMissionResult sr_game_execute(SrGame *g, int32_t job, SrApproach a);
+/* Walks away from an accepted job: it fails and the client remembers. */
+SrResult sr_game_abandon(SrGame *g, int32_t job);
 int32_t sr_game_report(SrGame *g, int32_t job);
 void sr_game_fire(SrGame *g);
 /* Uses the gadget bound to a quick slot (0..3); false if empty or none carried. */

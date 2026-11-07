@@ -597,6 +597,14 @@ SrMissionResult sr_game_execute(SrGame *g, int32_t id, SrApproach a) {
   return res;
 }
 
+SrResult sr_game_abandon(SrGame *g, int32_t id) {
+  SrJob *j = sr_jobs_get(&g->jobs, id);
+  if (!j) return SR_ERR_NOT_FOUND;
+  SrResult r = sr_job_abandon(j, &g->player, sr_game_time(g), &g->events);
+  if (r == SR_OK && g->active_job == id) g->active_job = -1;
+  return r;
+}
+
 int32_t sr_game_report(SrGame *g, int32_t id) {
   SrJob *j = sr_jobs_get(&g->jobs, id);
   if (!j) return 0;

@@ -51,6 +51,7 @@ typedef struct SrJob {
   int kills, alarms;
   int8_t framed;   /* faction the planted evidence points to, -1 none */
   int8_t approach; /* approach the job was done with, -1 not yet */
+  bool abandoned;  /* the player walked away from it */
   bool booked;     /* the corporate game has seen the outcome */
   char title[64];
 } SrJob;

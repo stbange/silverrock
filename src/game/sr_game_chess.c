@@ -345,7 +345,7 @@ static void book_jobs(SrGame *g, int64_t t) {
     if (!done && !failed) continue;
     j->booked = true;
     int evidence = (j->alarms > 0) + (j->kills > 0) + (j->alarms > 1);
-    if (k && k->open && failed && ch->camp.set_piece && k->op == ch->camp.set_piece) { /* walked away */
+    if (k && k->open && failed && j->abandoned && ch->camp.set_piece && k->op == ch->camp.set_piece) { /* walked away */
       k->open = false;
       sr_story_set_piece_abandoned(ch, g->city, t);
       continue;
@@ -359,6 +359,7 @@ static void book_jobs(SrGame *g, int64_t t) {
     award_cred(g, j, done, t);
     if (done) {
       ch->camp.last_job_at = t;
+      if (j->tier >= 1) ch->camp.last_real_job = t;
       bool clean = j->alarms == 0 && j->kills == 0 && j->approach != SR_AP_HAMMER;
       if (clean) { /* quiet work pays: a bonus, less Heat, the patron's appreciation */
         int32_t bonus = j->pay / 5;
@@ -857,6 +858,13 @@ void sr_game_term_input(SrGame *g, const SrActionState *a) {
       sr_game_toast(g, sr_game_trade(g, g->term_sel, 10) == SR_OK ? "Bought 10 shares." : "Not enough cred.");
     if (a->pressed[SR_ACT_RELOAD])
       sr_game_toast(g, sr_game_trade(g, g->term_sel, -10) == SR_OK ? "Sold 10 shares." : "Margin limit reached.");
+  }
+  if (g->term_tab == SR_TAB_JOBS && rows > 0 && a->pressed[SR_ACT_RELOAD]) { /* R walks away from a job */
+    int32_t ids[32];
+    sr_game_terminal_jobs(g, ids, 32);
+    SrJob *j = sr_jobs_get(&g->jobs, ids[SR_MIN(g->term_sel, rows - 1)]);
+    if (j && j->state == SR_JS_ACCEPTED && sr_game_abandon(g, j->id) == SR_OK)
+      sr_game_toast(g, "You walk away from it.");
   }
   if (g->term_tab == SR_TAB_JOBS && rows > 0 && a->pressed[SR_ACT_INTERACT]) {
     int32_t ids[32];

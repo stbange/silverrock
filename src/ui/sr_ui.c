@@ -628,7 +628,8 @@ static void terminal(SrUi *ui, const SrGame *g) {
     case SR_TAB_STORY: terminal_story(ui, g, x, y, line, s); break;
     default: terminal_home(ui, g, x, y, line, s); break;
   }
-  const char *hint = g->term_tab == SR_TAB_JOBS     ? "LEFT/RIGHT TABS  UP/DOWN CHOOSE  [E] ACCEPT  [ESC] CLOSE"
+  const char *hint = g->term_tab == SR_TAB_JOBS
+                         ? "LEFT/RIGHT TABS  UP/DOWN CHOOSE  [E] ACCEPT  [R] ABANDON  [ESC] CLOSE"
                      : g->term_tab == SR_TAB_MARKET ? "LEFT/RIGHT TABS  [E] BUY 10  [R] SELL 10  [ESC] CLOSE"
                      : g->term_tab == SR_TAB_STORY  ? "LEFT/RIGHT TABS  UP/DOWN CHOOSE  [E] CONFIRM  [ESC] CLOSE"
                      : g->term_tab == SR_TAB_HOME && g->site.active && g->site.in.apartment

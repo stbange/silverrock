@@ -1,0 +1,16 @@
+# Playtest bands for `sr_headless --playtest 16 DIR --bands tests/balance/playtest_bands.txt`
+# (improve-playability D12). 16 characters play 26 weeks each: 8 follow the story through the API
+# too, 8 only use what the user interface offers. A value outside [min, max] fails the run.
+# metric                  min      max
+runner_day_median         21       35
+knight_day_median         70       112
+act3_days_min             14       999
+ending_day_min            120      999
+ending_day_max            0        200
+defections_max            0        1
+act2_cash_weeks_median    0        12
+cash26_median             0        150000
+cash26_max                0        200000
+flatlines_total           1        9999
+reachable_endings         7        99
+approach_knight_spread    0        1.5
