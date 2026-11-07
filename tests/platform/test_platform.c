@@ -88,6 +88,7 @@ static void reference_scene(SrApp *a) {
   sr_clock_set_seconds(&g->clock, 2 * 86400 + 1); /* Wed 00:00, weather slot fixed */
   g->steps = 0;
   a->fixed_frame_dt = 0.0001;                     /* render without advancing the simulation */
+  a->loop.acc = 0;                                /* no step left over from earlier tests: rain and steam stand still */
   for (int i = 0; i < 40; i++) sr_app_iterate(a); /* stream chunks (2 per frame) */
 }
 
@@ -1127,6 +1128,7 @@ static void atmos_setup(SrApp *a, uint64_t seed) {
   g->settings.vertex_snap = g->settings.affine = g->settings.crt = false;
   g->settings.bloom = true;
   a->fixed_frame_dt = 0.0001;
+  a->loop.acc = 0;
 }
 
 /* Renders one view at the internal resolution (caller frees); NULL when it does not exist. */
@@ -1322,6 +1324,38 @@ static void test_atmosphere_gloom(void) {
   g_app.game->force_weather = -1;
 }
 
+/* Every weather has its own look (phase 3): the same street in the six weathers. */
+static void test_atmosphere_weather(void) {
+  SR_SPEC("world-environment", "Each weather looks different");
+  atmos_setup(&g_app, 7919ull * 11);
+  AtmosView v = *atmos_view("residential");
+  v.hour = 1;
+  uint8_t *img[SR_WX_COUNT];
+  double mean[SR_WX_COUNT][3];
+  int w = 0, h = 0;
+  for (int k = 0; k < SR_WX_COUNT; k++) {
+    v.weather = k;
+    img[k] = atmos_render(&g_app, &v, &w, &h);
+    for (int c = 0; c < 3; c++) {
+      double s = 0;
+      for (int i = 0; img[k] && i < w * h; i++) s += img[k][i * 3 + c];
+      mean[k][c] = s / (w * h);
+    }
+  }
+  for (int a = 0; a < SR_WX_COUNT; a++)
+    for (int b = 0; b < a; b++) {
+      if (!img[a] || !img[b]) continue;
+      double d = 0;
+      for (int c = 0; c < 3; c++) d += (mean[a][c] - mean[b][c]) * (mean[a][c] - mean[b][c]);
+      double share = diff_share(img[a], img[b], w * h, 6); /* 6 levels: the fog and rain are subtle on dark walls */
+      printf("  %-18s vs %-18s mean %.1f apart, %.1f %% of pixels differ\n", sr_weather_name((SrWeather)a),
+             sr_weather_name((SrWeather)b), sqrt(d), share * 100);
+      SR_CHECK(sqrt(d) >= 2.0 || share >= 0.03);
+    }
+  for (int k = 0; k < SR_WX_COUNT; k++) free(img[k]);
+  g_app.game->force_weather = -1;
+}
+
 void suite_platform(void) {
   snprintf(g_root, sizeof g_root, "%s/sr_platform_test_%d/", SDL_GetHint("TMPDIR") ? SDL_GetHint("TMPDIR") : "/tmp", 1);
   SDL_SetHint("SR_STORAGE_ROOT", g_root);
@@ -1345,6 +1379,7 @@ void suite_platform(void) {
   SR_RUN(test_atmosphere_shots);
   SR_RUN(test_atmosphere_metrics);
   SR_RUN(test_atmosphere_gloom);
+  SR_RUN(test_atmosphere_weather);
   SR_RUN(test_letterbox_window);
   SR_RUN(test_focus_and_autosave);
   SR_RUN(test_settings_persist);

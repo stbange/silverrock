@@ -30,11 +30,11 @@ alone refers to a scenario in this change's deltas, and "D1"…"D18" refer to de
 
 ## 3. Wet streets (about 1 week)
 
-- [ ] 3.1 Neon reflections on wet ground in the glow pass, with ripple, fade and the brightest-N limit (spec: "Wet streets reflect neon")
-- [ ] 3.2 Puddle decals, twice as reflective, rippling in rain
-- [ ] 3.3 Denser rain tinted by nearby lights; splashes; drips from awnings; rain visible in lamp cones (spec: "No rain under cover", "Rain splashes")
-- [ ] 3.4 Height fog; smog tint; acid-rain tint; ground mist in the Undercity and Docks (spec: "Each weather looks different", "Mist hugs the ground")
-- [ ] 3.5 Steam from manholes, vents and stalls, doubled in rain; smoke and flares from Industrial stacks (spec: "Steam rises from the street")
+- [x] 3.1 Neon reflections on wet ground in the glow pass, with ripple, fade and the brightest-N limit (spec: "Wet streets reflect neon")
+- [x] 3.2 Puddle decals, twice as reflective, rippling in rain
+- [x] 3.3 Denser rain tinted by nearby lights; splashes; drips from awnings; rain visible in lamp cones (spec: "No rain under cover", "Rain splashes")
+- [x] 3.4 Height fog; smog tint; acid-rain tint; ground mist in the Undercity and Docks (spec: "Each weather looks different", "Mist hugs the ground")
+- [x] 3.5 Steam from manholes, vents and stalls, doubled in rain; smoke and flares from Industrial stacks (spec: "Steam rises from the street")
 
 ## 4. Facades (about 1 week)
 

@@ -300,6 +300,105 @@ static void test_deck_and_sky(void) {
   free(s);
 }
 
+static void test_wet_streets(void) {
+  SR_SPEC("retro-rendering", "Wet streets reflect neon");
+  SR_SPEC("retro-rendering", "Rain splashes");
+  SR_SPEC("world-environment", "Mist hugs the ground");
+  SR_SPEC("world-environment", "Steam rises from the street");
+  SrGame *g = g_game;
+  const SrCity *c = g->city;
+  SrMesh m;
+  sr_mesh_init(&m);
+  /* a sign 20 m away: reflected on the wet ground below it, not on a dry street */
+  SrLight sign = {sr_v3(20, 4.5f, 0), 14, 1.0f, 0.2f, 0.8f};
+  SrVec3 eye = sr_v3(0, 1.7f, 0);
+  SR_CHECK_EQ(sr_build_reflections(&sign, 1, eye, 0.0f, 64, &m), 0);
+  SR_CHECK_EQ(m.nv, 0);
+  SR_CHECK_EQ(sr_build_reflections(&sign, 1, eye, 0.8f, 64, &m), 1);
+  SR_CHECK_EQ(m.nv, 4);
+  for (int i = 0; i < 4; i++) SR_CHECK(m.v[i].y < 0.1f && m.v[i].ground == 1);
+  SR_CHECK(fabsf(m.v[0].x - 20.0f) < 2.0f && m.v[2].x < 20.0f); /* from the foot of the sign toward the eye */
+  SR_CHECK(m.v[0].r > m.v[0].g);                                /* in the sign's colour */
+  SrLight far = {sr_v3(60, 4.5f, 0), 14, 1, 1, 1};
+  sr_mesh_clear(&m);
+  SR_CHECK_EQ(sr_build_reflections(&far, 1, eye, 0.8f, 64, &m), 0); /* beyond 40 m */
+  SrLight many[30];
+  for (int i = 0; i < 30; i++) many[i] = (SrLight){sr_v3((float)i, 6, 5), 20, 1, 1, 1};
+  sr_mesh_clear(&m);
+  SR_CHECK_EQ(sr_build_reflections(many, 30, eye, 0.8f, 16, &m), 16); /* the low-detail limit */
+  /* splashes on uncovered ground near the camera when it rains */
+  sr_game_leave(g);
+  SrVec3 street = g->player.pos;
+  sr_mesh_clear(&m);
+  sr_build_splashes(c, street, 0.2f, 100, &m);
+  SR_CHECK_EQ(m.nv, 0);
+  sr_build_splashes(c, street, 1.0f, 100, &m);
+  SR_CHECK(m.nv > 40);
+  for (int v = 0; v < m.nv; v += 4) {
+    float dx = m.v[v].x - street.x, dz = m.v[v].z - street.z;
+    SR_CHECK(dx * dx + dz * dz < 21.0f * 21.0f && m.v[v].y < 0.1f);
+    SR_CHECK(!sr_point_covered(c, sr_v3((m.v[v].x + m.v[v + 1].x) * 0.5f, 0.1f, (m.v[v].z + m.v[v + 1].z) * 0.5f)));
+  }
+  /* mist: denser fog below 3 m than above */
+  SR_CHECK(sr_fog_with_mist(0.3f, 0.3f, 0.5f, 40.0f) > sr_fog_with_mist(0.3f, 0.3f, 5.0f, 40.0f));
+  SR_CHECK_NEAR(sr_fog_with_mist(0.3f, 0.3f, 5.0f, 40.0f), 0.3f, 1e-6);
+  SR_CHECK_NEAR(sr_fog_with_mist(0.9f, 0.5f, 0.0f, 40.0f), 1.0f, 1e-6);
+  int under = -1, docks = -1;
+  for (int b = 0; b < c->grid * c->grid && (under < 0 || docks < 0); b++) {
+    SrDistrictType t = c->districts[c->blocks[b].district].type;
+    if (c->blocks[b].water) continue;
+    if (t == SR_D_UNDERCITY && under < 0) under = b;
+    if (t == SR_D_DOCKS && docks < 0) docks = b;
+  }
+  SrSceneCache *s = (SrSceneCache *)calloc(1, sizeof *s);
+  sr_scene_init(s, false);
+  SrFrame *f = (SrFrame *)malloc(sizeof *f);
+  int low = under >= 0 ? under : docks;
+  if (low >= 0) {
+    int32_t ox, oy;
+    sr_city_block_origin(low, c->grid, &ox, &oy);
+    g->player.pos = sr_v3((float)ox / 100.0f + 8.0f, 1.7f, (float)oy / 100.0f + 30.0f);
+    g->force_weather = SR_WX_FOG;
+    sr_scene_build(s, g, 1.0f, f);
+    float misty = f->mist;
+    g->player.pos = street;
+    g->force_weather = SR_WX_CLEAR;
+    sr_scene_build(s, g, 1.0f, f);
+    SR_CHECK(misty > f->mist + 0.3f);
+  }
+  /* steam: twice as many puffs while it rains */
+  SrStreetProp vent = {SR_SP_VENT, 0, SR_SPF_STEAM, SR_BAND_ALLEY, 3, 3, 0};
+  SrStreetProp bin = {SR_SP_BIN, 0, 0, SR_BAND_KERB, 3, 4, 0};
+  SrStreetProp pr[2] = {vent, bin};
+  sr_mesh_clear(&m);
+  sr_build_steam(pr, 2, eye, 0.0f, 10.0f, 60.0f, &m);
+  int dry = m.nv;
+  sr_mesh_clear(&m);
+  sr_build_steam(pr, 2, eye, 0.8f, 10.0f, 60.0f, &m);
+  SR_CHECK(dry > 0 && m.nv == dry * 2);
+  for (int v = 0; v < m.nv; v += 4) /* puffs rise above the vent */
+    SR_CHECK((m.v[v].y + m.v[v + 1].y + m.v[v + 2].y + m.v[v + 3].y) * 0.25f > 0.3f);
+  sr_mesh_clear(&m);
+  sr_build_steam(pr, 2, sr_v3(200, 1.7f, 200), 0.8f, 10.0f, 60.0f, &m);
+  SR_CHECK_EQ(m.nv, 0); /* beyond the sprite distance */
+  /* the street has steaming manholes and puddles somewhere */
+  int steaming = 0, puddles = 0;
+  SrStreetProp props[SR_MAX_BLOCK_PROPS];
+  for (int b = 0; b < c->grid * c->grid; b++) {
+    int n = sr_dressing_block(c, b, props, SR_MAX_BLOCK_PROPS);
+    for (int i = 0; i < n; i++) {
+      steaming += (props[i].flags & SR_SPF_STEAM) != 0;
+      puddles += props[i].kind == SR_SP_PUDDLE;
+    }
+  }
+  SR_CHECK(steaming > 20 && puddles > 50);
+  g->force_weather = -1;
+  free(f);
+  sr_scene_free(s);
+  free(s);
+  sr_mesh_free(&m);
+}
+
 void suite_atmos(void) {
   g_game = sr_game_create();
   sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Atmos");
@@ -310,5 +409,6 @@ void suite_atmos(void) {
   SR_RUN(test_same_time_same_frame);
   SR_RUN(test_halos);
   SR_RUN(test_deck_and_sky);
+  SR_RUN(test_wet_streets);
   sr_game_destroy(g_game);
 }

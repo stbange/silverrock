@@ -6,6 +6,7 @@
 
 #include "core/sr_math.h"
 #include "game/sr_game.h"
+#include "world/sr_dressing.h"
 
 #define SR_TEX_SIZE            128
 #define SR_TEX_LAYERS          64
@@ -219,6 +220,9 @@ int sr_site_collect_lights(const SrSite *s, SrLight *out, int max);
 /* Thermal vision: recolours vertices from `from` as glowing heat signatures. */
 void sr_mesh_thermal(SrMesh *m, int from_vertex);
 void sr_build_rain(SrVec3 cam, float intensity, uint64_t frame, const SrCity *c, SrMesh *out);
+/* Rain tinted by the lights around it, in the weather's colour (acid rain is green). */
+void sr_build_rain_lit(SrVec3 cam, float intensity, uint64_t frame, const SrCity *c, const SrLight *l, int nl,
+                       SrColor base, SrMesh *out);
 bool sr_point_covered(const SrCity *c, SrVec3 p);
 void sr_build_skyline(const SrCity *c, SrMesh *out);
 void sr_build_landmarks(const SrCity *c, float time_s, SrMesh *out);
@@ -237,6 +241,8 @@ void sr_mesh_sprite(SrMesh *m, const SrBillboard *bb, SrVec3 pos, float w, float
                     float yaw, SrColor col, int emissive);
 /* Animation frame for game time t (deterministic). */
 int sr_anim_frame(double t, float fps, int frames, uint32_t seed);
+/* Fog factor with ground mist added below 3 m (mirrors the shader). */
+float sr_fog_with_mist(float fog, float mist, float y, float view_z);
 /* Building use for window lighting (vertex pad byte: use << 6 | seed). */
 enum { SR_USE_OFFICE = 0, SR_USE_HOME, SR_USE_INDUSTRIAL, SR_USE_VACANT };
 /* Share of lit windows for a building use at an hour (0..24). Mirrored by the shader via u_share. */
@@ -279,6 +285,7 @@ typedef struct SrFrame {
   float band[3];      /* dawn or dusk glow on the fog toward band_dir_x (+1 east, -1 west) */
   float band_dir_x;
   int halo_count;      /* neon halos drawn beyond the fog end this frame */
+  float mist;          /* extra fog below 3 m (Undercity, Docks, foggy weather) */
   bool debug_emissive; /* tests: draw emissive surfaces white, everything else black */
   int nlights;
   SrLight lights[SR_MAX_FRAME_LIGHTS];
@@ -338,7 +345,31 @@ typedef struct SrSceneCache {
   SrColor deck_light[SR_MAX_BLOCKS]; /* neon glow each block throws up at the clouds */
   SrVec3 sil_at;                     /* where the silhouettes were built */
   float sil_fog_end;
+  /* wet streets (sr_wet_mesh.c) and the props of the blocks around the camera */
+  SrMesh wet;
+  struct {
+    int block;
+    int n;
+    uint64_t used;
+    SrStreetProp props[SR_MAX_BLOCK_PROPS];
+  } prop_cache[16];
+  uint64_t prop_tick;
+  float mist;      /* ground mist this frame */
+  int reflections; /* reflections drawn this frame */
 } SrSceneCache;
+
+/* Props of a block, cached (for sprites and lights around the camera). */
+const SrStreetProp *sr_scene_props(SrSceneCache *s, const SrCity *c, int block, int *n);
+
+/* Wet streets (sr_wet_mesh.c). */
+int sr_build_reflections(const SrLight *l, int n, SrVec3 eye, float wetness, int max, SrMesh *out);
+void sr_build_splashes(const SrCity *c, SrVec3 eye, float rain, uint64_t steps, SrMesh *out);
+void sr_build_drips(const SrCity *c, SrVec3 eye, float rain, float time_s, SrMesh *out);
+void sr_build_lamp_cones(const SrLight *l, int n, SrVec3 eye, float wet_air, SrMesh *out);
+void sr_build_steam(const SrStreetProp *p, int n, SrVec3 eye, float rain, float time_s, float dist, SrMesh *out);
+void sr_build_ripples(const SrStreetProp *p, int n, SrVec3 eye, float rain, float time_s, SrMesh *out);
+/* Rain drop colour lit by the lights around it. */
+SrColor sr_rain_tint(const SrLight *l, int n, SrVec3 p, SrColor base);
 
 /* The gloom (sr_sky_mesh.c): sky dome, the Pall's cloud deck, halos through fog, silhouettes. */
 void sr_sky_prepare(SrSceneCache *s, const SrCity *c);

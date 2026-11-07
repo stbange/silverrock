@@ -21,6 +21,7 @@ static SrColor rgbf(float r, float g, float b) { return (SrColor){u8(r), u8(g), 
 void sr_sky_prepare(SrSceneCache *s, const SrCity *c) {
   if (s->sky_seed == c->seed + 1 && s->beacons) return;
   s->sky_seed = c->seed + 1;
+  for (int i = 0; i < 16; i++) s->prop_cache[i].used = 0; /* another city: forget its props */
   free(s->beacons);
   int cap = c->building_count * 2 + c->factions.corp_count + 8;
   s->beacons = (SrBeacon *)calloc((size_t)cap, sizeof *s->beacons);

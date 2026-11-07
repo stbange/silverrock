@@ -56,6 +56,14 @@ float sr_glow_fade(float z, float fog_start, float fog_end) {
   return 1.0f - f;
 }
 
+float sr_fog_with_mist(float f, float mist, float y, float z) {
+  float low = (3.0f - y) / 3.0f, near = z / 25.0f;
+  low = low < 0 ? 0 : low > 1 ? 1 : low;
+  near = near < 0 ? 0 : near > 1 ? 1 : near;
+  f += mist * low * near;
+  return f < 0 ? 0 : f > 1 ? 1 : f;
+}
+
 /* Smooth bump between two hours (wrapping at midnight). */
 static float hour_curve(float h, float rise, float peak_from, float peak_to, float fall) {
   if (h < rise) h += 24.0f;

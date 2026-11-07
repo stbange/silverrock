@@ -187,6 +187,7 @@ static const char *k_world_fs =
     "uniform vec3 u_band;\n" /* dawn or dusk glow on the fog toward u_band_dir (+1 east, -1 west) */
     "uniform float u_band_dir;\n"
     "uniform vec3 u_eye;\n"
+    "uniform float u_mist;\n" /* extra fog below 3 m */
     "in vec4 v_color;\n"
     "in vec3 v_uvw;\n"
     "flat in float v_layer;\n"
@@ -207,6 +208,7 @@ static const char *k_world_fs =
     "void main() {\n"
     "  float f = clamp((v_fogz - u_fogr.x) / (u_fogr.y - u_fogr.x), 0.0, 1.0);\n"
     "  vec3 fogc = fog_color();\n"
+    "  f = clamp(f + u_mist * clamp((3.0 - v_wpos.y) / 3.0, 0.0, 1.0) * clamp(v_fogz / 25.0, 0.0, 1.0), 0.0, 1.0);\n"
     "  if (v_wire > 1.5) {\n" /* Matrix wireframe: quad edges glow, faces stay dim */
     "    vec2 q = v_uvw.xy / v_uvw.z;\n"
     "    float e = min(min(q.x, 1.0 - q.x), min(q.y, 1.0 - q.y));\n"
@@ -220,6 +222,7 @@ static const char *k_world_fs =
     "  vec4 t = texture(u_tex, vec3(uv, v_layer));\n"
     "  if (u_glow == 1) {\n" /* soft sprites: alpha is the strength, light only adds */
     "    vec3 g = t.rgb * v_color.rgb * (t.a * v_color.a * (1.0 - f));\n"
+    "    if (v_wire > 0.5) g *= 0.7 + 0.3 * sin(v_wpos.z * 3.1 + v_wpos.x * 1.7 + u_time * 4.0);\n" /* ripples */
     "    o_color = vec4(u_debug == 1 ? vec3(step(0.02, t.a * (1.0 - f))) : g, 1.0);\n"
     "    return;\n"
     "  }\n"
@@ -513,6 +516,7 @@ bool sr_glb_init(SrGlBackend *b, bool gles) {
   b->u_band = pGetUniformLocation(p, "u_band");
   b->u_band_dir = pGetUniformLocation(p, "u_band_dir");
   b->u_eye = pGetUniformLocation(p, "u_eye");
+  b->u_mist = pGetUniformLocation(p, "u_mist");
   p = b->prog_post;
   b->p_tex = pGetUniformLocation(p, "u_tex");
   b->p_dither = pGetUniformLocation(p, "u_dither");
@@ -698,6 +702,7 @@ static void scene_pass(SrGlBackend *b, const SrFrame *f, unsigned fbo, int iw, i
   pUniform3f(b->u_band, f->band[0], f->band[1], f->band[2]);
   pUniform1f(b->u_band_dir, f->band_dir_x);
   pUniform3f(b->u_eye, f->eye.x, f->eye.y, f->eye.z);
+  pUniform1f(b->u_mist, f->mist);
   /* the sky dome first, fully fogged and behind everything */
   pDepthMask(GL_FALSE);
   pUniform2f(b->u_fogr, -2.0f, -1.0f);
@@ -856,6 +861,7 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
     pUniform1i(b->u_glow, 0);
     pUniform1i(b->u_debug, 0);
     pUniform3f(b->u_band, 0, 0, 0);
+    pUniform1f(b->u_mist, 0);
     draw_mesh(b, &ui->mesh);
   }
   pBindVertexArray(0);

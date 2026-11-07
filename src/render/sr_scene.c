@@ -248,6 +248,44 @@ static void tag_vertices(SrMesh *m, int from, uint8_t pad) {
   for (int i = from; i < m->nv; i++) m->v[i].pad = pad;
 }
 
+/* A flat decal from the decal atlas, turned by yaw. */
+static void decal(SrMesh *m, float x, float y, float z, float w, float d, float yaw, int id, SrColor col, int em,
+                  int ground) {
+  SrAtlasCell a = sr_atlas_cell(SR_LAYER_DECALS, id);
+  float cy = cosf(yaw), sy = sinf(yaw), hw = w * 0.5f, hd = d * 0.5f;
+  float ax = cy * hw, az = -sy * hw, bx = sy * hd, bz = cy * hd;
+  sr_mesh_quad(m, sr_v3(x - ax + bx, y, z - az + bz), sr_v3(x + ax + bx, y, z + az + bz),
+               sr_v3(x + ax - bx, y, z + az - bz), sr_v3(x - ax - bx, y, z - az - bz), a.u0, a.v1, a.u1, a.v0, col,
+               a.layer, em, ground);
+}
+
+/* Road decals of a block: manholes, drains and puddles (wet, so lights shine in them). */
+static void road_decals(const SrCity *c, int blk, SrMesh *m) {
+  SrStreetProp props[SR_MAX_BLOCK_PROPS];
+  int n = sr_dressing_block(c, blk, props, SR_MAX_BLOCK_PROPS);
+  int32_t ox, oy;
+  sr_city_block_origin(blk, c->grid, &ox, &oy);
+  float st = (float)SR_STREET_CM / 100.0f;
+  for (int i = 0; i < n; i++) {
+    const SrStreetProp *p = &props[i];
+    bool lot = p->x - (float)ox / 100.0f >= st && p->z - (float)oy / 100.0f >= st;
+    float y = lot ? 0.135f : 0.015f;
+    switch (p->kind) {
+      case SR_SP_MANHOLE:
+        decal(m, p->x, y, p->z, 0.9f, 0.9f, p->yaw, SR_DECAL_MANHOLE, (SrColor){150, 150, 160, 255}, 0, 1);
+        break;
+      case SR_SP_DRAIN:
+        decal(m, p->x, y, p->z, 0.9f, 0.4f, p->yaw, SR_DECAL_DRAIN, (SrColor){150, 150, 160, 255}, 0, 1);
+        break;
+      case SR_SP_PUDDLE:
+        decal(m, p->x, y + 0.005f, p->z, 2.4f + (float)p->variant * 0.4f, 1.6f, p->yaw,
+              SR_DECAL_PUDDLE + (p->variant & 1), (SrColor){120, 130, 150, 255}, 0, 1);
+        break;
+      default: break;
+    }
+  }
+}
+
 static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) {
   const SrBlock *b = &c->blocks[blk];
   int32_t ox, oy;
@@ -271,6 +309,7 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
                0, (s - st) / st, 1, white, SR_LAYER_ASPHALT, 0, 1);
   sr_mesh_quad(m, sr_v3(x0 + st, 0.12f, z0 + s), sr_v3(x0 + s, 0.12f, z0 + s), sr_v3(x0 + s, 0.12f, z0 + st),
                sr_v3(x0 + st, 0.12f, z0 + st), 0, 0, (s - st) / 4, (s - st) / 4, pal->ground, SR_LAYER_SIDEWALK, 0, 1);
+  road_decals(c, blk, m);
   { /* street lamp at the intersection */
     SrColor lamp = pal->neon[blk % 3];
     sr_mesh_box(m, sr_v3(x0 + st - 1.2f, 0, z0 + st - 1.2f), sr_v3(x0 + st - 1.0f, 6.5f, z0 + st - 1.0f),
@@ -633,19 +672,46 @@ bool sr_point_covered(const SrCity *c, SrVec3 p) {
 }
 
 void sr_build_rain(SrVec3 cam, float intensity, uint64_t frame, const SrCity *c, SrMesh *out) {
+  sr_build_rain_lit(cam, intensity, frame, c, NULL, 0, (SrColor){120, 135, 165, 160}, out);
+}
+
+void sr_build_rain_lit(SrVec3 cam, float intensity, uint64_t frame, const SrCity *c, const SrLight *l, int nl,
+                       SrColor base, SrMesh *out) {
   sr_mesh_clear(out);
-  int drops = (int)(600.0f * intensity);
+  int drops = (int)(1500.0f * sqrtf(intensity)); /* even a drizzle shows */
+  float len = 0.5f + 0.7f * intensity;           /* longer streaks in heavy rain */
   SrRng r = sr_rng_stream(frame, "rain", 0, 0);
-  SrColor col = {170, 190, 230, 160};
+  int near = SR_MIN(nl, 8); /* the lights nearest the camera tint the drops */
   for (int i = 0; i < drops; i++) {
     float x = cam.x + (sr_rng_float(&r) - 0.5f) * 40.0f;
     float z = cam.z + (sr_rng_float(&r) - 0.5f) * 40.0f;
     float y = cam.y + (sr_rng_float(&r) - 0.3f) * 14.0f;
     SrVec3 p = sr_v3(x, y, z);
     if (sr_point_covered(c, p)) continue;
-    sr_mesh_quad(out, sr_v3(x, y, z), sr_v3(x + 0.02f, y, z), sr_v3(x + 0.05f, y + 0.6f, z),
-                 sr_v3(x + 0.03f, y + 0.6f, z), 0, 0, 1, 1, col, SR_LAYER_WHITE, 90, 0);
+    float dx = x - cam.x, dz = z - cam.z, d = sqrtf(dx * dx + dz * dz);
+    float rx = d > 0.01f ? dz / d * 0.015f : 0.015f, rz = d > 0.01f ? -dx / d * 0.015f : 0.0f; /* faces the eye */
+    SrColor col = near ? sr_rain_tint(l, near, p, base) : base;
+    sr_mesh_quad(out, sr_v3(x - rx, y, z - rz), sr_v3(x + rx, y, z + rz), sr_v3(x + rx + 0.03f, y + len, z + rz),
+                 sr_v3(x - rx + 0.03f, y + len, z - rz), 0, 0, 1, 1, col, SR_LAYER_WHITE, 90, 0);
   }
+}
+
+const SrStreetProp *sr_scene_props(SrSceneCache *s, const SrCity *c, int block, int *n) {
+  s->prop_tick++;
+  int oldest = 0;
+  for (int i = 0; i < 16; i++) {
+    if (s->prop_cache[i].used && s->prop_cache[i].block == block) {
+      s->prop_cache[i].used = s->prop_tick;
+      *n = s->prop_cache[i].n;
+      return s->prop_cache[i].props;
+    }
+    if (s->prop_cache[i].used < s->prop_cache[oldest].used) oldest = i;
+  }
+  s->prop_cache[oldest].block = block;
+  s->prop_cache[oldest].used = s->prop_tick;
+  s->prop_cache[oldest].n = sr_dressing_block(c, block, s->prop_cache[oldest].props, SR_MAX_BLOCK_PROPS);
+  *n = s->prop_cache[oldest].n;
+  return s->prop_cache[oldest].props;
 }
 
 void sr_build_skyline(const SrCity *c, SrMesh *out) {
@@ -706,7 +772,7 @@ void sr_scene_free(SrSceneCache *s) {
   sr_mesh_free(&s->air);
   sr_mesh_free(&s->grid);
   sr_mesh_free(&s->host);
-  SrMesh *gloom[] = {&s->sky, &s->deck, &s->deck_glow, &s->halos, &s->near_glow, &s->silhouettes, &s->sun};
+  SrMesh *gloom[] = {&s->sky, &s->deck, &s->deck_glow, &s->halos, &s->near_glow, &s->silhouettes, &s->sun, &s->wet};
   for (size_t i = 0; i < sizeof gloom / sizeof gloom[0]; i++) sr_mesh_free(gloom[i]);
   free(s->beacons);
   s->beacons = NULL;
@@ -811,6 +877,21 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
     f->band[k] = sky.band[k];
   }
   f->band_dir_x = sky.band_dir_x;
+  /* each weather has its own look: brown smog, sickly green acid rain, pale fog, dark downpours */
+  static const float wx_tint[SR_WX_COUNT][4] = {{0.12f, 0.10f, 0.13f, 0.45f}, /* dry, dusky overcast */
+                                                {0.06f, 0.09f, 0.17f, 0.55f}, {0.03f, 0.04f, 0.07f, 0.45f},
+                                                {0.17f, 0.18f, 0.20f, 0.45f}, {0.30f, 0.23f, 0.10f, 0.6f},
+                                                {0.10f, 0.25f, 0.09f, 0.6f}};
+  if (!sky.daylight) {
+    const float *wt = wx_tint[w.to];
+    for (int k = 0; k < 3; k++) f->fog[k] += (wt[k] - f->fog[k]) * wt[3] * w.blend;
+    for (int k = 0; k < 3; k++) f->sky[k] = f->fog[k];
+  }
+  /* ground mist: low-lying districts and foggy weather */
+  SrDistrictType dtype = district >= 0 ? c->districts[district].type : SR_D_RESIDENTIAL;
+  f->mist = 0.06f + (dtype == SR_D_UNDERCITY || dtype == SR_D_DOCKS ? 0.3f : 0.0f) +
+            (w.to == SR_WX_FOG ? 0.3f : 0.0f) * w.blend;
+  if (sky.daylight) f->mist = 0.0f;
   /* 35 % less ambient than M1: walls stay darker than the neon on them */
   f->ambient[0] = pal->ambient.r / 255.0f * sky.ambient * 0.65f;
   f->ambient[1] = pal->ambient.g / 255.0f * sky.ambient * 0.65f;
@@ -896,8 +977,9 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
     sr_build_vehicles(&g->crowd, p->pos, f->fog_end, &s->characters); /* vehicles join the near mesh */
   }
   add_draw(f, &s->characters, g->thermal ? SR_PASS_XRAY : SR_PASS_WORLD, p->pos);
-  if (w.rain > 0.05f) {
-    sr_build_rain(p->pos, w.rain, g->steps, c, &s->rain); /* game time: same time, same drops */
+  if (w.rain > 0.05f) { /* game time: same time, same drops */
+    SrColor rc = w.to == SR_WX_ACID ? (SrColor){120, 200, 100, 170} : (SrColor){140, 155, 185, 170};
+    sr_build_rain_lit(p->pos, w.rain, g->steps, c, f->lights, f->nlights, rc, &s->rain);
     add_draw(f, &s->rain, SR_PASS_WORLD, p->pos);
   }
   sr_build_aerodynes(&g->air, (double)g->steps / 60.0, p->pos, 600.0f, &s->air);
@@ -944,6 +1026,34 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
     s->sil_fog_end = f->fog_end;
   }
   add_draw(f, &s->silhouettes, SR_PASS_NOFOG, p->pos);
+  if (!g->pall_removed && (w.to == SR_WX_SMOG || w.to == SR_WX_ACID)) { /* an orange or sickly Pall */
+    float tr = w.to == SR_WX_SMOG ? 1.25f : 0.8f, tg = w.to == SR_WX_SMOG ? 1.0f : 1.2f, tb = 0.7f;
+    for (int v = 0; v < s->deck.nv; v++) {
+      s->deck.v[v].r = (uint8_t)SR_MIN(255.0f, (float)s->deck.v[v].r * tr);
+      s->deck.v[v].g = (uint8_t)SR_MIN(255.0f, (float)s->deck.v[v].g * tg);
+      s->deck.v[v].b = (uint8_t)((float)s->deck.v[v].b * tb);
+    }
+  }
+  /* wet streets: reflections, splashes, drips, lamp cones, steam and ripples */
+  sr_mesh_clear(&s->wet);
+  s->reflections = sr_build_reflections(f->lights, f->nlights, p->pos, w.wetness, 64, &s->wet);
+  sr_build_splashes(c, p->pos, w.rain, g->steps, &s->wet);
+  sr_build_drips(c, p->pos, w.rain, f->time_s, &s->wet);
+  sr_build_lamp_cones(f->lights, f->nlights, p->pos, wet_air, &s->wet);
+  int cblk = sr_city_block_at(c, (int32_t)(p->pos.x * 100.0f), (int32_t)(p->pos.z * 100.0f));
+  if (cblk >= 0) {
+    float steam_rain = w.rain + (w.to == SR_WX_ACID ? 0.5f : 0.0f);
+    for (int dy = -1; dy <= 1; dy++)
+      for (int dx = -1; dx <= 1; dx++) {
+        int bx = cblk % c->grid + dx, by = cblk / c->grid + dy;
+        if (bx < 0 || by < 0 || bx >= c->grid || by >= c->grid) continue;
+        int n = 0;
+        const SrStreetProp *pr = sr_scene_props(s, c, by * c->grid + bx, &n);
+        sr_build_steam(pr, n, p->pos, steam_rain, f->time_s, 60.0f, &s->wet);
+        sr_build_ripples(pr, n, p->pos, w.rain, f->time_s, &s->wet);
+      }
+  }
+  add_draw(f, &s->wet, SR_PASS_GLOW, p->pos);
 }
 
 void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) { scene_build(s, g, aspect, f, true); }
