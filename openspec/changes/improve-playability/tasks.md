@@ -22,22 +22,22 @@ a scenario in this change's deltas, and "D1"…"D12" refer to design decisions.
 
 ## 3. Balance (about 1 week)
 
-- [ ] 3.1 Street Cred from notable deeds, weekly cap of 4, idle decay above Runner, story gates at 69 and 89 (spec: "Weekly cap", "Idle decay", "Story gates")
-- [ ] 3.2 Living costs: upkeep 2 %, fixer cut 10 %, medical bills 15 cred per HP with medical debt, rent +10 % per tier above Runner, Heat clean-up at fixers (spec: "Upkeep with rent", "Medical bill", "Notoriety raises the rent")
-- [ ] 3.3 New T3/T4 pay ranges; black ops at most weekly, half paid in rewards (Board reveal, Heat wipe, cyberware voucher) (spec: "Black ops are rare")
-- [ ] 3.4 Approach rewards: clean bonus +20 % and −1 Heat, +2 trust on patron jobs, paydata ×1.5 at fences, Matrix steps count for netrunners (spec: "Clean bonus")
-- [ ] 3.5 Long-run capital +8 per takeover; dominance threshold `clamp(2.2 / corps, 0.25, 0.40)` (spec: "Takeovers accumulate", "Threshold scales with the board")
-- [ ] 3.6 Retune with the playtest harness until the bands hold; update `tests/balance/bands.txt` (spec: "Money keeps mattering", "Paced rise", "Approaches stay balanced")
+- [x] 3.1 Street Cred from notable deeds, weekly cap of 4, idle decay above Runner, story gates at 69 and 89 (spec: "Weekly cap", "Idle decay", "Story gates")
+- [x] 3.2 Living costs: upkeep 2 %, fixer cut 10 %, medical bills 15 cred per HP with medical debt, rent +10 % per tier above Runner, Heat clean-up at fixers (spec: "Upkeep with rent", "Medical bill", "Notoriety raises the rent")
+- [x] 3.3 New T3/T4 pay ranges; black ops at most weekly, half paid in rewards (Board reveal, Heat wipe, cyberware voucher) (spec: "Black ops are rare")
+- [x] 3.4 Approach rewards: clean bonus +20 % and −1 Heat, +2 trust on patron jobs, paydata ×1.5 at fences, Matrix steps count for netrunners (spec: "Clean bonus")
+- [x] 3.5 Long-run capital +8 per takeover; dominance threshold `clamp(2.2 / corps, 0.25, 0.40)` (spec: "Takeovers accumulate", "Threshold scales with the board")
+- [x] 3.6 Retune with the playtest harness until the bands hold; update `tests/balance/bands.txt` (spec: "Money keeps mattering", "Paced rise", "Approaches stay balanced")
 
 ## 4. Story pacing and presence (about 1.5 weeks)
 
-- [ ] 4.1 Act minimums (retainer from day 3, Act I ≥ 3 weeks, Act II 6–12 weeks); staged transitions (handler meeting, three news items, a city change per act) (spec: "Act progression", "Staged transition", "Retainer offer")
-- [ ] 4.2 Act III climax: four beats with the last as a set piece that never resolves off-screen; ending choice after the set piece; abandoning picks Kingmaker for the rival (spec: "The set piece waits for the player")
-- [ ] 4.3 Arc limits (1 in Act I, 2 in Act II), beats at least 3 days apart, cast messages from `sr_story_text.c` (3 variants per beat and branch), reports on skipped beats (spec: "Beat announced", "Skipped beat")
-- [ ] 4.4 Story log in `SrStory` (32 entries) shown on the Story tab; trust levels and ending requirements shown (spec: "Beat announced")
-- [ ] 4.5 Nudge for stalled players after 14 days at Pawn (spec: "Stalled at Pawn")
-- [ ] 4.6 Endings: Kingmaker chooses the megacorp; Sunrise hint from the Ghost; a sequence per ending (three messages, news, city change); a new patron cycle two weeks after the ending (spec: "Choosing a king", "Continue after the ending")
-- [ ] 4.7 Notoriety stories on each new tier and after three reports in a week (spec: "A name on the street")
+- [x] 4.1 Act minimums (retainer from day 3, Act I ≥ 3 weeks, Act II 6–12 weeks); staged transitions (handler meeting, three news items, a city change per act) (spec: "Act progression", "Staged transition", "Retainer offer")
+- [x] 4.2 Act III climax: four beats with the last as a set piece that never resolves off-screen; ending choice after the set piece; abandoning picks Kingmaker for the rival (spec: "The set piece waits for the player")
+- [x] 4.3 Arc limits (1 in Act I, 2 in Act II), beats at least 3 days apart, cast messages from `sr_story_text.c` (3 variants per beat and branch), reports on skipped beats (spec: "Beat announced", "Skipped beat")
+- [x] 4.4 Story log in `SrStory` (32 entries) shown on the Story tab; trust levels and ending requirements shown (spec: "Beat announced")
+- [x] 4.5 Nudge for stalled players after 14 days at Pawn (spec: "Stalled at Pawn")
+- [x] 4.6 Endings: Kingmaker chooses the megacorp; Sunrise hint from the Ghost; a sequence per ending (three messages, news, city change); a new patron cycle two weeks after the ending (spec: "Choosing a king", "Continue after the ending")
+- [x] 4.7 Notoriety stories on each new tier and after three reports in a week (spec: "A name on the street")
 
 ## 5. Persistence and verification
 

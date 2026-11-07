@@ -569,6 +569,30 @@ static void terminal_story(SrUi *ui, const SrGame *g, float x, float y, float li
     sr_ui_text(ui, x, y, buf, k_cyan, s);
     y += line;
   }
+  /* what trust unlocks, and what the endings need */
+  if (st->retainer) {
+    snprintf(buf, sizeof buf, "TRUST %d: 40 OPENS ACT II, 60 OPENS BLACK OPS, 0 MEANS THEY HUNT YOU", st->trust);
+    text_fit(ui, x, y, buf, k_cyan, s, (float)ui->w - 2 * x);
+    y += line;
+  }
+  if (st->act >= SR_ACT_KNIGHT && st->ending == SR_END_NONE) {
+    text_fit(ui, x, y,
+             "ENDINGS: LOYAL (STAY), DEFECTOR (SWITCH ONCE), BURN (LEAK OR BE HUNTED), KINGMAKER, SUNRISE (?)", k_cyan,
+             s, (float)ui->w - 2 * x);
+    y += line;
+  }
+  int options = 0, okind = 0;
+  while (sr_game_story_option(g, options, &okind)) options++;
+  y += line * 0.5f;
+  sr_ui_text(ui, x, y, "STORY SO FAR", k_amber, s);
+  y += line;
+  for (int i = 0; i < 6 && y < (float)ui->h - (4 + options) * line; i++) {
+    const SrLogEntry *e = sr_story_log_entry(&g->chess, i);
+    if (!e) break;
+    snprintf(buf, sizeof buf, "D%lld %s", (long long)(e->time / 86400), e->text);
+    text_fit(ui, x, y, buf, k_white, s, (float)ui->w - 2 * x);
+    y += line;
+  }
   y += line * 0.5f;
   int kind = 0;
   for (int i = 0; sr_game_story_option(g, i, &kind) && y < (float)ui->h - 3 * line; i++) {

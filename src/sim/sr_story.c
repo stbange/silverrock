@@ -58,21 +58,52 @@ void sr_story_init(SrStory *s, const SrCity *c, uint64_t seed, int patron_choice
 
 void sr_story_trust(SrStory *s, int delta) { s->trust = SR_CLAMP(s->trust + delta, 0, 100); }
 
+/* ---- the story log and the cast's lines ------------------------------------------------------ */
+
+void sr_story_log(SrChess *ch, int64_t now, const char *text) {
+  SrLogEntry *e = &ch->camp.log[ch->camp.log_count % SR_STORY_LOG];
+  e->time = now;
+  snprintf(e->text, sizeof e->text, "%s", text);
+  ch->camp.log_count++;
+}
+
+const SrLogEntry *sr_story_log_entry(const SrChess *ch, int i) {
+  int n = SR_MIN(ch->camp.log_count, SR_STORY_LOG);
+  if (i < 0 || i >= n) return NULL;
+  return &ch->camp.log[(ch->camp.log_count - 1 - i) % SR_STORY_LOG];
+}
+
+void sr_story_say(SrChess *ch, SrCastRole role, const char *text) {
+  SrCampaign *cp = &ch->camp;
+  if (cp->msg_count >= SR_STORY_QUEUE) { /* the oldest unread line gives way */
+    memmove(&cp->msgs[0], &cp->msgs[1], sizeof(SrStoryMsg) * (SR_STORY_QUEUE - 1));
+    cp->msg_count--;
+  }
+  cp->msgs[cp->msg_count].role = (uint8_t)role;
+  snprintf(cp->msgs[cp->msg_count].text, sizeof cp->msgs[cp->msg_count].text, "%s", text);
+  cp->msg_count++;
+}
+
+void sr_story_crown(SrChess *ch, int corp) { ch->camp.king = (int8_t)corp; }
+
 bool sr_story_t4_allowed(const SrStory *s, int tier) {
   return s->retainer && s->patron >= 0 && tier >= SR_CRED_KNIGHT && s->trust >= SR_TRUST_T4;
 }
 
 void sr_story_test_done(SrStory *s, int64_t now) {
   if (s->retainer || s->offer_open) return;
-  if (s->offer_at == 0 || s->offer_at > now + 86400) s->offer_at = now + 86400;
+  int64_t at = SR_MAX(now + 86400, s->act_started + SR_RETAINER_MIN); /* never before day 3 */
+  if (s->offer_at == 0 || s->offer_at > at) s->offer_at = at;
 }
 
 void sr_story_accept_retainer(SrStory *s, int64_t now) {
   if (s->retainer || s->patron < 0) return;
   s->retainer = true;
   s->offer_open = false;
-  s->act = SR_ACT_PAWN;
-  s->act_started = now;
+  if (s->act != SR_ACT_EPILOGUE) { /* after an ending the city goes on: a new cycle, not a new campaign */
+    s->act = SR_ACT_PAWN;
+    s->act_started = now;
+  }
   s->next_offer = now;
   sr_story_trust(s, 10);
 }
@@ -124,7 +155,7 @@ static int pick_person(const SrPopulation *pop, int f, uint64_t key) {
 static void beat_start(SrChess *ch, SrCity *c, int idx, int64_t now) {
   SrArc *a = &ch->story.arcs[idx];
   int branch = a->beat == 0 ? 0 : (a->path >> (a->beat - 1)) & 1;
-  SrOpType t = (SrOpType)ARC_OPS[a->type][a->beat][branch];
+  SrOpType t = (SrOpType)ARC_OPS[a->type][SR_MIN(a->beat, 2)][branch];
   int client = a->a, target = a->b, building = a->building, district = -1;
   if (t == SR_OP_BRIBE) {
     district = (int)(sr_mix64(ch->seed + (uint64_t)a->started + a->beat) % (uint64_t)SR_MAX(1, ch->pol.seat_count));
@@ -143,6 +174,22 @@ static void beat_start(SrChess *ch, SrCity *c, int idx, int64_t now) {
   SrOperation *op = sr_chess_op(ch, id);
   if (op) op->arc = (int16_t)idx;
   a->op = id;
+  /* the climax's last beat is a set piece: it waits for the player */
+  bool climax = ch->story.act == SR_ACT_PROMOTION && idx == 0 && a->beat == a->beats - 1;
+  if (climax && op) ch->camp.set_piece = op->id;
+  /* a cast member tells the player what is going on */
+  const char *an = a->a >= 0 ? c->factions.f[a->a].name : "someone";
+  const char *bn = a->b >= 0 ? c->factions.f[a->b].name : "someone";
+  const char *place =
+      a->building >= 0 ? c->districts[c->blocks[c->buildings[a->building].block].district].name : "town";
+  char line[112];
+  sr_story_beat_text(line, sizeof line, (SrArcType)a->type, a->beat, branch, an, bn, place,
+                     sr_mix64(sr_hash_combine(ch->seed, (uint64_t)a->started + a->beat)));
+  if (climax) snprintf(line, sizeof line, "This is it: %s against %s, and you are the one going in.", an, bn);
+  sr_story_say(ch, sr_story_teller((SrArcType)a->type), line);
+  char entry[72];
+  snprintf(entry, sizeof entry, "%s, step %d: %s", sr_arc_name((SrArcType)a->type), a->beat + 1, sr_op_name(t));
+  sr_story_log(ch, now, entry);
 }
 
 static int arc_start(SrChess *ch, SrCity *c, const SrPopulation *pop, SrArcType t, int fa, int fb, int64_t now) {
@@ -196,13 +243,21 @@ int sr_story_arc_start(SrChess *ch, SrCity *c, const SrPopulation *pop, SrArcTyp
   return arc_start(ch, c, pop, t, -1, -1, now);
 }
 
-void sr_story_beat_done(SrChess *ch, SrCity *c, int idx, bool success, int64_t now) {
+void sr_story_beat_done(SrChess *ch, SrCity *c, int idx, bool success, bool offscreen, int64_t now) {
   if (idx < 0 || idx >= SR_MAX_ARCS || !ch->story.arcs[idx].active) return;
   SrArc *a = &ch->story.arcs[idx];
   if (success) a->path = (uint8_t)(a->path | (1u << a->beat));
+  if (offscreen) { /* the player let it go: tell them how it went */
+    char line[112];
+    sr_story_skipped_text(line, sizeof line, success, a->a >= 0 ? c->factions.f[a->a].name : "someone",
+                          a->b >= 0 ? c->factions.f[a->b].name : "someone");
+    sr_story_say(ch, sr_story_teller((SrArcType)a->type), line);
+  }
+  if (ch->story.act == SR_ACT_PROMOTION && idx == 0 && a->beat == a->beats - 1) ch->camp.set_piece_done = true;
   a->beat++;
-  if (a->beat < a->beats) {
-    beat_start(ch, c, idx, now);
+  if (a->beat < a->beats) { /* the next beat comes a few days later */
+    ch->camp.beat_at[idx] = now + SR_BEAT_GAP_S;
+    a->op = -1;
     return;
   }
   a->active = false;
@@ -210,8 +265,6 @@ void sr_story_beat_done(SrChess *ch, SrCity *c, int idx, bool success, int64_t n
   char msg[72];
   snprintf(msg, sizeof msg, "Arc ends: %s (%s)", sr_arc_name((SrArcType)a->type), success ? "won" : "lost");
   sr_chess_note(ch, now, msg);
-  /* the Act III climax is the scenario's arc */
-  if (ch->story.act == SR_ACT_PROMOTION && idx == 0) ch->story.finale_ready = true;
 }
 
 /* ---- trust, betrayal, defection ---------------------------------------------------------------- */
@@ -257,6 +310,7 @@ void sr_story_discovered(SrChess *ch, SrCity *c, int64_t now) {
   char msg[72];
   snprintf(msg, sizeof msg, "%s learns the player worked against it", c->factions.f[s->patron].name);
   sr_chess_note(ch, now, msg);
+  sr_story_log(ch, now, msg);
   if (s->trust == 0) turn_hostile(ch, c, now);
 }
 
@@ -388,17 +442,50 @@ void sr_story_end(SrChess *ch, SrCity *c, SrEnding e, int64_t now) {
     case SR_END_BURN:
       for (int f = 0; f < c->factions.corp_count; f++) boost(ch, f, -40, -30);
       break;
-    case SR_END_KINGMAKER:
-      boost(ch, s->scenario_other, 60, 15);
-      boost(ch, s->scenario_corp, -40, -10);
+    case SR_END_KINGMAKER: {
+      int king = ch->camp.king >= 0 ? ch->camp.king : s->scenario_other;
+      boost(ch, king, 60, 15);
+      if (king != s->scenario_corp) boost(ch, s->scenario_corp, -40, -10);
+      ch->camp.king = (int8_t)king;
       break;
+    }
     case SR_END_SUNRISE: boost(ch, s->scenario_corp, -60, -40); break;
     default: break;
+  }
+  /* the sequence: three voices, a news montage, a city that looks different */
+  int winner = e == SR_END_KINGMAKER ? ch->camp.king : e == SR_END_LOYAL || e == SR_END_DEFECTOR ? s->patron : -1;
+  const char *wn = winner >= 0 ? c->factions.f[winner].name : "Nobody";
+  static const SrCastRole voices[3] = {SR_CAST_HANDLER, SR_CAST_JOURNALIST, SR_CAST_GHOST};
+  for (int i = 0; i < 3; i++) {
+    char line[112];
+    sr_story_ending_text(line, sizeof line, e, i, wn);
+    sr_story_say(ch, voices[i], line);
   }
   char head[64];
   snprintf(head, sizeof head, "The board changes: %s", sr_ending_name(e));
   sr_news_publish(ch, c, -1, s->scenario_corp, -1, -1, SR_NEWS_STORY, false, head, now);
+  if (winner >= 0) {
+    sr_headline(head, sizeof head, "%1 now runs the city in all but name", wn, NULL, NULL);
+    sr_news_publish(ch, c, c->factions.media_count > 0 ? c->factions.media_first : -1, winner, -1, -1, SR_NEWS_STORY,
+                    false, head, now);
+    ch->pol.police_contract = (int8_t)winner; /* the winner's colours on the streets */
+  } else {
+    ch->pol.police_contract = -1;
+    ch->pol.curfew = 0; /* the old order is gone: curfews lifted */
+    sr_news_publish(ch, c, -1, -1, -1, -1, SR_NEWS_STORY, false,
+                    e == SR_END_SUNRISE ? "Daylight over the city" : "Corporate files flood the streets", now);
+  }
   sr_chess_note(ch, now, head);
+  sr_story_log(ch, now, sr_ending_name(e));
+  ch->camp.ending_at = now;
+}
+
+void sr_story_set_piece_abandoned(SrChess *ch, SrCity *c, int64_t now) {
+  SrStory *s = &ch->story;
+  if (s->act != SR_ACT_PROMOTION || s->ending != SR_END_NONE) return;
+  ch->camp.king = s->scenario_other;
+  sr_story_log(ch, now, "You walked away from the final job");
+  sr_story_end(ch, c, SR_END_KINGMAKER, now);
 }
 
 static SrArcType finale_arc(SrScenario sc) {
@@ -426,25 +513,111 @@ static void begin_act3(SrChess *ch, SrCity *c, const SrPopulation *pop, int lead
   sr_chess_note(ch, now, msg);
   /* the climax arc takes slot 0: earlier arcs there are wound up off-screen */
   for (int i = 0; i < SR_MAX_ARCS; i++) s->arcs[i].active = false;
-  arc_start(ch, c, pop, finale_arc((SrScenario)s->scenario), s->scenario_corp, s->scenario_other, now);
+  ch->camp.set_piece = 0;
+  ch->camp.set_piece_done = false;
+  for (int i = 0; i < SR_MAX_ARCS; i++) ch->camp.beat_at[i] = 0;
+  int idx = arc_start(ch, c, pop, finale_arc((SrScenario)s->scenario), s->scenario_corp, s->scenario_other, now);
+  if (idx >= 0) s->arcs[idx].beats = 4; /* the climax: four beats, the last one a set piece */
+}
+
+/* Every act change is staged: the handler calls, the news reports the board, the city changes. */
+static void stage_act(SrChess *ch, SrCity *c, int64_t now) {
+  SrStory *s = &ch->story;
+  sr_story_say(ch, SR_CAST_HANDLER, sr_story_act_text((SrAct)s->act));
+  static const char *const names[] = {"Prologue", "Act I: Pawn", "Act II: Knight", "Act III: Promotion", "Epilogue"};
+  sr_story_log(ch, now, names[SR_MIN(s->act, 4)]);
+  int leader = 0;
+  float dom = sr_chess_dominance(ch, c, &leader);
+  char head[64], pct[8];
+  snprintf(pct, sizeof pct, "%d%%", (int)(dom * 100.0f));
+  sr_headline(head, sizeof head, "%1 now holds %2 of the corporate pie", c->factions.f[leader].name, pct, NULL);
+  sr_news_publish(ch, c, -1, leader, -1, -1, SR_NEWS_STORY, false, head, now);
+  if (s->patron >= 0) {
+    sr_headline(head, sizeof head, "%1 hires quietly, analysts puzzled", c->factions.f[s->patron].name, NULL, NULL);
+    sr_news_publish(ch, c, -1, s->patron, -1, -1, SR_NEWS_STORY, false, head, now);
+  }
+  int rival = s->patron >= 0 ? rival_of(c, s->patron, (uint64_t)now) : (leader + 1) % c->factions.corp_count;
+  sr_headline(head, sizeof head, "%1 vows to defend its interests", c->factions.f[rival].name, NULL, NULL);
+  sr_news_publish(ch, c, -1, rival, -1, -1, SR_NEWS_STORY, false, head, now);
+  if (s->act == SR_ACT_KNIGHT) { /* the streets tighten: a curfew where the gangs are */
+    ch->pol.police_budget = 2;
+    for (int d = 0; d < c->district_count && d < 16; d++)
+      if (sr_chess_gang_of(c, d) >= 0) {
+        ch->pol.curfew = (uint16_t)(ch->pol.curfew | (1u << d));
+        break;
+      }
+  }
+  if (s->act == SR_ACT_PROMOTION && s->scenario_corp >= 0) /* the scenario corp's message on every billboard */
+    for (int k = 0; k < 2; k++) {
+      sr_headline(head, sizeof head, k ? "%1: the future is already here" : "%1: trust us with tomorrow",
+                  c->factions.f[s->scenario_corp].name, NULL, NULL);
+      sr_news_publish(ch, c, -1, s->scenario_corp, -1, -1, SR_NEWS_STORY, false, head, now);
+    }
 }
 
 void sr_story_tick(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_t now) {
   SrStory *s = &ch->story;
   look_into_suspects(ch, c, now);
   if (sr_story_succession(s, ch->seed, now) > 0) sr_chess_note(ch, now, "A successor steps into a vacant role");
-  /* the handler calls with the retainer: after the test, or at the end of the first week */
+  SrCampaign *cp = &ch->camp;
+  /* the handler calls with the retainer: after the test (day 3 at the earliest), or after a week */
   if (!s->retainer && s->act == SR_ACT_PROLOGUE && s->patron >= 0) {
     if (s->offer_at == 0 && now >= s->act_started + 7 * 86400) s->offer_at = now;
-    if (s->offer_at > 0 && now >= s->offer_at) s->offer_open = true;
+    if (s->offer_at > 0 && now >= s->offer_at && now >= s->act_started + SR_RETAINER_MIN) s->offer_open = true;
   }
-  if (s->act == SR_ACT_EPILOGUE) return;
+  uint8_t act_before = s->act;
+  /* arc beats waiting for their day */
+  for (int i = 0; i < SR_MAX_ARCS; i++)
+    if (s->arcs[i].active && cp->beat_at[i] > 0 && now >= cp->beat_at[i]) {
+      cp->beat_at[i] = 0;
+      beat_start(ch, c, i, now);
+    }
+  if (s->act == SR_ACT_EPILOGUE) { /* the city goes on: a new cycle two weeks after the ending */
+    if (!cp->new_cycle && cp->ending_at > 0 && now >= cp->ending_at + 2 * SR_WEEK_S) {
+      cp->new_cycle = true;
+      if (s->patron < 0)
+        for (int k = 0; k < c->factions.corp_count && s->patron < 0; k++)
+          if (!sr_story_blacklisted(ch, k) && k != s->hostile) {
+            s->patron = (int8_t)k;
+            s->offer_open = true;
+          }
+      sr_story_say(ch, SR_CAST_FIXER, "The board has new players and new grudges. Work's back, if you want it.");
+      sr_story_log(ch, now, "A new cycle begins");
+    }
+    if (cp->new_cycle && now >= s->next_offer) {
+      int active = 0;
+      for (int i = 0; i < SR_MAX_ARCS; i++) active += s->arcs[i].active;
+      if (active < 1) sr_story_arc_start(ch, c, pop, (SrArcType)(sr_mix64((uint64_t)now) % SR_ARC_COUNT), now);
+      s->next_offer = now + SR_WEEK_S;
+    }
+    return;
+  }
   SrCredTier tier = sr_cred_tier(ch->street_cred);
-  if (s->act == SR_ACT_PAWN && s->retainer && tier >= SR_CRED_RUNNER && s->trust >= SR_TRUST_ACT2) {
+  if (s->act == SR_ACT_PAWN && s->retainer && tier >= SR_CRED_RUNNER && s->trust >= SR_TRUST_ACT2 &&
+      now - s->act_started >= SR_ACT1_MIN_S) {
     s->act = SR_ACT_KNIGHT;
     s->act_started = now;
     s->next_counter = now + SR_WEEK_S;
     sr_chess_note(ch, now, "Act II begins");
+  }
+  /* stuck at Pawn: the handler shows the way */
+  if (s->act == SR_ACT_PAWN && !cp->nudged && tier <= SR_CRED_PAWN && now - s->act_started >= 2 * SR_WEEK_S &&
+      s->patron >= 0 && s->retainer) {
+    cp->nudged = true;
+    sr_story_say(ch, SR_CAST_HANDLER, sr_story_nudge_text());
+    int rival = rival_of(c, s->patron, (uint64_t)now);
+    int b = pick_facility(c, rival, (uint64_t)now, false);
+    int id = sr_chess_start_op(ch, c, SR_OP_THEFT, s->patron, rival, b, -1, now);
+    SrOperation *op = sr_chess_op(ch, id);
+    SrContract *k = op ? sr_chess_contract(ch, op->contract) : NULL;
+    if (k) k->job_type = 4; /* surveillance: a T1 job */
+    sr_story_log(ch, now, "The handler hands you a starter job");
+  }
+  /* deep in the Matrix: the Ghost gets in touch */
+  if (!cp->ghost_hint && s->act >= SR_ACT_KNIGHT && s->matrix_depth >= 10) {
+    cp->ghost_hint = true;
+    sr_story_say(ch, SR_CAST_GHOST, sr_story_ghost_text());
+    sr_story_log(ch, now, "A message from the Ghost");
   }
   /* a hostile former patron hunts the player every week */
   if (s->hostile >= 0 && now >= s->next_hunt) {
@@ -479,15 +652,21 @@ void sr_story_tick(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_t now)
   if (s->act == SR_ACT_KNIGHT) {
     int leader = 0;
     float dom = sr_chess_dominance(ch, c, &leader);
-    if (dom >= sr_chess_dominance_threshold(c) || now - s->act_started >= SR_ACT2_MAX_S)
-      begin_act3(ch, c, pop, leader, now);
+    bool dominant = dom >= sr_chess_dominance_threshold(c) && now - s->act_started >= SR_ACT2_MIN_S;
+    if (dominant || now - s->act_started >= SR_ACT2_MAX_S) begin_act3(ch, c, pop, leader, now);
   }
   if (s->act == SR_ACT_PROMOTION) {
-    if (!s->finale_ready && now >= s->finale_at) s->finale_ready = true;
-    /* nobody chose: the board decides two weeks after the climax */
-    if (s->finale_ready && now >= s->finale_at + SR_FINALE_S) {
+    /* the choice opens after the set piece, and not before two weeks of the climax */
+    if (!s->finale_ready && cp->set_piece_done && now - s->act_started >= SR_ACT3_MIN_S) {
+      s->finale_ready = true;
+      cp->ready_at = now;
+      sr_story_say(ch, SR_CAST_HANDLER, "It's done. Now you decide how this ends. Check your terminal.");
+    }
+    /* nobody chose: the board decides two weeks later */
+    if (s->finale_ready && now >= cp->ready_at + SR_FINALE_S) {
       unsigned m = sr_story_endings(s);
       sr_story_end(ch, c, (m & (1u << SR_END_LOYAL)) ? SR_END_LOYAL : SR_END_KINGMAKER, now);
     }
   }
+  if (s->act != act_before && s->act != SR_ACT_EPILOGUE) stage_act(ch, c, now);
 }

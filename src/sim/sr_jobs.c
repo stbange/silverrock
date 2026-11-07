@@ -225,10 +225,12 @@ static int count_bits(unsigned v) {
 
 SrJob *sr_jobs_push(SrJobBoard *b, const SrJob *j) {
   if (b->count >= SR_MAX_JOBS) {
-    /* drop the oldest job that is no longer active */
+    /* drop the oldest finished job, else the oldest open offer; accepted jobs stay */
     int victim = -1;
     for (int i = 0; i < b->count && victim < 0; i++)
-      if (b->jobs[i].state != SR_JS_ACCEPTED) victim = i;
+      if (b->jobs[i].state != SR_JS_ACCEPTED && b->jobs[i].state != SR_JS_OFFERED) victim = i;
+    for (int i = 0; i < b->count && victim < 0; i++)
+      if (b->jobs[i].state == SR_JS_OFFERED) victim = i;
     if (victim < 0) return NULL;
     memmove(&b->jobs[victim], &b->jobs[victim + 1], sizeof(SrJob) * (size_t)(b->count - victim - 1));
     b->count--;

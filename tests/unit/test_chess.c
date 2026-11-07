@@ -638,9 +638,11 @@ static void test_patron(void) {
   int64_t done = sr_game_time(g);
   int msgs = g->player.msg_count;
   SR_CHECK_EQ(sr_game_accept_retainer(g), SR_ERR_INVALID); /* not yet */
-  sr_skip_to(g, done + 2 * 86400);
-  SR_CHECK(st->offer_open);
-  SR_CHECK(st->offer_at - done <= 2 * 86400);
+  int64_t due =
+      done + 2 * 86400 > st->act_started + SR_RETAINER_MIN ? done + 2 * 86400 : st->act_started + SR_RETAINER_MIN;
+  sr_skip_to(g, due + SR_TICK_S); /* noticed on the next strategic tick */
+  SR_CHECK(st->offer_open);       /* within two days of the test, but never before day 3 */
+  SR_CHECK(st->offer_at <= due && st->offer_at >= st->act_started + SR_RETAINER_MIN);
   SR_CHECK(g->player.msg_count > msgs);
   SR_CHECK_EQ(sr_game_accept_retainer(g), SR_OK);
   SR_CHECK(st->retainer);
@@ -711,9 +713,14 @@ static void test_acts_and_defection(void) {
   sr_skip_to(g, sr_game_time(g) + SR_TICK_S + 60);
   SR_CHECK_EQ(st->act, SR_ACT_PAWN);
   g->player.prog.street_cred = 26; /* Runner */
+  st->trust = 40;
+  sr_skip_to(g, sr_game_time(g) + SR_TICK_S);
+  SR_CHECK_EQ(st->act, SR_ACT_PAWN); /* not before three weeks of Act I */
+  st->act_started -= SR_ACT1_MIN_S;
   st->trust = 39;
   sr_skip_to(g, sr_game_time(g) + SR_TICK_S);
   SR_CHECK_EQ(st->act, SR_ACT_PAWN);
+  g->player.prog.street_cred = 26;
   st->trust = 40;
   sr_skip_to(g, sr_game_time(g) + SR_TICK_S);
   SR_CHECK_EQ(st->act, SR_ACT_KNIGHT);
@@ -765,6 +772,9 @@ static void test_arcs(void) {
     a->building = facility(w.c, a->b);
     sr_chess_resolve(w.ch, w.c, w.pop, &w.log, contract_of(w.ch, a->op), run == 0, true, 200);
     SR_CHECK_EQ(a->beat, 1);
+    SR_CHECK_EQ(a->op, -1); /* the next beat comes a few days later */
+    sr_story_tick(w.ch, w.c, w.pop, 200 + SR_BEAT_GAP_S);
+    SR_CHECK(sr_chess_op(w.ch, a->op) != NULL);
     next[run] = (SrOpType)sr_chess_op(w.ch, a->op)->type;
     world_free(&w);
   }
@@ -776,12 +786,13 @@ static void test_arcs(void) {
   sr_chess_advance(w.ch, w.c, w.pop, &w.log, k->deadline + SR_TICK_S);
   SR_CHECK(w.ch->story.arcs[idx].beat >= 1);
   SR_CHECK(w.ch->story.beats_offscreen >= 1);
+  SR_CHECK(w.ch->camp.msg_count >= 2); /* announced, then "while you were away..." */
   /* all three beats done: the arc ends; the slots fill up to three */
-  for (int b = 0; b < 3 && w.ch->story.arcs[idx].active; b++) sr_story_beat_done(w.ch, w.c, idx, true, 300);
+  for (int b = 0; b < 3 && w.ch->story.arcs[idx].active; b++) sr_story_beat_done(w.ch, w.c, idx, true, false, 300);
   SR_CHECK(!w.ch->story.arcs[idx].active);
   for (int i = 0; i < SR_MAX_ARCS; i++) sr_story_arc_start(w.ch, w.c, w.pop, SR_ARC_MOLE, 400);
   SR_CHECK_EQ(sr_story_arc_start(w.ch, w.c, w.pop, SR_ARC_MOLE, 400), -1);
-  sr_story_beat_done(w.ch, w.c, -1, true, 0);
+  sr_story_beat_done(w.ch, w.c, -1, true, false, 0);
   world_free(&w);
 }
 
@@ -817,7 +828,7 @@ static void test_endgame(void) {
   st->offer_open = true;
   sr_game_accept_retainer(g);
   st->act = SR_ACT_KNIGHT;
-  st->act_started = sr_game_time(g);
+  st->act_started = sr_game_time(g) - SR_ACT2_MIN_S; /* dominance counts after six weeks of Act II */
   int leader = (st->patron + 1) % g->city->factions.corp_count;
   for (int f = 0; f < g->city->factions.corp_count; f++) {
     ch->f[f].res[SR_RES_CAPITAL] = f == leader ? 200 : 25;
@@ -876,9 +887,10 @@ static void test_endgame(void) {
   w.ch->story.retainer = true;
   sr_story_tick(w.ch, w.c, w.pop, SR_ACT2_MAX_S + 1);
   SR_CHECK_EQ(w.ch->story.act, SR_ACT_PROMOTION);
-  sr_story_tick(w.ch, w.c, w.pop, w.ch->story.finale_at + 1);
+  w.ch->camp.set_piece_done = true; /* the player did the final job */
+  sr_story_tick(w.ch, w.c, w.pop, w.ch->story.act_started + SR_ACT3_MIN_S + 1);
   SR_CHECK(w.ch->story.finale_ready);
-  sr_story_tick(w.ch, w.c, w.pop, w.ch->story.finale_at + SR_FINALE_S + 1);
+  sr_story_tick(w.ch, w.c, w.pop, w.ch->camp.ready_at + SR_FINALE_S + 1);
   SR_CHECK(w.ch->story.ending != SR_END_NONE);
   world_free(&w);
   sr_game_destroy(g);

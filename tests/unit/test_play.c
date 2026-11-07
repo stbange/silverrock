@@ -557,6 +557,213 @@ static void test_reachable_dominance(void) {
   sr_game_destroy(g);
 }
 
+/* ---- phase 4 --------------------------------------------------------------------------------- */
+
+static bool inbox_has(const SrGame *g, const char *needle) {
+  for (int i = 0; i < g->player.msg_count; i++)
+    if (strstr(g->player.msgs[i].text, needle)) return true;
+  return false;
+}
+
+static void test_staged_acts(void) {
+  SR_SPEC("story-campaign", "Staged transition");
+  SR_SPEC("story-campaign", "Beat announced");
+  SrGame *g = game(51);
+  SrStory *st = &g->chess.story;
+  st->offer_open = true;
+  sr_game_accept_retainer(g);
+  int news = g->chess.news.count, log = g->chess.camp.log_count;
+  st->act_started -= SR_ACT1_MIN_S;
+  g->player.prog.street_cred = 30;
+  st->trust = 45;
+  sr_game_skip(g, SR_TICK_S + 60, false);
+  SR_CHECK_EQ(st->act, SR_ACT_KNIGHT);
+  SR_CHECK(g->chess.news.count >= news + 3);                             /* the board in the news */
+  SR_CHECK(inbox_has(g, "Real operations"));                             /* the handler's meeting */
+  SR_CHECK(g->chess.pol.curfew != 0 || g->chess.pol.police_budget == 2); /* the streets tighten */
+  SR_CHECK(g->chess.camp.log_count > log);
+  /* an arc beat is announced by a cast member and logged */
+  int msgs = g->player.msg_count;
+  int idx = sr_story_arc_start(&g->chess, g->city, g->pop, SR_ARC_SCANDAL, sr_game_time(g));
+  SR_CHECK(idx >= 0);
+  sr_game_skip(g, 120, false);
+  SR_CHECK(g->player.msg_count > msgs);
+  const SrMessage *m = &g->player.msgs[g->player.msg_count - 1];
+  SR_CHECK(m->pinned);
+  SR_CHECK_STR(m->from, st->cast[SR_CAST_JOURNALIST].name);
+  SR_CHECK(strstr(sr_story_log_entry(&g->chess, 0)->text, "Scandal") != NULL);
+  SR_CHECK(sr_story_log_entry(&g->chess, 999) == NULL);
+  /* every arc type has lines for every stage */
+  char line[112];
+  for (int t = 0; t < SR_ARC_COUNT; t++)
+    for (int b = 0; b < 3; b++) {
+      sr_story_beat_text(line, sizeof line, (SrArcType)t, b, b & 1, "A Corp", "B Corp", "Somewhere", (uint64_t)t);
+      SR_CHECK(line[0] && strchr(line, '%') == NULL);
+    }
+  for (int e = 0; e <= SR_END_SUNRISE + 1; e++)
+    for (int l = -1; l <= 3; l++) sr_story_ending_text(line, sizeof line, (SrEnding)e, l, "X");
+  for (int a = SR_ACT_PROLOGUE; a <= SR_ACT_EPILOGUE; a++) SR_CHECK(sr_story_act_text((SrAct)a)[0]);
+  for (int k = 0; k < SR_STORY_QUEUE + 3; k++) sr_story_say(&g->chess, SR_CAST_FIXER, "queued");
+  SR_CHECK_EQ(g->chess.camp.msg_count, SR_STORY_QUEUE);
+  /* Act III: the scenario corp's message on billboards everywhere */
+  int news3 = g->chess.news.count;
+  st->act_started -= SR_ACT2_MAX_S;
+  sr_game_skip(g, SR_TICK_S, false);
+  SR_CHECK_EQ(st->act, SR_ACT_PROMOTION);
+  SR_CHECK(g->chess.news.count >= news3 + 5);
+  SR_CHECK(sr_news_billboard(&g->chess.news, 0, 0) != NULL);
+  sr_game_destroy(g);
+}
+
+static void test_set_piece(void) {
+  SR_SPEC("story-campaign", "The set piece waits for the player");
+  SR_SPEC("story-campaign", "Choosing a king");
+  SrGame *g = game(52);
+  SrStory *st = &g->chess.story;
+  st->offer_open = true;
+  sr_game_accept_retainer(g);
+  g->player.prog.street_cred = 75;
+  st->act = SR_ACT_KNIGHT;
+  st->act_started = sr_game_time(g) - SR_ACT2_MAX_S;
+  sr_game_skip(g, SR_TICK_S, false);
+  SR_CHECK_EQ(st->act, SR_ACT_PROMOTION);
+  SR_CHECK_EQ(st->arcs[0].beats, 4);
+  /* the first three beats go by off-screen; the fourth is the set piece */
+  for (int k = 0; k < 40 && g->chess.camp.set_piece == 0; k++) sr_game_skip(g, 86400, false);
+  SR_CHECK(g->chess.camp.set_piece != 0);
+  SrOperation *spo = sr_chess_op(&g->chess, g->chess.camp.set_piece);
+  SrContract *k = spo ? sr_chess_contract(&g->chess, spo->contract) : NULL;
+  SR_CHECK(k != NULL);
+  if (!k) return;
+  sr_game_skip(g, 3600, false);
+  SrJob *j = sr_jobs_get(&g->jobs, k->job_id);
+  SR_CHECK(j != NULL && strstr(j->title, "FINAL JOB") != NULL);
+  SR_CHECK(j->client_building == g->player.home); /* on the terminal, from the handler */
+  /* nobody takes it: it does not resolve off-screen and does not expire */
+  sr_game_skip(g, 20 * 86400, false);
+  spo = sr_chess_op(&g->chess, g->chess.camp.set_piece);
+  k = spo ? sr_chess_contract(&g->chess, spo->contract) : NULL;
+  SR_CHECK(k && k->open);
+  if (!k) return;
+  j = sr_jobs_get(&g->jobs, k->job_id);
+  SR_CHECK(j != NULL && j->state == SR_JS_OFFERED);
+  if (!j) return;
+  SR_CHECK(!st->finale_ready);
+  /* the player does it (every step of it): the choice opens, and Kingmaker lists every megacorp */
+  int32_t sp_id = g->chess.camp.set_piece; /* look it up by id: the operation list moves */
+  for (int step = 0; step < 3; step++) {
+    spo = sr_chess_op(&g->chess, sp_id);
+    if (!spo || !spo->active) break;
+    k = sr_chess_contract(&g->chess, spo->contract);
+    sr_game_skip(g, 3600, false);
+    j = k ? sr_jobs_get(&g->jobs, k->job_id) : NULL;
+    if (!j) break;
+    SR_CHECK_EQ(sr_game_accept(g, j->id), SR_OK);
+    j->executed = true;
+    sr_game_report(g, j->id);
+    sr_game_skip(g, 120, false);
+  }
+  sr_game_skip(g, SR_TICK_S + 60, false);
+  SR_CHECK(g->chess.camp.set_piece_done);
+  SR_CHECK(st->finale_ready);
+  g->screen = SR_SCREEN_TERMINAL;
+  g->term_tab = SR_TAB_STORY;
+  int crown = -1, kind = 0;
+  for (int i = 0; sr_game_story_option(g, i, &kind); i++)
+    if (kind == 100 + 2) crown = i;
+  SR_CHECK(crown >= 0);
+  SrUi ui;
+  sr_ui_init(&ui);
+  sr_ui_begin(&ui, 1280, 720, 2);
+  sr_ui_build(&ui, g, NULL, false);
+  sr_ui_free(&ui);
+  g->term_sel = crown;
+  SrActionState a;
+  memset(&a, 0, sizeof a);
+  a.pressed[SR_ACT_INTERACT] = true;
+  sr_game_step(g, &a);
+  SR_CHECK_EQ(st->ending, SR_END_KINGMAKER);
+  SR_CHECK_EQ(g->chess.camp.king, 2);
+  SR_CHECK_EQ(g->chess.pol.police_contract, 2); /* the king's colours on the streets */
+  SR_CHECK(inbox_has(g, "picked a king"));
+  sr_game_destroy(g);
+  /* walking away from the set piece crowns the rival */
+  g = game(53);
+  st = &g->chess.story;
+  st->act = SR_ACT_PROMOTION;
+  st->scenario_other = 3;
+  sr_story_set_piece_abandoned(&g->chess, g->city, sr_game_time(g));
+  SR_CHECK_EQ(st->ending, SR_END_KINGMAKER);
+  SR_CHECK_EQ(g->chess.camp.king, 3);
+  sr_story_set_piece_abandoned(&g->chess, g->city, sr_game_time(g)); /* already over */
+  sr_game_destroy(g);
+}
+
+static void test_nudge_and_epilogue(void) {
+  SR_SPEC("story-campaign", "Stalled at Pawn");
+  SR_SPEC("story-campaign", "Continue after the ending");
+  SrGame *g = game(54);
+  SrStory *st = &g->chess.story;
+  st->offer_open = true;
+  sr_game_accept_retainer(g);
+  g->player.prog.street_cred = 12; /* Pawn */
+  int ops = g->chess.op_count;
+  sr_game_skip(g, 2 * SR_WEEK_S + SR_TICK_S, false);
+  SR_CHECK(g->chess.camp.nudged);
+  SR_CHECK(inbox_has(g, "Runner-level cred"));
+  SR_CHECK(g->chess.op_count > ops); /* a starter job from the handler */
+  /* after an ending: two weeks later, a new cycle */
+  st->act = SR_ACT_PROMOTION;
+  st->finale_ready = true;
+  st->leaks = 2; /* the player leaked enough to burn it all */
+  SR_CHECK_EQ(sr_game_choose_ending(g, SR_END_BURN), SR_OK);
+  SR_CHECK(st->sandbox);
+  SR_CHECK_EQ(g->chess.pol.curfew, 0); /* the old order is gone */
+  SR_CHECK(!g->chess.camp.new_cycle);
+  sr_game_skip(g, 2 * SR_WEEK_S + SR_TICK_S, false);
+  SR_CHECK(g->chess.camp.new_cycle);
+  SR_CHECK(inbox_has(g, "Work's back"));
+  sr_game_skip(g, SR_WEEK_S, false);
+  int active = 0;
+  for (int i = 0; i < SR_MAX_ARCS; i++) active += st->arcs[i].active;
+  SR_CHECK(active >= 1); /* the city's stories go on */
+  sr_game_destroy(g);
+  /* the Ghost writes to a runner who goes deep */
+  g = game(55);
+  g->chess.story.act = SR_ACT_KNIGHT;
+  g->chess.story.matrix_depth = 12;
+  sr_game_skip(g, SR_TICK_S + 60, false);
+  SR_CHECK(inbox_has(g, "The Pall is a machine"));
+  sr_game_destroy(g);
+}
+
+static void test_notoriety(void) {
+  SR_SPEC("news-media", "A name on the street");
+  SrGame *g = game(56);
+  g->player.prog.street_cred = 44;
+  int news = g->chess.news.count;
+  SrJob j;
+  sr_job_for_contract(g->city, SR_JT_SABOTAGE, facility_of(g->city, 2), 1, 2, 77, sr_game_time(g), &j);
+  j.tier = 2;
+  j.state = SR_JS_COMPLETED;
+  SrJob *pj = sr_jobs_push(&g->jobs, &j);
+  (void)pj;
+  sr_game_skip(g, 120, false); /* Operator */
+  SR_CHECK(sr_cred_tier(g->player.prog.street_cred) == SR_CRED_OPERATOR);
+  bool story = false;
+  for (int i = 0; i < sr_news_size(&g->chess.news) && i < g->chess.news.count - news; i++)
+    story |= sr_news_latest(&g->chess.news, i)->perpetrator == -2;
+  SR_CHECK(story);
+  /* three reports in a week bring another story the next week */
+  sr_game_skip(g, SR_WEEK_S, false);
+  int before = g->chess.news.count;
+  for (int k = 0; k < 3; k++)
+    sr_news_publish(&g->chess, g->city, -1, 1, -1, -2, SR_EV_SABOTAGE, false, "Runner hits a site", sr_game_time(g));
+  sr_game_skip(g, 3600, false);
+  SR_CHECK(g->chess.news.count >= before + 4);
+  sr_game_destroy(g);
+}
+
 void suite_play(void) {
   SR_RUN(test_headlines);
   SR_RUN(test_patron_warning);
@@ -570,4 +777,8 @@ void suite_play(void) {
   SR_RUN(test_living_costs);
   SR_RUN(test_blackops_and_rewards);
   SR_RUN(test_reachable_dominance);
+  SR_RUN(test_staged_acts);
+  SR_RUN(test_set_piece);
+  SR_RUN(test_nudge_and_epilogue);
+  SR_RUN(test_notoriety);
 }

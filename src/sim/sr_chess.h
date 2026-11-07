@@ -301,6 +301,19 @@ typedef struct SrStory {
 #define SR_TRUST_DEFECT 25 /* trust with a new patron after a defection */
 
 #define SR_MAX_SUSPECTS 8
+#define SR_STORY_LOG    32
+#define SR_STORY_QUEUE  8
+
+typedef struct SrLogEntry {
+  int64_t time;
+  char text[72];
+} SrLogEntry;
+
+/* A line a cast member says to the player; the game delivers it to the inbox. */
+typedef struct SrStoryMsg {
+  uint8_t role; /* SrCastRole */
+  char text[112];
+} SrStoryMsg;
 
 /* A job against the patron the patron may still find out about. */
 typedef struct SrSuspect {
@@ -326,6 +339,19 @@ typedef struct SrCampaign {
   int discoveries; /* betrayals the patron found out about */
   int8_t hunter;   /* faction whose hunters are coming for the player, -1 none */
   int64_t hunt_at; /* when they strike (the next time the player is reachable) */
+  /* story presence and pacing */
+  int log_count;
+  SrLogEntry log[SR_STORY_LOG];
+  int msg_count;
+  SrStoryMsg msgs[SR_STORY_QUEUE];
+  int64_t beat_at[SR_MAX_ARCS]; /* next beat of each arc starts then (beats are 3 days apart) */
+  int32_t set_piece;            /* operation of the climax's last beat (never resolved off-screen), 0 none */
+  bool set_piece_done;
+  int64_t ready_at; /* the ending choice opened */
+  bool nudged, ghost_hint, new_cycle;
+  int8_t king;            /* megacorp the player crowned (Kingmaker), -1 the scenario's other corp */
+  int32_t notoriety_week; /* last week the press ran a story about the runner (+1) */
+  int64_t ending_at;
 } SrCampaign;
 
 /* ---- the whole corporate game ---------------------------------------------------------------- */
@@ -457,17 +483,41 @@ void sr_headline(char *out, size_t cap, const char *tmpl, const char *a, const c
 void sr_news_event_headline(char *out, size_t cap, const SrCity *c, const SrWorldEvent *e, int outlet, int perp);
 
 /* ---- story (sr_story.c) ---- */
-#define SR_ACT2_MAX_S (12 * SR_WEEK_S) /* Act II lasts at most this long */
-#define SR_FINALE_S   (2 * SR_WEEK_S)
-#define SR_TRUST_ACT2 40
-#define SR_TRUST_T4   60
-#define SR_BETRAYAL   25
+#define SR_ACT2_MAX_S   (12 * SR_WEEK_S) /* Act II lasts at most this long */
+#define SR_ACT1_MIN_S   (3 * SR_WEEK_S)  /* Act I lasts at least this long */
+#define SR_ACT2_MIN_S   (6 * SR_WEEK_S)  /* no endgame before six weeks of Act II */
+#define SR_ACT3_MIN_S   (14 * 86400)     /* the climax takes at least two weeks */
+#define SR_RETAINER_MIN (3 * 86400)      /* the retainer offer comes on day 3 at the earliest */
+#define SR_BEAT_GAP_S   (3 * 86400)      /* arc beats are at least three days apart */
+#define SR_FINALE_S     (2 * SR_WEEK_S)
+#define SR_TRUST_ACT2   40
+#define SR_TRUST_T4     60
+#define SR_BETRAYAL     25
 void sr_story_init(SrStory *s, const SrCity *c, uint64_t seed, int patron_choice);
 void sr_story_trust(SrStory *s, int delta);
 /* Story upkeep each strategic tick: arcs, acts, offers, succession, the endgame. */
 void sr_story_tick(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_t now);
 int sr_story_arc_start(SrChess *ch, SrCity *c, const SrPopulation *pop, SrArcType t, int64_t now);
-void sr_story_beat_done(SrChess *ch, SrCity *c, int arc, bool success, int64_t now);
+/* An arc beat resolved (offscreen: by an NPC crew, the player is told what happened). */
+void sr_story_beat_done(SrChess *ch, SrCity *c, int arc, bool success, bool offscreen, int64_t now);
+/* The story log (newest first) and the queue of cast lines for the inbox. */
+void sr_story_log(SrChess *ch, int64_t now, const char *text);
+const SrLogEntry *sr_story_log_entry(const SrChess *ch, int i);
+void sr_story_say(SrChess *ch, SrCastRole role, const char *text);
+/* Kingmaker: the megacorp the player crowns. */
+void sr_story_crown(SrChess *ch, int corp);
+/* The climax's set piece was abandoned: the rival is crowned. */
+void sr_story_set_piece_abandoned(SrChess *ch, SrCity *c, int64_t now);
+/* ---- story text (sr_story_text.c) ---- */
+void sr_story_fill(char *out, size_t cap, const char *tmpl, const char *a, const char *b, const char *c);
+SrCastRole sr_story_teller(SrArcType t);
+void sr_story_beat_text(char *out, size_t cap, SrArcType t, int beat, int branch, const char *a, const char *b,
+                        const char *place, uint64_t key);
+void sr_story_skipped_text(char *out, size_t cap, bool success, const char *a, const char *b);
+const char *sr_story_act_text(SrAct act);
+const char *sr_story_nudge_text(void);
+const char *sr_story_ghost_text(void);
+void sr_story_ending_text(char *out, size_t cap, SrEnding e, int line, const char *corp);
 /* The prologue test gig was completed: the handler calls within 2 days. */
 void sr_story_test_done(SrStory *s, int64_t now);
 void sr_story_accept_retainer(SrStory *s, int64_t now);

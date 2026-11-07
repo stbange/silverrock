@@ -119,6 +119,7 @@ void sr_chess_init(SrChess *ch, SrCity *c, uint64_t seed, int patron_choice, int
   sr_market_init(&ch->market, ch, c);
   sr_story_init(&ch->story, c, seed, patron_choice);
   ch->camp.hunter = -1;
+  ch->camp.king = -1;
   ch->story.act_started = now;
 }
 
@@ -588,7 +589,7 @@ void sr_chess_resolve(SrChess *ch, SrCity *c, SrPopulation *pop, SrEventLog *log
     char msg[72];
     snprintf(msg, sizeof msg, "%s's %s fails", c->factions.f[op->client].name, sr_op_name((SrOpType)op->type));
     sr_chess_note(ch, now, msg);
-    if (op->arc >= 0) sr_story_beat_done(ch, c, op->arc, false, now);
+    if (op->arc >= 0) sr_story_beat_done(ch, c, op->arc, false, !by_player, now);
     return;
   }
   op->step++;
@@ -607,7 +608,7 @@ void sr_chess_resolve(SrChess *ch, SrCity *c, SrPopulation *pop, SrEventLog *log
     snprintf(msg, sizeof msg, "%s: %s on %s succeeds", c->factions.f[op->client].name, sr_op_name((SrOpType)op->type),
              op->target >= 0 ? c->factions.f[op->target].name : "-");
   sr_chess_note(ch, now, msg);
-  if (op->arc >= 0) sr_story_beat_done(ch, c, op->arc, true, now);
+  if (op->arc >= 0) sr_story_beat_done(ch, c, op->arc, true, !by_player, now);
 }
 
 /* Off-screen odds: the client's means against the target's defences. */
@@ -791,7 +792,8 @@ void sr_chess_tick(SrChess *ch, SrCity *c, SrPopulation *pop, SrEventLog *log, i
   /* open contracts past their deadline: NPC crews try them */
   for (int i = 0; i < ch->contract_count; i++) {
     SrContract *k = &ch->contracts[i];
-    if (!k->open || now < k->deadline) continue;
+    if (!k->open || now < k->deadline || (ch->camp.set_piece && k->op == ch->camp.set_piece))
+      continue; /* the set piece waits for the player */
     SrOperation *op = sr_chess_op(ch, k->op);
     bool ok = op && offscreen_success(ch, c, op, sr_hash_combine(ch->seed, (uint64_t)k->id * 7u + 3u));
     if (op && op->arc >= 0) ch->story.beats_offscreen++;

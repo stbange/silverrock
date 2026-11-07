@@ -12,6 +12,8 @@ static int64_t now_of(const SrGame *g) { return sr_game_time(g); }
 static void sync_world(SrGame *g, int64_t t);
 static void hunters(SrGame *g, int64_t t);
 static void living_costs(SrGame *g, int64_t t);
+static void notoriety_story(SrGame *g, int64_t t);
+static void deliver_story(SrGame *g);
 
 void sr_game_chess_init(SrGame *g) {
   sr_chess_init(&g->chess, g->city, sr_hash_combine(g->seed, 0xC4E55u), g->patron_choice, now_of(g));
@@ -76,11 +78,23 @@ static uint8_t source_of(uint8_t channel) {
 
 static void post_contracts(SrGame *g, int64_t t) {
   SrChess *ch = &g->chess;
+  SrOperation *spo = ch->camp.set_piece ? sr_chess_op(ch, ch->camp.set_piece) : NULL;
+  SrContract *sp = spo && spo->active ? sr_chess_contract(ch, spo->contract) : NULL;
+  SrJob *spj = sp && sp->job_id >= 0 ? sr_jobs_get(&g->jobs, sp->job_id) : NULL;
+  if (sp && sp->open && sp->job_id >= 0 && (!spj || spj->state == SR_JS_WITHDRAWN)) {
+    sp->job_id = -1; /* gone from the board: post the final job again */
+    spj = NULL;
+  }
+  if (spj && (spj->state == SR_JS_OFFERED || spj->state == SR_JS_ACCEPTED) && spj->deadline - t < 2 * 86400)
+    spj->deadline = t + 7 * 86400; /* the set piece never expires */
+  if (sp) sp->deadline = SR_MAX(sp->deadline, t + 86400);
   for (int i = 0; i < ch->contract_count; i++) {
     SrContract *k = &ch->contracts[i];
     if (!k->open || k->job_id != -1 || t >= k->deadline) continue;
     /* only work the player can take reaches them; the rest goes to NPC crews */
-    if (sr_job_tier_of_type((SrJobType)k->job_type) > sr_max_tier_for_cred(g->player.prog.street_cred)) continue;
+    if (sr_job_tier_of_type((SrJobType)k->job_type) > sr_max_tier_for_cred(g->player.prog.street_cred) &&
+        !(ch->camp.set_piece && k->op == ch->camp.set_piece))
+      continue;
     SrJob j;
     uint64_t key = sr_hash_combine(ch->seed, (uint64_t)k->id * 31u + 7u);
     SrOperation *op = sr_chess_op(ch, k->op);
@@ -99,6 +113,13 @@ static void post_contracts(SrGame *g, int64_t t) {
       sr_tier_pay_range(3, &lo, &hi);
       j.pay = lo + (int32_t)((key >> 8) % (uint64_t)(hi - lo));
       j.upfront = j.pay / 4;
+    }
+    if (ch->camp.set_piece && k->op == ch->camp.set_piece) { /* the climax's set piece: it waits for the player */
+      j.client_building = g->player.home;
+      j.deadline = t + 14 * 86400;
+      char title[64];
+      snprintf(title, sizeof title, "FINAL JOB: %s", sr_job_type_name((SrJobType)j.type));
+      snprintf(j.title, sizeof j.title, "%s", title);
     }
     SrJob *s = sr_jobs_push(&g->jobs, &j);
     if (!s) return;
@@ -273,6 +294,7 @@ static void award_cred(SrGame *g, const SrJob *j, bool done, int64_t t) {
     char msg[96];
     snprintf(msg, sizeof msg, "Street Cred tier: %s", sr_cred_tier_name(sr_cred_tier(pr->street_cred)));
     sr_game_toast(g, msg);
+    if (gain > 0) notoriety_story(g, t); /* a new name on the street */
   }
 }
 
@@ -323,6 +345,11 @@ static void book_jobs(SrGame *g, int64_t t) {
     if (!done && !failed) continue;
     j->booked = true;
     int evidence = (j->alarms > 0) + (j->kills > 0) + (j->alarms > 1);
+    if (k && k->open && failed && ch->camp.set_piece && k->op == ch->camp.set_piece) { /* walked away */
+      k->open = false;
+      sr_story_set_piece_abandoned(ch, g->city, t);
+      continue;
+    }
     if (k && k->open) {
       k->framed = j->framed;
       k->player_evidence = evidence > 0;
@@ -395,6 +422,36 @@ static void curfew_checks(SrGame *g, int64_t t) {
   }
 }
 
+/* Lines the cast says arrive in the inbox, pinned. */
+static void deliver_story(SrGame *g) {
+  SrCampaign *cp = &g->chess.camp;
+  for (int i = 0; i < cp->msg_count; i++) {
+    const SrStoryMsg *m = &cp->msgs[i];
+    char from[24];
+    snprintf(from, sizeof from, "%s", g->chess.story.cast[m->role % SR_CAST_COUNT].name);
+    sr_player_story_message(&g->player, from, m->text, now_of(g));
+  }
+  cp->msg_count = 0;
+}
+
+/* The press notices a runner on the rise. */
+static void notoriety_story(SrGame *g, int64_t t) {
+  int32_t week = (int32_t)(t / SR_WEEK_S) + 1;
+  if (g->chess.camp.notoriety_week == week) return;
+  g->chess.camp.notoriety_week = week;
+  static const char *const k_stories[3] = {"Who is the runner everyone in %2 talks about?",
+                                           "A %1 among runners: the street has a new name",
+                                           "Corps on edge as a %1 works the city"};
+  const char *tier = sr_cred_tier_name(sr_cred_tier(g->player.prog.street_cred));
+  int d = g->city->blocks[g->city->buildings[g->player.home].block].district;
+  char head[64];
+  sr_headline(head, sizeof head, k_stories[(uint64_t)week % 3u], tier, g->city->districts[d].name, NULL);
+  int outlet = g->city->factions.media_count > 0
+                   ? g->city->factions.media_first + (int)((uint64_t)week % (uint64_t)g->city->factions.media_count)
+                   : -1;
+  sr_news_publish(&g->chess, g->city, outlet, -1, -1, -2, SR_NEWS_STORY, false, head, t);
+}
+
 static void story_messages(SrGame *g) {
   SrStory *s = &g->chess.story;
   static const char *const offer = "We liked your work. A retainer: steady pay, better jobs. Accept on the terminal.";
@@ -408,13 +465,22 @@ void sr_game_chess_minute(SrGame *g, int64_t t) {
   SrChess *ch = &g->chess;
   ch->street_cred = g->player.prog.street_cred;
   book_jobs(g, t);
+  deliver_story(g);
   int handlers_before = ch->story.cast[SR_CAST_HANDLER].generation;
   sr_chess_advance(ch, g->city, g->pop, &g->events, t);
   sr_news_tick(ch, g->city, &g->events, t); /* within the hour of an event */
+  deliver_story(g);
   if (ch->story.cast[SR_CAST_HANDLER].generation != handlers_before && ch->story.cast[SR_CAST_HANDLER].alive)
     handler_story(g, "Your old handler is gone. I'm taking over. Nothing changes.");
   if (t % 3600 == 0) {
     living_costs(g, t);
+    int reports = 0; /* three reports about the runner in a week: the press digs */
+    for (int i = 0; i < sr_news_size(&ch->news); i++) {
+      const SrNews *n = sr_news_latest(&ch->news, i);
+      if (t - n->time > SR_WEEK_S) break;
+      reports += n->perpetrator == -2 && n->kind != SR_NEWS_STORY;
+    }
+    if (reports >= 3) notoriety_story(g, t);
     post_contracts(g, t);
     sync_world(g, t);
     story_messages(g);
@@ -589,6 +655,7 @@ SrResult sr_game_accept_retainer(SrGame *g) {
   SrStory *s = &g->chess.story;
   if (!s->offer_open || s->retainer || s->patron < 0) return SR_ERR_INVALID;
   sr_story_accept_retainer(s, now_of(g));
+  sr_story_log(&g->chess, now_of(g), "Act I: Pawn");
   char msg[112];
   snprintf(msg, sizeof msg, "Welcome to %s. Don't make me regret it.", g->city->factions.f[s->patron].blackops);
   handler_story(g, msg);
@@ -610,6 +677,7 @@ SrResult sr_game_choose_ending(SrGame *g, SrEnding e) {
   SrStory *s = &g->chess.story;
   if (!s->finale_ready || !(sr_story_endings(s) & (1u << e))) return SR_ERR_INVALID;
   sr_story_end(&g->chess, g->city, e, now_of(g));
+  deliver_story(g);
   sync_world(g, now_of(g));
   g->autosave_requests++;
   return SR_OK;
@@ -736,12 +804,23 @@ const char *sr_game_story_option(const SrGame *g, int i, int *kind) {
   }
   if (s->finale_ready) {
     unsigned m = sr_story_endings(s);
-    for (int e = SR_END_LOYAL; e <= SR_END_SUNRISE; e++)
-      if ((m & (1u << e)) && n++ == i) {
+    for (int e = SR_END_LOYAL; e <= SR_END_SUNRISE; e++) {
+      if (!(m & (1u << e))) continue;
+      if (e == SR_END_KINGMAKER) { /* the player picks the king */
+        for (int k = 0; k < g->city->factions.corp_count; k++)
+          if (n++ == i) {
+            *kind = 100 + k;
+            snprintf(buf, sizeof buf, "Ending: Kingmaker - crown %s", g->city->factions.f[k].name);
+            return buf;
+          }
+        continue;
+      }
+      if (n++ == i) {
         *kind = 10 + e;
         snprintf(buf, sizeof buf, "Ending: %s", sr_ending_name((SrEnding)e));
         return buf;
       }
+    }
   }
   return NULL;
 }
@@ -794,12 +873,16 @@ void sr_game_term_input(SrGame *g, const SrActionState *a) {
   if (g->term_tab == SR_TAB_STORY && rows > 0 && a->pressed[SR_ACT_INTERACT]) {
     int kind = 0;
     if (sr_game_story_option(g, SR_MIN(g->term_sel, rows - 1), &kind)) {
-      if (kind == 1)
+      if (kind == 1) {
         sr_game_accept_retainer(g);
-      else if (kind == 2)
+      } else if (kind == 2) {
         sr_game_accept_offer(g);
-      else
+      } else if (kind >= 100) { /* Kingmaker: the chosen megacorp */
+        sr_story_crown(&g->chess, kind - 100);
+        sr_game_choose_ending(g, SR_END_KINGMAKER);
+      } else {
         sr_game_choose_ending(g, (SrEnding)(kind - 10));
+      }
       g->term_sel = 0;
     }
   }
