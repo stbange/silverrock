@@ -79,11 +79,11 @@ alone refers to a scenario in this change's deltas, and "D1"…"D18" refer to de
 
 ## 9. District kits and vertical layers (about 1.5 weeks)
 
-- [ ] 9.1 Kit table for the 11 district types (shapes, modules, bases, roofs, prop weights, signature pieces) (spec: "Districts apart by shape and colour")
-- [ ] 9.2 Signature set pieces: Docks cranes and containers; Industrial stacks, tanks and pipes; Old Quarter lantern lanes and shrines; Spire plazas and holo-trees; Campus lawns and glowing trees; Barrens rubble and burned cars; Civic flags and barriers
-- [ ] 9.3 Highway decks with pillars, barriers, lamps and moving traffic lights; darker ambient and hanging bulbs underneath; Undercity shanties against pillars (spec: "Life under the highway")
-- [ ] 9.4 Skyways between Spire towers (spec: "Skyways")
-- [ ] 9.5 Elevated metro track with passing trains on the metro timetable (spec: "Trains pass overhead")
+- [x] 9.1 Kit table for the 11 district types (shapes, modules, bases, roofs, prop weights, signature pieces) (spec: "Districts apart by shape and colour")
+- [x] 9.2 Signature set pieces: Docks cranes and containers; Industrial stacks, tanks and pipes; Old Quarter lantern lanes and shrines; Spire plazas and holo-trees; Campus lawns and glowing trees; Barrens rubble and burned cars; Civic flags and barriers
+- [x] 9.3 Highway decks with pillars, barriers, lamps and moving traffic lights; darker ambient and hanging bulbs underneath; Undercity shanties against pillars (spec: "Life under the highway")
+- [x] 9.4 Skyways between Spire towers (spec: "Skyways")
+- [x] 9.5 Elevated metro track with passing trains on the metro timetable (spec: "Trains pass overhead")
 
 ## 10. Motion (about 3–4 days)
 

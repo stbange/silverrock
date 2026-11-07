@@ -411,7 +411,7 @@ static void test_facades(void) {
     if (seed == 1) { /* pinned: the derived detail changes only on purpose (and alike on every target) */
       printf("  facade digest %016llx, dressing digest %016llx\n", (unsigned long long)fd, (unsigned long long)dd);
       SR_CHECK(fd == 0x7706771d161b6111ull);
-      SR_CHECK(dd == 0xeda0522fea2ab5d1ull);
+      SR_CHECK(dd == 0xc6f3fccc134672b0ull);
     }
     int pairs = 0, across = 0;
     for (int blk = 0; blk < c->grid * c->grid; blk++) {
@@ -873,6 +873,113 @@ static void test_sky_details(void) {
   sr_mesh_free(&glow);
 }
 
+static void test_district_kits_and_layers(void) {
+  SR_SPEC("retro-rendering", "Districts apart by shape and colour");
+  SR_SPEC("city-generation", "Life under the highway");
+  SR_SPEC("city-generation", "Skyways");
+  SR_SPEC("city-generation", "Trains pass overhead");
+  int tubes_total = 0, close_pairs_total = 0;
+  for (int seed = 1; seed <= 5; seed++) {
+    SrCity *c = sr_city_create((uint64_t)seed * 7919u, NULL);
+    SrStreetProp p[SR_MAX_BLOCK_PROPS];
+    for (int blk = 0; blk < c->grid * c->grid; blk++) {
+      if (c->blocks[blk].water) continue;
+      SrDistrictType t = c->districts[c->blocks[blk].district].type;
+      int n = sr_dressing_block(c, blk, p, SR_MAX_BLOCK_PROPS);
+      bool own = false;
+      for (int i = 0; i < n; i++) {
+        own = own || p[i].kind == sr_district_signature(t);
+        for (int o = 0; o < SR_D_COUNT; o++) /* another district's signature never shows up here */
+          if (o != (int)t && sr_district_signature((SrDistrictType)o) != sr_district_signature(t))
+            SR_CHECK(p[i].kind != sr_district_signature((SrDistrictType)o));
+      }
+      SR_CHECK(own);                /* and every block carries its own */
+      if (c->blocks[blk].highway) { /* pillars and hanging bulbs under the deck */
+        int pillars = 0, bulbs = 0;
+        for (int i = 0; i < n; i++) {
+          pillars += p[i].kind == SR_SP_PILLAR && p[i].variant == 0;
+          bulbs += p[i].kind == SR_SP_BULB;
+        }
+        SR_CHECK(pillars >= 3 && bulbs >= 4);
+      }
+    }
+    /* skyways: Spire towers over 100 m standing 40-90 m apart and facing each other get one */
+    SrSkywayTube tubes[SR_MAX_TUBES];
+    int nt = sr_skyway_tubes(c, tubes, SR_MAX_TUBES);
+    for (int i = 0; i < nt; i++) {
+      SR_CHECK(tubes[i].x1 > tubes[i].x0 && tubes[i].z1 > tubes[i].z0 && tubes[i].y >= 40.0f);
+      SR_CHECK(tubes[i].y + 4.0f <=
+               (float)SR_MIN(c->buildings[tubes[i].a].height_cm, c->buildings[tubes[i].b].height_cm) / 100.0f);
+    }
+    int close_pairs = 0;
+    for (int i = 0; i < c->building_count; i++) {
+      const SrBuilding *a = &c->buildings[i];
+      if (a->height_cm < 10000 || c->districts[c->blocks[a->block].district].type != SR_D_SPIRE) continue;
+      for (int j = i + 1; j < c->building_count; j++) {
+        const SrBuilding *b = &c->buildings[j];
+        if (b->height_cm < 10000 || c->districts[c->blocks[b->block].district].type != SR_D_SPIRE) continue;
+        float dx = (float)(a->x0 + a->x1 - b->x0 - b->x1) / 200.0f,
+              dz = (float)(a->y0 + a->y1 - b->y0 - b->y1) / 200.0f;
+        float d = sqrtf(dx * dx + dz * dz);
+        bool facing = (SR_MIN(a->y1, b->y1) - SR_MAX(a->y0, b->y0) >= 600) ||
+                      (SR_MIN(a->x1, b->x1) - SR_MAX(a->x0, b->x0) >= 600);
+        close_pairs += d >= 40.0f && d <= 90.0f && facing;
+      }
+    }
+    if (close_pairs > 0) SR_CHECK(nt > 0);
+    tubes_total += nt;
+    close_pairs_total += close_pairs;
+    /* trains: during a trip the train is on the track between the stations */
+    if (c->metro_edge_count > 0) {
+      int seen = 0;
+      for (int64_t t = 86400; t < 86400 + 600 && !seen; t += 5) {
+        SrVec3 pos, dir;
+        if (!sr_metro_train_pos(c, 0, t, &pos, &dir)) continue;
+        seen = 1;
+        float r[3][2];
+        sr_metro_route(c, 0, r);
+        SR_CHECK_NEAR(pos.y, SR_METRO_Y, 1e-3);
+        bool on_track = (fabsf(pos.z - r[0][1]) < 0.1f && pos.x >= SR_MIN(r[0][0], r[1][0]) - 0.1f &&
+                         pos.x <= SR_MAX(r[0][0], r[1][0]) + 0.1f) ||
+                        (fabsf(pos.x - r[1][0]) < 0.1f && pos.z >= SR_MIN(r[1][1], r[2][1]) - 0.1f &&
+                         pos.z <= SR_MAX(r[1][1], r[2][1]) + 0.1f);
+        SR_CHECK(on_track);
+        SrMesh m;
+        sr_mesh_init(&m);
+        SR_CHECK(sr_build_trains(c, t, pos, &m) >= 1 && m.nv > 0);
+        sr_mesh_free(&m);
+      }
+      SR_CHECK(seen);
+    }
+    sr_city_destroy(c);
+  }
+  printf("  skyways: %d tubes over five seeds (%d close Spire pairs)\n", tubes_total, close_pairs_total);
+  SR_CHECK(tubes_total > 0);
+  /* under the deck the frame is darker than in the open street next to it */
+  SrGame *g = g_game;
+  const SrCity *c = g->city;
+  int hw = -1;
+  for (int b = 0; b < c->grid * c->grid && hw < 0; b++)
+    if (c->blocks[b].highway && !c->blocks[b].water) hw = b;
+  if (hw >= 0) {
+    SrSceneCache *s = (SrSceneCache *)calloc(1, sizeof *s);
+    sr_scene_init(s, false);
+    SrFrame *f = (SrFrame *)malloc(sizeof *f);
+    int32_t ox, oy;
+    sr_city_block_origin(hw, c->grid, &ox, &oy);
+    sr_game_leave(g);
+    g->player.pos = sr_v3((float)ox / 100.0f + 30.0f, 1.7f, (float)oy / 100.0f + 8.0f);
+    sr_scene_build(s, g, 1.0f, f);
+    float under = f->ambient[0] + f->ambient[1] + f->ambient[2];
+    g->player.pos = sr_v3((float)ox / 100.0f + 30.0f, 1.7f, (float)oy / 100.0f + 16.8f); /* the open pavement */
+    sr_scene_build(s, g, 1.0f, f);
+    SR_CHECK(under < (f->ambient[0] + f->ambient[1] + f->ambient[2]) * 0.8f);
+    free(f);
+    sr_scene_free(s);
+    free(s);
+  }
+}
+
 void suite_atmos(void) {
   g_game = sr_game_create();
   sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Atmos");
@@ -890,5 +997,6 @@ void suite_atmos(void) {
   SR_RUN(test_props_collide_and_shops);
   SR_RUN(test_signs_and_adverts);
   SR_RUN(test_sky_details);
+  SR_RUN(test_district_kits_and_layers);
   sr_game_destroy(g_game);
 }

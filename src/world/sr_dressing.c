@@ -41,7 +41,22 @@ static const SrStreetPropInfo k_props[SR_SP_COUNT] = {
     {"flag", 0.2f, 0.2f, 7.0f, 0},
     {"holo-tree", 0.8f, 0.8f, 4.0f, SR_SPF_LIT},
     {"fire escape", 3.0f, 1.2f, 0.0f, 0},
+    {"vending row", 3.2f, 0.8f, 2.0f, SR_SPF_SOLID | SR_SPF_LIT},
+    {"marquee", 3.0f, 0.8f, 3.2f, SR_SPF_LIT},
+    {"kiosk", 1.8f, 0.9f, 2.4f, SR_SPF_SOLID | SR_SPF_LIT},
+    {"tank", 6.0f, 6.0f, 8.0f, SR_SPF_SOLID},
+    {"crane", 10.0f, 4.0f, 34.0f, 0},
+    {"glowing tree", 1.0f, 1.0f, 4.5f, SR_SPF_LIT},
+    {"shanty", 2.6f, 1.0f, 2.2f, SR_SPF_SOLID | SR_SPF_LIT},
+    {"bulb", 0.3f, 0.3f, 0.3f, SR_SPF_LIT},
+    {"pillar", 1.4f, 1.4f, 11.0f, SR_SPF_SOLID},
 };
+
+static const int8_t k_signature[SR_D_COUNT] = {SR_SP_HOLOTREE, SR_SP_FLAG,   SR_SP_VENDROW, SR_SP_MARQUEE,
+                                               SR_SP_KIOSK,    SR_SP_SHRINE, SR_SP_FENCE,   SR_SP_CRANE,
+                                               SR_SP_GLOWTREE, SR_SP_SHANTY, SR_SP_RUBBLE};
+
+int sr_district_signature(SrDistrictType t) { return k_signature[(unsigned)t < SR_D_COUNT ? t : SR_D_RESIDENTIAL]; }
 
 const SrStreetPropInfo *sr_street_prop_info(int kind) { return &k_props[(unsigned)kind < SR_SP_COUNT ? kind : 0]; }
 
@@ -65,21 +80,21 @@ static const Kit k_kits[SR_D_COUNT] = {
     /* civic: barriers and flags, benches */
     {30, 25, 35, 3, {3, 3, 2, 3, 2, 2, 5}, {2, 5, 0, 1, 0, 1, 2}, SR_SP_FLAG},
     /* commercial: vending rows, stalls, news */
-    {35, 45, 45, 4, {3, 4, 3, 1, 1, 4, 1}, {6, 2, 4, 2, 2, 2, 2}, SR_SP_BOOTH},
+    {35, 45, 45, 4, {3, 4, 3, 1, 1, 4, 1}, {6, 2, 4, 2, 2, 2, 2}, SR_SP_VENDROW},
     /* entertainment: vending, stalls, bins */
-    {35, 45, 40, 5, {2, 5, 2, 1, 1, 3, 2}, {6, 1, 5, 2, 2, 3, 2}, SR_SP_VENDING},
+    {35, 45, 40, 5, {2, 5, 2, 1, 1, 3, 2}, {6, 1, 5, 2, 2, 3, 2}, SR_SP_MARQUEE},
     /* residential: bins, trees, trash, AC */
-    {32, 35, 50, 5, {3, 5, 2, 4, 1, 2, 1}, {2, 3, 1, 3, 2, 5, 1}, SR_SP_TRASH},
+    {32, 35, 50, 5, {3, 5, 2, 4, 1, 2, 1}, {2, 3, 1, 3, 2, 5, 1}, SR_SP_KIOSK},
     /* old quarter: stalls with steam, shrines, crates */
     {30, 50, 25, 6, {2, 3, 0, 2, 2, 1, 1}, {2, 1, 7, 1, 4, 3, 1}, SR_SP_SHRINE},
     /* industrial: dumpsters, crates, barriers, fences */
     {28, 35, 30, 6, {4, 3, 0, 0, 0, 0, 4}, {1, 0, 0, 5, 5, 3, 0}, SR_SP_FENCE},
     /* docks: containers, crates, bollards */
-    {28, 35, 20, 6, {2, 2, 0, 0, 0, 0, 6}, {1, 0, 0, 3, 6, 2, 0}, SR_SP_CONTAINER},
+    {28, 35, 20, 6, {2, 2, 0, 0, 0, 0, 6}, {1, 0, 0, 3, 6, 2, 0}, SR_SP_CRANE},
     /* campus: trees, planters, holo-trees, benches */
-    {32, 25, 25, 2, {1, 2, 1, 6, 5, 1, 2}, {3, 5, 0, 0, 0, 0, 1}, SR_SP_HOLOTREE},
+    {32, 25, 25, 2, {1, 2, 1, 6, 5, 1, 2}, {3, 5, 0, 0, 0, 0, 1}, SR_SP_GLOWTREE},
     /* undercity: trash, crates, barrels */
-    {30, 45, 20, 8, {1, 4, 0, 0, 0, 1, 1}, {1, 0, 3, 4, 4, 7, 1}, SR_SP_BARREL},
+    {30, 45, 20, 8, {1, 4, 0, 0, 0, 1, 1}, {1, 0, 3, 4, 4, 7, 1}, SR_SP_SHANTY},
     /* barrens: rubble, burned cars, little else */
     {12, 20, 0, 7, {1, 2, 0, 0, 0, 0, 1}, {0, 0, 0, 2, 3, 5, 0}, SR_SP_RUBBLE},
 };
@@ -212,9 +227,8 @@ int sr_dressing_block(const SrCity *c, int block, SrStreetProp *out, int max) {
       float x = e->x0 + e->ax * a + e->nx * 0.6f, z = e->z0 + e->az * a + e->nz * 0.6f;
       if ((int)(h % 100u) < kit->kerb_pct) {
         int kind = (h >> 20) % 9u == 0 && kit->special >= 0 ? kit->special : k_kerb_kinds[pick(kit->kerb, 7, h >> 8)];
-        if (kind == SR_SP_CONTAINER || kind == SR_SP_STALL || kind == SR_SP_VENDING || kind == SR_SP_BOOTH ||
-            kind == SR_SP_FENCE)
-          kind = SR_SP_BOLLARD; /* big signature props stand in the building band, not at the kerb */
+        if (k_props[kind].w > 1.3f || k_props[kind].d > 1.3f || kind == SR_SP_VENDING || kind == SR_SP_BOOTH)
+          kind = SR_SP_BOLLARD; /* big props never stand at the kerb */
         if (!at_door(c, b, x, z)) push(out, &n, max, kind, SR_BAND_KERB, x, z, face, h);
       }
       /* parked cars in the road's parking lane */
@@ -241,7 +255,8 @@ int sr_dressing_block(const SrCity *c, int block, SrStreetProp *out, int max) {
         float bx = x + e->nx * (BLDG_BAND * 0.5f + 1.0f), bz = z + e->nz * (BLDG_BAND * 0.5f + 1.0f);
         if (!in_building(c, b, bx, bz, 0.0f)) continue;
         int kind = (h >> 20) % 7u == 0 && kit->special >= 0 ? kit->special : k_bldg_kinds[pick(kit->bldg, 7, h >> 8)];
-        if (kind == SR_SP_CONTAINER && e->pavement < 7.0f) kind = SR_SP_CRATES;
+        if (k_props[kind].d > BLDG_BAND + 0.3f && kind != SR_SP_STALL && kind != SR_SP_DUMPSTER)
+          kind = SR_SP_CRATES; /* too deep for the building band: set pieces go on open lots */
         push(out, &n, max, kind, SR_BAND_BUILDING, x, z, face, h);
       }
     }
@@ -306,6 +321,95 @@ int sr_dressing_block(const SrCity *c, int block, SrStreetProp *out, int max) {
       push(out, &n, max, SR_SP_MANHOLE, SR_BAND_ROAD, x, z, 0, h ^ (uint64_t)(a * 13.0f));
       if (((h ^ (uint64_t)a) >> 7) % 3u == 0) out[n - 1].flags |= SR_SPF_STEAM;
     }
+  }
+  /* set pieces on open lot space, away from the walking lanes and the doors: the district's
+   * signature, containers at the docks, tanks in industry */
+  int sig = k_signature[t];
+  bool has_sig = false;
+  for (int i = 0; i < n; i++) has_sig = has_sig || out[i].kind == sig;
+  int pieces = t == SR_D_DOCKS ? 4 : t == SR_D_INDUSTRIAL ? 2 : 1;
+  float placed[8][3];
+  int np = 0;
+  for (int piece = 0; piece < pieces && n < max; piece++) {
+    int kind = t == SR_D_DOCKS ? SR_SP_CONTAINER : t == SR_D_INDUSTRIAL ? SR_SP_TANK : sig;
+    if (kind == sig && (has_sig || sig == SR_SP_CRANE)) continue;
+    const SrStreetPropInfo *in = &k_props[kind];
+    float size = SR_MAX(in->w, in->d) * 0.5f + 1.0f;
+    for (int tries = 0; tries < 40; tries++) {
+      uint64_t h = hash(c, block, 11, (uint32_t)(piece * 64 + tries));
+      float x = kerbs[0].x0 + 1.0f + (float)(h % 7800u) / 100.0f,
+            z = kerbs[0].z0 + 1.0f + (float)((h >> 16) % 7800u) / 100.0f;
+      bool ok = !in_building(c, b, x, z, size + 0.5f) && !at_door(c, b, x, z);
+      for (int k = 0; k < 4 && ok; k++) { /* beyond every walking lane */
+        float d = (x - kerbs[k].x0) * kerbs[k].nx + (z - kerbs[k].z0) * kerbs[k].nz;
+        ok = d > sr_walk_lane(kerbs[k].pavement) + 1.2f + size;
+      }
+      for (int q = 0; q < np && ok; q++)
+        ok = (x - placed[q][0]) * (x - placed[q][0]) + (z - placed[q][1]) * (z - placed[q][1]) >
+             (size + placed[q][2]) * (size + placed[q][2]);
+      if (!ok) continue;
+      push(out, &n, max, kind, SR_BAND_BUILDING, x, z, (float)(h >> 40 & 3u) * SR_PI / 2, h);
+      placed[np][0] = x;
+      placed[np][1] = z;
+      placed[np++][2] = size;
+      if (kind == sig) has_sig = true;
+      break;
+    }
+  }
+  if (!has_sig && sig == SR_SP_CRANE) { /* the crane straddles the widest pavement (it never blocks) */
+    int k = 0;
+    for (int q = 1; q < 4; q++)
+      if (kerbs[q].pavement > kerbs[k].pavement) k = q;
+    float a = kerbs[k].len * 0.5f;
+    push(out, &n, max, SR_SP_CRANE, SR_BAND_KERB, kerbs[k].x0 + kerbs[k].ax * a + kerbs[k].nx * 1.0f,
+         kerbs[k].z0 + kerbs[k].az * a + kerbs[k].nz * 1.0f, atan2f(kerbs[k].nx, kerbs[k].nz), hash(c, block, 12, 1));
+    has_sig = true;
+  }
+  for (int k = 0; k < 4 && !has_sig && n < max; k++) { /* the first free spot of the building band */
+    const Kerb *e = &kerbs[k];
+    if (e->pavement < KERB_BAND + BLDG_BAND + 1.0f) continue;
+    float off = e->pavement - BLDG_BAND * 0.5f;
+    for (int slot = 1; slot * 2.5f < e->len - 3.0f && !has_sig; slot++) {
+      float a = (float)slot * 2.5f, x = e->x0 + e->ax * a + e->nx * off, z = e->z0 + e->az * a + e->nz * off;
+      float half = k_props[sig].w * 0.5f + 0.3f;
+      bool ok = !at_door(c, b, x, z) && !in_building(c, b, x, z, 0.3f) &&
+                in_building(c, b, x + e->nx * (BLDG_BAND * 0.5f + 1.0f), z + e->nz * (BLDG_BAND * 0.5f + 1.0f), 0.0f);
+      for (int i = 0; i < n && ok; i++) /* clear of the props already there */
+        if (out[i].band == SR_BAND_BUILDING)
+          ok = (out[i].x - x) * (out[i].x - x) + (out[i].z - z) * (out[i].z - z) > (half + 0.8f) * (half + 0.8f);
+      if (!ok) continue;
+      push(out, &n, max, sig, SR_BAND_BUILDING, x, z, atan2f(-e->nx, -e->nz), hash(c, block, 12, (uint32_t)slot));
+      has_sig = true;
+    }
+  }
+  if (!has_sig && n < max) { /* last resort: at the west kerb (slim, so the walking lane stays clear) */
+    push(out, &n, max, sig, SR_BAND_KERB, kerbs[0].x0 + 0.6f, kerbs[0].z0 + 10.0f, atan2f(-kerbs[0].nx, -kerbs[0].nz),
+         hash(c, block, 12, 0));
+  }
+  /* under a highway: pillars along the street's middle, bulbs hanging from the deck, shanties */
+  if (b->highway) {
+    float st2 = (float)SR_STREET_CM / 200.0f;
+    for (int k = 0; k < 4 && n < max; k++) {
+      float px = (float)ox / 100.0f + 12.0f + 24.0f * (float)k, pz = (float)oy / 100.0f + st2;
+      push(out, &n, max, SR_SP_PILLAR, SR_BAND_ROAD, px, pz, 0, hash(c, block, 13, (uint32_t)k));
+      out[n - 1].variant = 0; /* a highway pillar: up to the deck */
+      if (t == SR_D_UNDERCITY && (hash(c, block, 14, (uint32_t)k) & 1u))
+        push(out, &n, max, SR_SP_SHANTY, SR_BAND_ROAD, px + 2.6f, pz, 0, hash(c, block, 15, (uint32_t)k));
+    }
+    for (int k = 0; k < 8 && n < max; k++)
+      push(out, &n, max, SR_SP_BULB, SR_BAND_ROAD, (float)ox / 100.0f + 6.0f + 12.0f * (float)k,
+           (float)oy / 100.0f + st2 + ((k & 1) ? 3.0f : -3.0f), 0, hash(c, block, 16, (uint32_t)k));
+  }
+  /* pillars of the elevated metro standing in this block's area */
+  for (int e = 0; e < c->metro_edge_count && n < max; e++) {
+    float pl[64][2];
+    int npl = sr_metro_pillars(c, e, pl, 64);
+    for (int k = 0; k < npl && n < max; k++)
+      if (sr_city_block_at(c, (int32_t)(pl[k][0] * 100.0f), (int32_t)(pl[k][1] * 100.0f)) == block) {
+        push(out, &n, max, SR_SP_PILLAR, SR_BAND_ROAD, pl[k][0], pl[k][1], 0,
+             hash(c, block, 17, (uint32_t)(e * 64 + k)));
+        out[n - 1].variant = 1; /* a metro pillar: up to the track */
+      }
   }
   /* burning barrels in the empty lots of the Barrens and the Undercity */
   if ((t == SR_D_BARRENS || t == SR_D_UNDERCITY) && b->building_count < 3) {
@@ -716,6 +820,82 @@ int sr_billboard_slots(const SrCity *c, int block, SrBillboardSlot *out, int max
                                  0,
                                  -1,
                                  (uint32_t)(h >> 20)};
+  }
+  return n;
+}
+
+/* ---- vertical layers ---------------------------------------------------------------------------- */
+
+static int tube_between(const SrCity *c, int i, int j, float y, SrSkywayTube *t) {
+  const SrBuilding *a = &c->buildings[i], *b = &c->buildings[j];
+  int32_t zo0 = SR_MAX(a->y0, b->y0), zo1 = SR_MIN(a->y1, b->y1), xo0 = SR_MAX(a->x0, b->x0),
+          xo1 = SR_MIN(a->x1, b->x1);
+  if (zo1 - zo0 >= 600 && (a->x1 <= b->x0 || b->x1 <= a->x0)) { /* facing along x */
+    const SrBuilding *w = a->x1 <= b->x0 ? a : b, *e = w == a ? b : a;
+    float zm = (float)(zo0 + zo1) / 200.0f;
+    *t = (SrSkywayTube){(float)w->x1 / 100.0f, zm - 2.0f, (float)e->x0 / 100.0f, zm + 2.0f, y, (int16_t)i, (int16_t)j};
+    return 1;
+  }
+  if (xo1 - xo0 >= 600 && (a->y1 <= b->y0 || b->y1 <= a->y0)) { /* facing along z */
+    const SrBuilding *nn = a->y1 <= b->y0 ? a : b, *s = nn == a ? b : a;
+    float xm = (float)(xo0 + xo1) / 200.0f;
+    *t = (SrSkywayTube){xm - 2.0f, (float)nn->y1 / 100.0f, xm + 2.0f, (float)s->y0 / 100.0f, y, (int16_t)i, (int16_t)j};
+    return 1;
+  }
+  return 0;
+}
+
+int sr_skyway_tubes(const SrCity *c, SrSkywayTube *out, int max) {
+  int n = 0;
+  for (int k = 0; k < c->skyway_count && n < max; k++) { /* the generator's skyways */
+    int a = c->skyways[k].a, b = c->skyways[k].b;
+    float y = SR_MAX(40.0f, (float)SR_MIN(c->buildings[a].height_cm, c->buildings[b].height_cm) / 100.0f * 0.5f);
+    n += tube_between(c, a, b, y, &out[n]);
+  }
+  for (int i = 0; i < c->building_count && n < max; i++) {
+    const SrBuilding *a = &c->buildings[i];
+    if (a->height_cm < 10000 || c->districts[c->blocks[a->block].district].type != SR_D_SPIRE) continue;
+    for (int j = i + 1; j < c->building_count && n < max; j++) {
+      const SrBuilding *b = &c->buildings[j];
+      if (b->height_cm < 10000 || c->districts[c->blocks[b->block].district].type != SR_D_SPIRE) continue;
+      float ax = (float)(a->x0 + a->x1) / 200.0f, az = (float)(a->y0 + a->y1) / 200.0f;
+      float bx = (float)(b->x0 + b->x1) / 200.0f, bz = (float)(b->y0 + b->y1) / 200.0f;
+      float d = sqrtf((ax - bx) * (ax - bx) + (az - bz) * (az - bz));
+      if (d < 40.0f || d > 90.0f) continue;
+      float y = SR_MAX(60.0f, SR_MIN(150.0f, (float)SR_MIN(a->height_cm, b->height_cm) / 100.0f * 0.45f));
+      n += tube_between(c, i, j, y, &out[n]);
+    }
+  }
+  return n;
+}
+
+void sr_metro_route(const SrCity *c, int edge, float pts[3][2]) {
+  const SrEdge *e = &c->metro_edges[edge];
+  int32_t ax, ay, bx, by;
+  sr_city_block_origin(c->stations[e->a].block, c->grid, &ax, &ay);
+  sr_city_block_origin(c->stations[e->b].block, c->grid, &bx, &by);
+  float st = (float)SR_STREET_CM / 200.0f; /* the middle of the street strips */
+  pts[0][0] = (float)ax / 100.0f + st;
+  pts[0][1] = (float)ay / 100.0f + st;
+  pts[1][0] = (float)bx / 100.0f + st;
+  pts[1][1] = pts[0][1];
+  pts[2][0] = pts[1][0];
+  pts[2][1] = (float)by / 100.0f + st;
+}
+
+int sr_metro_pillars(const SrCity *c, int edge, float out[][2], int max) {
+  float p[3][2];
+  sr_metro_route(c, edge, p);
+  int n = 0;
+  for (int s = 0; s < 2; s++) {
+    float ax = p[s][0], az = p[s][1], bx = p[s + 1][0], bz = p[s + 1][1];
+    float len = fabsf(ax - bx) + fabsf(az - bz);
+    int pillars = (int)(len / 32.0f);
+    for (int k = 1; k <= pillars && n < max; k++) {
+      float t = (float)k / (float)(pillars + 1);
+      out[n][0] = ax + (bx - ax) * t;
+      out[n++][1] = az + (bz - az) * t;
+    }
   }
   return n;
 }

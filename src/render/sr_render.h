@@ -356,6 +356,8 @@ typedef struct SrSceneCache {
   /* the gloom (sr_sky_mesh.c) */
   SrMesh sky, deck, deck_glow, halos, near_glow, silhouettes, sun;
   SrMesh beams, blimps, blimp_glow, distant, skyline_glow;
+  SrMesh vertical, trains; /* skyways and metro tracks (built once), trains (every frame) */
+  bool vertical_built;
   bool distant_built;
   SrBeacon *beacons;
   int nbeacons;
@@ -418,6 +420,15 @@ SrColor sr_lamp_color(SrDistrictType t);
 
 /* The cached street mesh of a block at the current detail level. */
 SrMesh *sr_scene_street(SrSceneCache *s, const SrCity *c, int block);
+/* Vertical layers (sr_vertical_mesh.c). */
+void sr_build_highway(const SrCity *c, int block, SrMesh *m);
+void sr_build_highway_traffic(const SrCity *c, SrVec3 eye, float time_s, SrMesh *out);
+void sr_build_skyways(const SrCity *c, SrMesh *m);
+void sr_build_metro_tracks(const SrCity *c, SrMesh *m);
+/* Where the train between a metro edge's stations is at time t, from the timetable. */
+bool sr_metro_train_pos(const SrCity *c, int edge, int64_t t, SrVec3 *pos, SrVec3 *dir);
+int sr_build_trains(const SrCity *c, int64_t t, SrVec3 eye, SrMesh *out);
+
 /* Props of a block, cached (for sprites and lights around the camera). */
 const SrStreetProp *sr_scene_props(SrSceneCache *s, const SrCity *c, int block, int *n);
 

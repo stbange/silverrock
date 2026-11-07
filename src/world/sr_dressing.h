@@ -115,6 +115,15 @@ typedef enum SrStreetPropKind {
   SR_SP_FLAG,
   SR_SP_HOLOTREE,
   SR_SP_FIRE_ESCAPE, /* on a side wall: x/z is the wall foot, yaw faces out */
+  SR_SP_VENDROW,     /* a row of vending machines (commercial) */
+  SR_SP_MARQUEE,     /* a club entrance with chasing lights and a queue rope (entertainment) */
+  SR_SP_KIOSK,       /* a corner kiosk (residential) */
+  SR_SP_TANK,        /* a storage tank on an empty lot (industrial) */
+  SR_SP_CRANE,       /* a gantry crane (docks) */
+  SR_SP_GLOWTREE,    /* a glowing tree on a lawn (campus) */
+  SR_SP_SHANTY,      /* a shanty of boxes and tarps (undercity) */
+  SR_SP_BULB,        /* a bulb hanging under a highway deck */
+  SR_SP_PILLAR,      /* a highway pillar */
   SR_SP_COUNT
 } SrStreetPropKind;
 
@@ -140,8 +149,10 @@ typedef struct SrStreetPropInfo {
 } SrStreetPropInfo;
 
 const SrStreetPropInfo *sr_street_prop_info(int kind);
+/* The signature prop of a district type: it occurs in that district's blocks and nowhere else. */
+int sr_district_signature(SrDistrictType t);
 
-#define SR_MAX_BLOCK_PROPS 160
+#define SR_MAX_BLOCK_PROPS 192
 
 /* All props of a block in a fixed order (deterministic for the seed); returns the count. */
 int sr_dressing_block(const SrCity *c, int block, SrStreetProp *out, int max);
@@ -153,6 +164,24 @@ float sr_walk_lane(float pavement_m);
 /* True when a solid prop of the block covers the point (metres). */
 bool sr_dressing_blocks(const SrCity *c, float x, float z);
 uint64_t sr_dressing_digest(const SrCity *c);
+
+/* ---- vertical layers ---------------------------------------------------------------------------- */
+
+/* A glass tube between two Spire towers: x0..x1 by z0..z1, from y to y + 4 m. */
+typedef struct SrSkywayTube {
+  float x0, z0, x1, z1, y;
+  int16_t a, b; /* the linked buildings */
+} SrSkywayTube;
+#define SR_MAX_TUBES 48
+/* Skyways between Spire towers over 100 m tall that stand 40 to 90 m apart and face each other. */
+/* Also the generator's skyways (tallest towers of neighbouring blocks) where their faces overlap. */
+int sr_skyway_tubes(const SrCity *c, SrSkywayTube *out, int max);
+
+#define SR_METRO_Y 18.0f /* the elevated track's height */
+/* The route of a metro edge along the street centre lines: start, corner and end (x, z), metres. */
+void sr_metro_route(const SrCity *c, int edge, float pts[3][2]);
+/* The pillars under a metro edge's track, every 32 m (x, z); returns how many. */
+int sr_metro_pillars(const SrCity *c, int edge, float out[][2], int max);
 
 /* ---- billboards ---------------------------------------------------------------------------------- */
 

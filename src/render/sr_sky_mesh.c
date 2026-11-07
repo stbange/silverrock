@@ -23,6 +23,7 @@ void sr_sky_prepare(SrSceneCache *s, const SrCity *c) {
   s->sky_seed = c->seed + 1;
   for (int i = 0; i < 16; i++) s->prop_cache[i].used = 0; /* another city: forget its props */
   s->distant_built = false;
+  s->vertical_built = false;
   s->skyline_built = false;
   free(s->beacons);
   int cap = c->building_count * 3 + c->factions.corp_count + c->grid * c->grid + 8;

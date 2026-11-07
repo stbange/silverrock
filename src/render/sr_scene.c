@@ -205,10 +205,7 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
                0, (s - st) / st, 1, white, SR_LAYER_ASPHALT, 0, 1);
   sr_mesh_quad(m, sr_v3(x0 + st, 0.12f, z0 + s), sr_v3(x0 + s, 0.12f, z0 + s), sr_v3(x0 + s, 0.12f, z0 + st),
                sr_v3(x0 + st, 0.12f, z0 + st), 0, 0, (s - st) / 4, (s - st) / 4, pal->ground, SR_LAYER_SIDEWALK, 0, 1);
-  if (b->highway) { /* elevated highway deck overhead */
-    sr_mesh_box(m, sr_v3(x0, 11.0f, z0 + 2), sr_v3(x0 + s, 12.0f, z0 + st - 2), shade(pal->ground, 80),
-                SR_LAYER_CONCRETE, 0.2f, 0);
-  }
+  if (b->highway) sr_build_highway(c, blk, m); /* elevated highway deck overhead */
   for (int i = 0; i < b->building_count; i++) {
     int bi = b->first_building + i;
     const SrBuilding *bd = &c->buildings[bi];
@@ -650,7 +647,7 @@ void sr_scene_free(SrSceneCache *s) {
   sr_mesh_free(&s->air);
   sr_mesh_free(&s->grid);
   sr_mesh_free(&s->host);
-  SrMesh *sky2[] = {&s->beams, &s->blimps, &s->blimp_glow, &s->distant, &s->skyline_glow};
+  SrMesh *sky2[] = {&s->beams, &s->blimps, &s->blimp_glow, &s->distant, &s->skyline_glow, &s->vertical, &s->trains};
   for (size_t i = 0; i < sizeof sky2 / sizeof sky2[0]; i++) sr_mesh_free(sky2[i]);
   SrMesh *gloom[] = {&s->sky,         &s->deck, &s->deck_glow, &s->halos, &s->near_glow,
                      &s->silhouettes, &s->sun,  &s->wet,       &s->fronts};
@@ -778,6 +775,14 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   f->ambient[0] = pal->ambient.r / 255.0f * sky.ambient * 0.65f;
   f->ambient[1] = pal->ambient.g / 255.0f * sky.ambient * 0.65f;
   f->ambient[2] = pal->ambient.b / 255.0f * sky.ambient * 0.65f;
+  int under = sr_city_block_at(c, (int32_t)(p->pos.x * 100.0f), (int32_t)(p->pos.z * 100.0f));
+  if (under >= 0 && c->blocks[under].highway && p->pos.y < 11.0f) { /* under the highway deck it is darker */
+    int32_t hox, hoy;
+    sr_city_block_origin(under, c->grid, &hox, &hoy);
+    float dz = p->pos.z - (float)hoy / 100.0f;
+    if (dz >= 2.0f && dz <= (float)SR_STREET_CM / 100.0f - 2.0f)
+      for (int k = 0; k < 3; k++) f->ambient[k] *= 0.6f;
+  }
   f->daylight = sky.daylight;
   f->time_s = (float)sr_time_of_day(t) + (float)(g->steps % 60) / 60.0f;
   f->hour = (float)sr_time_of_day(t) / 3600.0f;
@@ -985,6 +990,17 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   }
   sr_build_stack_smoke(c, p->pos, f->time_s, &s->wet);
   sr_build_holo_ads(c, &s->ads, p->pos, f->time_s, &s->wet);
+  sr_build_highway_traffic(c, p->pos, f->time_s, &s->wet);
+  if (!s->vertical_built) { /* skyways and the elevated metro */
+    sr_mesh_clear(&s->vertical);
+    sr_build_skyways(c, &s->vertical);
+    sr_build_metro_tracks(c, &s->vertical);
+    s->vertical_built = true;
+  }
+  add_draw(f, &s->vertical, SR_PASS_WORLD, p->pos);
+  sr_mesh_clear(&s->trains);
+  sr_build_trains(c, t, p->pos, &s->trains);
+  add_draw(f, &s->trains, SR_PASS_WORLD, p->pos);
   add_draw(f, &s->wet, SR_PASS_GLOW, p->pos);
 }
 

@@ -223,6 +223,94 @@ static void prop_mesh(SrMesh *m, const SrStreetProp *p, SrDistrictType t, float 
       }
       break;
     }
+    case SR_SP_VENDROW: {
+      static const SrColor glow[3] = {{40, 200, 255, 255}, {255, 60, 140, 255}, {255, 210, 60, 255}};
+      for (int k = 0; k < 3; k++) {
+        float ox = -1.1f + 1.1f * (float)k;
+        pbox(m, p, g, sr_v3(ox - 0.5f, 0, -0.4f), sr_v3(ox + 0.5f, 2.0f, 0.4f), (SrColor){60, 60, 66, 255},
+             SR_LAYER_METAL, 0);
+        pbox(m, p, g + 0.5f, sr_v3(ox - 0.4f, 0, 0.4f), sr_v3(ox + 0.4f, 1.3f, 0.42f), glow[(k + p->variant) % 3],
+             SR_LAYER_BASE_FIRST, 220);
+      }
+      break;
+    }
+    case SR_SP_MARQUEE: { /* a canopy edged with bulbs over a club door, a rope for the queue */
+      pbox(m, p, g + 3.0f, sr_v3(-1.5f, 0, -1.0f), sr_v3(1.5f, 0.25f, 1.0f), (SrColor){120, 20, 80, 255},
+           SR_LAYER_WHITE, 60);
+      SrAtlasCell bulbs = sr_ad_cell(SR_LAYER_ADS, SR_AD_BULBS);
+      SrVec3 o = sr_v3(p->x, g + 3.0f, p->z);
+      float cy = cosf(p->yaw), sy = sinf(p->yaw);
+      SrVec3 a = sr_v3(o.x - cy * 1.5f + sy * 1.02f, o.y, o.z + sy * 1.5f + cy * 1.02f);
+      SrVec3 b = sr_v3(o.x + cy * 1.5f + sy * 1.02f, o.y, o.z - sy * 1.5f + cy * 1.02f);
+      int first = m->nv;
+      sr_mesh_quad(m, a, b, sr_v3(b.x, b.y + 0.25f, b.z), sr_v3(a.x, a.y + 0.25f, a.z), bulbs.u0, bulbs.v1,
+                   bulbs.u0 + (bulbs.u1 - bulbs.u0) * 3.0f, bulbs.v0, (SrColor){255, 220, 140, 255}, bulbs.layer, 255,
+                   0);
+      for (int v = first; v < m->nv; v++) m->v[v].pad = (uint8_t)(0xC0u | (h & 63u)); /* chasing lights (motion) */
+      for (int k = 0; k < 4; k++)
+        pbox(m, p, g, sr_v3(-1.2f + 0.8f * (float)k - 0.04f, 0, 1.6f),
+             sr_v3(-1.2f + 0.8f * (float)k + 0.04f, 0.9f, 1.68f), (SrColor){200, 180, 60, 255}, SR_LAYER_METAL, 0);
+      pbox(m, p, g + 0.8f, sr_v3(-1.2f, 0, 1.62f), sr_v3(1.2f, 0.06f, 1.66f), (SrColor){160, 20, 40, 255},
+           SR_LAYER_WHITE, 0);
+      break;
+    }
+    case SR_SP_KIOSK:
+      pbox(m, p, g, sr_v3(-1.1f, 0, -1.0f), sr_v3(1.1f, 2.4f, 1.0f), (SrColor){70, 90, 80, 255}, SR_LAYER_METAL, 0);
+      pbox(m, p, g + 0.9f, sr_v3(-0.9f, 0, 1.0f), sr_v3(0.9f, 1.0f, 1.03f), (SrColor){240, 200, 130, 255},
+           SR_LAYER_BASE_FIRST, 150);
+      pbox(m, p, g + 2.4f, sr_v3(-1.3f, 0, -1.2f), sr_v3(1.3f, 0.2f, 1.4f), (SrColor){150, 40, 40, 255}, SR_LAYER_WHITE,
+           0);
+      break;
+    case SR_SP_TANK: /* an octagonal tank: two crossed boxes and a ladder */
+      pbox(m, p, g, sr_v3(-3.0f, 0, -1.25f), sr_v3(3.0f, 8.0f, 1.25f), (SrColor){130, 130, 120, 255},
+           SR_LAYER_TRIM_FIRST + 1, 0);
+      pbox(m, p, g, sr_v3(-1.25f, 0, -3.0f), sr_v3(1.25f, 8.0f, 3.0f), (SrColor){125, 125, 116, 255},
+           SR_LAYER_TRIM_FIRST + 1, 0);
+      pbox(m, p, g, sr_v3(-2.2f, 0, -2.2f), sr_v3(2.2f, 8.0f, 2.2f), (SrColor){128, 128, 118, 255},
+           SR_LAYER_TRIM_FIRST + 1, 0);
+      pbox(m, p, g, sr_v3(2.9f, 0, -0.2f), sr_v3(3.1f, 8.4f, 0.2f), dark, SR_LAYER_METAL, 0);
+      pbox(m, p, g + 8.0f, sr_v3(-0.2f, 0, -0.2f), sr_v3(0.2f, 0.5f, 0.2f), (SrColor){255, 40, 40, 255}, SR_LAYER_WHITE,
+           220);
+      break;
+    case SR_SP_CRANE: { /* a gantry: two legs, a beam and a boom out over the water */
+      SrColor yellow = {190, 150, 40, 255};
+      for (int k = 0; k < 2; k++) {
+        float lx = k ? 4.5f : -4.5f;
+        pbox(m, p, g, sr_v3(lx - 0.5f, 0, -1.6f), sr_v3(lx + 0.5f, 30.0f, -0.6f), yellow, SR_LAYER_METAL, 0);
+        pbox(m, p, g, sr_v3(lx - 0.5f, 0, 0.6f), sr_v3(lx + 0.5f, 30.0f, 1.6f), yellow, SR_LAYER_METAL, 0);
+      }
+      pbox(m, p, g + 30.0f, sr_v3(-5.2f, 0, -1.8f), sr_v3(5.2f, 2.0f, 1.8f), yellow, SR_LAYER_METAL, 0);
+      pbox(m, p, g + 30.5f, sr_v3(-0.8f, 0, 1.8f), sr_v3(0.8f, 1.2f, 22.0f), yellow, SR_LAYER_METAL, 0);
+      pbox(m, p, g + 32.0f, sr_v3(-0.3f, 0, -0.3f), sr_v3(0.3f, 0.4f, 0.3f), (SrColor){255, 40, 40, 255},
+           SR_LAYER_WHITE, 230);
+      pbox(m, p, g + 18.0f, sr_v3(-0.03f, 0, 14.0f), sr_v3(0.03f, 12.5f, 14.06f), dark, SR_LAYER_WHITE,
+           0); /* the cable */
+      break;
+    }
+    case SR_SP_GLOWTREE:
+      pbox(m, p, g, sr_v3(-0.12f, 0, -0.12f), sr_v3(0.12f, 2.2f, 0.12f), (SrColor){70, 60, 50, 255}, SR_LAYER_WHITE, 0);
+      pbox(m, p, g + 2.0f, sr_v3(-1.1f, 0, -1.1f), sr_v3(1.1f, 1.8f, 1.1f), (SrColor){60, 220, 150, 255},
+           SR_LAYER_TRIM_FIRST + 4, 150);
+      break;
+    case SR_SP_SHANTY: {
+      static const SrColor tarp[3] = {{40, 80, 130, 255}, {130, 60, 40, 255}, {90, 100, 60, 255}};
+      pbox(m, p, g, sr_v3(-1.5f, 0, -1.2f), sr_v3(1.5f, 2.0f, 1.2f), (SrColor){90, 80, 70, 255},
+           SR_LAYER_TRIM_FIRST + 1, 0);
+      pbox(m, p, g + 2.0f, sr_v3(-1.7f, 0, -1.4f), sr_v3(1.7f, 0.15f, 1.6f), tarp[p->variant % 3], SR_LAYER_WHITE, 0);
+      pbox(m, p, g + 1.0f, sr_v3(-0.3f, 0, 1.2f), sr_v3(0.3f, 0.5f, 1.24f), (SrColor){255, 190, 110, 255},
+           SR_LAYER_WHITE, 200);
+      break;
+    }
+    case SR_SP_BULB:
+      pbox(m, p, g + 10.4f, sr_v3(-0.02f, 0, -0.02f), sr_v3(0.02f, 0.6f, 0.02f), dark, SR_LAYER_WHITE, 0);
+      pbox(m, p, g + 10.2f, sr_v3(-0.15f, 0, -0.15f), sr_v3(0.15f, 0.25f, 0.15f), (SrColor){255, 200, 120, 255},
+           SR_LAYER_WHITE, 255);
+      break;
+    case SR_SP_PILLAR:
+      if (p->variant != 1) /* metro pillars are part of the track mesh */
+        pbox(m, p, g, sr_v3(-0.7f, 0, -0.7f), sr_v3(0.7f, 11.0f, 0.7f), (SrColor){110, 110, 112, 255},
+             SR_LAYER_CONCRETE, 0);
+      break;
     default: break;
   }
 }
@@ -276,8 +364,25 @@ static void street_surface(const SrCity *c, int blk, SrMesh *m) {
     float ax = sides[i].x + (i < 2 ? lane : dir * 12.0f), az = sides[i].z + (i < 2 ? dir * 12.0f : lane);
     decal_q(m, ax, ye, az, 1.6f, 3.0f, sides[i].yaw + (dir > 0 ? SR_PI : 0.0f), SR_DECAL_ARROW, paint);
   }
-  /* stains and cracks, more in poor districts */
   SrDistrictType t = c->districts[c->blocks[blk].district].type;
+  if (t == SR_D_CAMPUS || t == SR_D_SPIRE) { /* lawns on campus; glowing lines across Spire plazas */
+    float pav[4];
+    sr_block_pavements(c, blk, pav);
+    float ix0 = lx0 + sr_walk_lane(pav[0]) + 1.5f, iz0 = lz0 + sr_walk_lane(pav[1]) + 1.5f;
+    float ix1 = lx1 - sr_walk_lane(pav[2]) - 1.5f, iz1 = lz1 - sr_walk_lane(pav[3]) - 1.5f;
+    if (t == SR_D_CAMPUS && ix1 > ix0 && iz1 > iz0)
+      sr_mesh_quad(m, sr_v3(ix0, 0.13f, iz1), sr_v3(ix1, 0.13f, iz1), sr_v3(ix1, 0.13f, iz0), sr_v3(ix0, 0.13f, iz0), 0,
+                   0, (ix1 - ix0) * 0.2f, (iz1 - iz0) * 0.2f, (SrColor){40, 90, 50, 255}, SR_LAYER_TRIM_FIRST + 4, 0,
+                   0);
+    if (t == SR_D_SPIRE)
+      for (int li = 0; li < 4; li++) {
+        float zz = lz0 + 6.0f + (lz1 - lz0 - 12.0f) * (float)li / 3.0f;
+        sr_mesh_quad(m, sr_v3(lx0 + 2.0f, 0.13f, zz + 0.08f), sr_v3(lx1 - 2.0f, 0.13f, zz + 0.08f),
+                     sr_v3(lx1 - 2.0f, 0.13f, zz - 0.08f), sr_v3(lx0 + 2.0f, 0.13f, zz - 0.08f), 0, 0, 1, 1,
+                     (SrColor){90, 200, 255, 255}, SR_LAYER_WHITE, 160, 0);
+      }
+  }
+  /* stains and cracks, more in poor districts */
   int n = t == SR_D_SPIRE || t == SR_D_CAMPUS ? 2 : t == SR_D_BARRENS || t == SR_D_UNDERCITY ? 12 : 6;
   for (int i = 0; i < n; i++) {
     uint64_t h = sr_mix64(c->seed ^ ((uint64_t)blk << 20) ^ (uint64_t)(i * 7919));
@@ -414,6 +519,20 @@ int sr_block_prop_lights(const SrCity *c, int blk, SrLight *out, int max) {
       case SR_SP_STALL: col = (SrColor){255, 150, 60, 255}; break;
       case SR_SP_SHRINE: col = (SrColor){255, 160, 70, 255}; break;
       case SR_SP_HOLOTREE: col = (SrColor){90, 255, 200, 255}; break;
+      case SR_SP_VENDROW: col = (SrColor){120, 160, 255, 255}; break;
+      case SR_SP_MARQUEE:
+        y = 3.2f;
+        r = 12.0f;
+        col = (SrColor){255, 200, 120, 255};
+        break;
+      case SR_SP_KIOSK: col = (SrColor){255, 200, 130, 255}; break;
+      case SR_SP_GLOWTREE: col = (SrColor){60, 230, 150, 255}; break;
+      case SR_SP_SHANTY: col = (SrColor){255, 180, 100, 255}; break;
+      case SR_SP_BULB:
+        y = 10.0f;
+        r = 10.0f;
+        col = (SrColor){255, 190, 110, 255};
+        break;
       default: break;
     }
     l->pos = sr_v3(px, y, pz);
