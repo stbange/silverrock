@@ -21,11 +21,29 @@ does not feel like a place:
 - **The texture array is full.** The home sign shows the wrong icon, and no room is left for new
   materials.
 
+**The vision.** The city is always somehow dark. Nights are long and days are short: about 19 of
+24 hours are night, and a grey half-light comes for about three hours around noon, framed by short
+dawns and dusks with a red smear low under the clouds. Days are overcast under dark, heavy clouds,
+so there is never much light except the neon. It nearly always rains, and fog is always present.
+The player sees one or two blocks, and beyond that only neon halos glowing through the fog. The mood
+is gloomy, and the detail goes where the player is: the near street.
+
 This change brings the city up to the art direction in `docs/concept/01-game-design.md` §6.5, §6.6
 and §16 before M6 adds content. M6's content (new districts and set pieces) then builds on the kits
 this change introduces. Roadmap position: after the playability pass, before **M6**.
 
 ## What Changes
+
+- **The gloom.**
+  - A light cycle with 19 hours of night, dawn 10:00–11:00, a dark overcast day 11:00–14:00 and dusk
+    14:00–15:00. The sun is never seen, and the sky never outshines the neon.
+  - A climate with rain about 90 % of the time, fog always, and visibility of 60–200 m (was
+    110–400 m).
+  - Neon that glows through the fog: halos for logos, billboards, crowns and beacons up to three
+    times the visibility distance.
+  - The Pall as a low, heavy cloud deck that swallows the tallest towers.
+  - The Sunrise ending becomes the only time the clouds break and the rain stops.
+  - A brightness setting, so the gloom stays playable on dark screens.
 
 - **Render foundations.**
   - The texture array grows to 64 layers, with atlases for icons and sprites.
@@ -54,12 +72,12 @@ this change introduces. Roadmap position: after the playability pass, before **M
     multiply when the corp wins.
   - LED tickers that show the latest headline, flickering broken neon, and wanted posters at high
     Heat.
-- **Sky and horizon.**
-  - The Pall as a cloud ceiling lit from below by the districts.
-  - Searchlights sweeping from the corporate towers, and advertising blimps.
-  - A low-detail "distant city" that fills the space between the streamed chunks and the skyline,
-    and a skyline with lit windows and blinking beacons.
-- **Weather.**
+- **Sky details.**
+  - Searchlights cutting up into the clouds from the corporate towers, and advertising blimps
+    just under them.
+  - Building silhouettes in the fog, and a low-detail distant city and skyline for the rare long
+    views from rooftops.
+- **Wet streets.** (Phase 3, right after the gloom, since the street is nearly always wet.)
   - Neon reflections on wet ground, and puddles.
   - Rain splashes, drips under awnings, and denser rain tinted by nearby lights.
   - Ground mist, a smog tint, a green tint during acid-rain advisories, and steam that thickens in
@@ -99,7 +117,9 @@ None.
   motion, detail settings; modified rain, signage, skyline and night lighting.
 - `city-generation`: building shape grammar and street dressing, derived from the seed without
   changing the city digest.
-- `world-environment`: the Pall overhead and the look of each weather type.
+- `world-environment`: the light cycle (long nights, short grey days, dawn and dusk), the rainy and
+  foggy climate, the Pall as a cloud deck, and the look of each weather type.
+- `story-campaign`: the Sunrise ending is the only time the clouds break and the sun is seen.
 - `news-media`: billboards that follow the board, and tickers in the street.
 
 ## Impact
@@ -112,6 +132,8 @@ None.
     grading.
   - A new file `src/world/sr_dressing.c` holds the facade grammar and prop placement. The game
     layer uses the same data for collision.
+- **Gameplay:** the clock, schedules and rent keep the 24-hour day. Guards already cap their sight at
+  45 m, so stealth does not change. The balance bands and playtests are re-run to confirm this.
 - **Saves and seeds:** unchanged. Everything is derived from the existing city data with hashes, so
   `SR_GEN_VERSION`, the city digest and the save format stay as they are.
 - **Tests:**

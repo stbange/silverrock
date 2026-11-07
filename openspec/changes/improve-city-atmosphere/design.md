@@ -14,6 +14,28 @@ The city is drawn from `SrCity`:
 
 This design keeps that pipeline and adds detail around it.
 
+## Vision: a gloomy city
+
+The city is always dark, wet and close.
+
+- **Nights are long and days are short.** Out of 24 hours, about 19 are night. A grey half-light
+  comes for about three hours around noon, framed by short dawns and dusks. The dawns and dusks are
+  the most beautiful moments in the game: a red and orange smear low on the horizon, under the
+  clouds. Nobody sees the sun itself.
+- **Days are overcast under dark, heavy clouds.** Even at noon the street is dimmer than a neon
+  sign. Neon, windows, lamps and headlights are the main light sources at every hour.
+- **It nearly always rains, and there is always fog.** The player sees one or two blocks, rarely
+  more. Through the fog, distant neon shows as coloured halos: a corporate logo, a billboard, a red
+  beacon on a tower.
+- **The mood is gloomy, not empty.** Short sight lines make the near street the whole world, so the
+  detail goes where the player is: shopfronts, props, signs, puddles, steam and reflections.
+
+This vision shapes every decision below. D16–D18, at the end, cover the light cycle, the climate and neon
+through fog. The rule that wins any conflict: **at every hour, outside the Sunrise ending, the
+brightest and most saturated things on screen are artificial lights.**
+
+The clock, opening hours, shifts and rent keep the 24-hour day. Only the light changes.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -22,10 +44,12 @@ This design keeps that pipeline and adds detail around it.
   - buildings that differ from their neighbours;
   - props on the pavement;
   - signs and adverts;
-  - a sky with something in it;
-  - a horizon that is not a black slot.
+  - a low cloud deck overhead;
+  - fog at the end of the street, with neon halos glowing through it.
 - A screenshot tells the district from its shapes and props, not only its colour.
-- Rain, fog and smog each look different.
+- It is night most of the time, with short grey days and coloured dawns and dusks. Neon is always
+  the strongest light.
+- Rain, fog and smog each look different, and the street nearly always looks wet.
 - Everything stays procedural and deterministic from the seed, with no art assets.
 - Seeds, saves and the city digest do not change.
 - Phones keep 30 FPS (95th percentile) on the benchmark route, and desktops keep 60 FPS.
@@ -214,21 +238,27 @@ collision, the crowd and navigation therefore need no change.
 
 ### D8 — Sky, Pall and horizon (V6)
 
-- **The Pall.** A tessellated ceiling at 380 m above the city, made of 32 × 32 vertices:
-  - It uses the scrolling noise layer.
-  - Each vertex is lit by the emissive density of the district below it, so it glows magenta over
-    the Strip, cyan over the Spire and dull orange over Industrial.
-  - It drifts with the weather's wind. It is hidden during the Sunrise ending.
+- **The Pall as a low cloud deck.** A tessellated ceiling 220–300 m above the city, made of
+  32 × 32 vertices. The tallest Spire towers vanish into it.
+  - It uses the scrolling noise layer, in two layers that drift at different speeds with the
+    weather's wind, so the clouds look heavy and in motion.
+  - At night, each vertex is lit by the emissive density of the district below it, so the deck
+    glows magenta over the Strip, cyan over the Spire and dull orange over Industrial.
+  - By day it is dark slate grey, never white (D16). At dawn and dusk its underside picks up the
+    red glow near the horizon.
+  - It is hidden during the Sunrise ending.
 - **Searchlights.** 2–4 per HQ and 6 in the Spire: additive cones in the glow pass, sweeping on
   hashed phases. They brighten when the owner's alert is raised.
 - **Blimps.** 2–3 per city, on slow loops 150–250 m up, with emissive screens showing adverts (D7)
   and blinking navigation lights.
-- **Distant city.** A static mesh for the whole city with one box per building, at a coarse height,
-  using the lit-window shader, the crown colour and beacons. It is drawn in the no-fog pass beyond
-  the streamed chunks and faded with distance. The streamed chunks overdraw it, and fog hides the
-  seam. This removes the dark slot at the end of each street.
-- **Skyline.** The skyline ring gets lit windows (the D3 shader at lower contrast), blinking red
-  beacons on its tallest segments, and the Pall glow above it.
+- **Distant city.** With visibility at 60–200 m (D17), the street ends in fog, not in a skyline.
+  The dark slot is replaced by fog with neon halos glowing through it (D18).
+  - Just beyond the fog end, the tallest buildings show as flat silhouettes one shade darker than
+    the fog, for depth.
+  - The full distant-city mesh (one box per building with lit windows and beacons) is drawn only
+    from rooftops and in overcast weather, when visibility passes 150 m.
+- **Skyline.** The skyline ring stays for the rare clear views from high places. It gets lit
+  windows, blinking red beacons and the cloud glow above it. In normal weather the fog hides it.
 
 ### D9 — Wet streets and weather looks (V7)
 
@@ -246,6 +276,9 @@ collision, the crowd and navigation therefore need no change.
     the nearest light.
   - Splashes on the ground near the camera, drips along awning edges, and a sheet of rain visible in
     lamp cones.
+- **Climate.** Rain falls about 90 % of the time, and fog is always present (D17), so reflections,
+  puddles and splashes are part of the normal look, not a special case. That is why this phase
+  comes early.
 - **Fog types.**
   - Fog becomes thicker near the ground: the shader adds density below 3 m, scaled by district
     (Undercity, Docks) and weather (fog).
@@ -332,6 +365,8 @@ All animation is a function of game time, so screenshots in tests are reproducib
 - `street_detail`: low, medium or high. The default is high on desktop and medium on phones.
 - `reflections`: on or off.
 - `pixel_lighting`: on or off.
+- `brightness`: −2 to +2, a gamma lift on the dark tones in the post pass, for dark screens and
+  bright rooms. It does not change fog distance.
 
 **Effect of `street_detail`:**
 
@@ -363,8 +398,9 @@ applies.
 
 ### D15 — Verification
 
-**Reference views.** The platform tests render 12 fixed views on 3 seeds:
-- street level in six district types;
+**Reference views.** The platform tests render 14 fixed views on 3 seeds:
+- street level in six district types, at night;
+- the same street at dawn, at noon and at dusk;
 - an alley;
 - under a highway;
 - a rooftop;
@@ -380,7 +416,13 @@ sheets go into the review.
 - the 1 % most saturated pixels come from emissive surfaces;
 - the mean colours of the six district views are separated by at least the existing palette
   distance;
-- the horizon rule (no empty column below the horizon) still holds.
+- the horizon rule (no empty column below the horizon) still holds, with fog and halos counting as
+  filled;
+- **noon stays dark:** the mean luminance of the noon view is at most 1.6× the night view, and its
+  most saturated pixels still come from emissive surfaces;
+- **dusk has colour:** the upper band of the dusk view toward the west has a mean hue in the red to
+  orange range;
+- **neon through fog:** in the fog view, at least one halo lies beyond the fog end.
 
 **Unit tests:**
 - facade variety (the variety rule in D3 over 5 seeds);
@@ -389,11 +431,80 @@ sheets go into the review.
 - clear walking lanes (no solid prop in the clear lane);
 - the layer map guard (D1);
 - the advert state follows the board (scandal → vandalised);
-- the sprite and glow pass building.
+- the sprite and glow pass building;
+- the light cycle: night for 19 of 24 hours, sky luminance at most 0.25 at every hour, and the
+  dawn and dusk bands at the right times and on the right sides;
+- the climate: rain in at least 85 % of weather slots over a simulated year, and visibility never
+  above 200 m outside the Sunrise ending.
 
 **Golden images** are updated once per phase, after a manual look.
 
 **Benchmark.** The benchmark route on high and low stays inside the frame-rate budget.
+
+### D16 — The light cycle: long nights, short grey days
+
+`sr_sky_at(t, pall_removed)` keeps the 24-hour clock but changes the light over the day:
+
+| Time | Phase | Sky and light |
+|---|---|---|
+| 15:00–10:00 | Night (19 h) | As today, with the lower ambient from D12 |
+| 10:00–11:00 | Dawn | A red-orange band low in the east, under the clouds, rising and fading; the cloud underside warms; ambient rises slowly |
+| 11:00–14:00 | Grey day | Dark slate overcast; ambient at most 1.6× the night value; fog turns grey-blue; neon stays on |
+| 14:00–15:00 | Dusk | A deep red band low in the west, the longest and most saturated colour of the day, then blue-black |
+
+- **The sun is never seen.** At dawn and dusk a soft brighter smear sits low in the band, behind the
+  clouds, never a disc. The horizon band is a gradient on the sky dome and on the fog colour toward
+  that side, so it shows through fog as a coloured glow.
+- **Limits.** The mean sky luminance stays at or below 0.25 at every hour. In the darkest pixels of
+  a street view, the city's own lights keep the upper hand.
+- **Weather.** Rain and fog dim the cycle further. In a downpour the dawn band is barely a tint,
+  and on the rare overcast dry evenings the dusk is at its strongest.
+- **Lights.** Street lamps, signs and shopfronts stay on all day. Lit windows follow the hours
+  (D3). Offices are busiest during the grey day.
+- **Sunrise ending.** It is the only time the clouds break: the rain stops, the fog lifts and a
+  clear blue sky with the sun appears, as today.
+- **Lore.** The Pall thins for a few grey hours around noon, but nobody has seen the sun in forty
+  years. The concept document is updated to match: §3, §6.6 and the tagline.
+
+### D17 — The climate: nearly constant rain, always fog
+
+`sr_weather_slot` changes its weights and `sr_weather_visibility` its distances:
+
+| Weather | Weight now → new | Rain | Visibility now → new |
+|---|---|---|---|
+| Overcast (was "clear") | 35 → 6 | none, streets still wet | 400 → 200 m |
+| Drizzle | 25 → 34 | 0.35 | 300 → 150 m |
+| Downpour | 15 → 22 | 1.0 | 160 → 90 m |
+| Fog | 12 → 18 | 0.2 (misty drizzle) | 110 → 60 m |
+| Smog alert | 8 → 10 | 0.15 | 200 → 110 m |
+| Acid-rain advisory | 5 → 10 | 0.6 | 220 → 120 m |
+
+- Rain then falls in about 94 % of weather slots, and the street is never dry: wetness is at least
+  0.6.
+- "Clear" is renamed "overcast" in the HUD. Its internal name stays, so saves and scripts are
+  unaffected.
+- **Gameplay check.** Guard perception already caps sight at 45 m, so stealth does not change. The
+  crowd's umbrellas follow the rain, so most people carry one. A task re-runs the balance bands and
+  the playtests to confirm nothing else depends on the weather mix.
+- **Performance.** A shorter fog end means fewer streamed chunks in view. The budget saved goes to
+  street detail (D13).
+
+### D18 — Neon through fog
+
+The fog hides the city, but not its lights.
+
+- **Emissive fog.** In the shader, the fog factor for emissive surfaces becomes
+  `f *= 1 − 0.85 × emissive` (from 0.7), so signs keep their colour deep into the fog.
+- **Fog halos.** Large emissives beyond the fog end are drawn as soft coloured halo sprites in the
+  glow pass, up to 3× the visibility distance:
+  - HQ holo-logos, neon crowns, billboards, blade signs, tower beacons and searchlight cones.
+  - A halo grows and softens with distance, and its brightness falls with the square of the
+    distance in fog lengths.
+  - At most 48 halos are drawn, the brightest first.
+- **Halos near the camera.** Lamps and signs inside the fog get a faint halo too, the classic glow
+  of lights in wet air. Its size and strength follow fog density and rain.
+- **Result.** The end of every street is a wall of fog with coloured smudges in it, some of them
+  slowly rotating logos. That replaces the dark slot.
 
 ## Risks / Trade-offs
 
@@ -409,6 +520,10 @@ sheets go into the review.
 - **Collision changes.** Solid props could block paths or doors.
   - *Mitigation:* solid props stay out of the clear lane and the door zone, and the
     connectivity validator also runs with the props.
+- **Too dark to play.** A gloomy city can hide the way and the places the player looks for.
+  - *Mitigation:* places of interest keep the brightest signs, fog halos mark landmarks far away,
+    the HUD's district name and waypoints stay, and a brightness setting (D13) lifts the dark
+    tones without lifting the fog.
 - **Golden image churn.** Every phase changes the reference images.
   - *Mitigation:* one update per phase, reviewed with the before/after sheet.
 
@@ -418,6 +533,11 @@ sheets go into the review.
 - Golden images and the reference views are regenerated per phase with `SR_UPDATE_GOLDENS=1`.
 
 ## Open Questions
+
+- The tagline changed from "The sun hasn't risen in forty years" to "Nobody has seen the sun in
+  forty years", since dawns and dusks now show light without the sun. Confirm the wording.
+- Should the grey day move with the seasons (longer in summer)? The default is no: a fixed short day
+  is easier to plan around.
 
 - Should billboards also show the player's own exploits (a "Who is the runner?" campaign) once
   notoriety is high? This is suggested for M6.

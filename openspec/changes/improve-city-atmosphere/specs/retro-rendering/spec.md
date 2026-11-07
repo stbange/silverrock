@@ -16,17 +16,18 @@ gets its own lights, and emissive surfaces SHALL remain visible through fog.
 - **THEN** the draws of that block use the 8 lights nearest to it, not the 8 nearest to the chunk centre
 
 ### Requirement: Skyline horizon
-The horizon SHALL always show a city skyline silhouette with lit windows and beacons, and a low-detail distant city
-SHALL fill the space between the streamed chunks and the skyline, so that the world never ends in an empty
-background.
+The view SHALL never end in an empty background: in fog, the end of the street SHALL show fog with neon halos and
+silhouettes of tall buildings, and in rare long views from high places or in overcast weather a skyline with lit
+windows and beacons and a low-detail distant city SHALL fill the horizon.
 
 #### Scenario: No void at the horizon
-- **WHEN** reference views from city edges and high rooftops are rendered
+- **WHEN** reference views from city edges and high rooftops are rendered in overcast weather
 - **THEN** every pixel column below the horizon line contains skyline or scene geometry
 
 #### Scenario: No dark slot at the end of the street
 - **WHEN** the camera looks down a long straight street at street level
-- **THEN** the pixels at the vanishing point show distant city geometry, not the fog colour alone
+- **THEN** the pixels around the vanishing point show neon halos or building silhouettes in the fog, not a flat fog
+  colour alone
 
 ### Requirement: Rain and wet surfaces
 Rain SHALL be rendered as particles that do not fall under cover and that splash on the ground near the camera, and
@@ -97,9 +98,19 @@ pass that does not write depth and fades with fog.
 - **WHEN** a glow sprite is beyond the fog end distance
 - **THEN** it adds no colour to the image
 
+### Requirement: Neon through fog
+Emissive surfaces SHALL keep most of their colour inside the fog, large emissives (headquarters logos, neon crowns,
+billboards, blade signs, tower beacons and searchlights) SHALL show as soft coloured halos up to three times the
+visibility distance, and lamps and signs SHALL carry a faint halo in wet air.
+
+#### Scenario: Neon halos through fog
+- **WHEN** a headquarters logo or a billboard is between one and three visibility distances away in fog
+- **THEN** a halo in its colour is drawn at its position, and none is drawn beyond three visibility distances
+
 ### Requirement: Contrast and emphasis
 Lit windows SHALL stay below full white, ambient light SHALL leave walls darker than the neon on them, and bloom
-SHALL apply to emissive surfaces only, so that neon is the brightest and most saturated part of a night scene.
+SHALL apply to emissive surfaces only, so that neon is the brightest and most saturated part of the scene at every
+hour, by day as well as by night.
 
 #### Scenario: No white walls of windows
 - **WHEN** the reference views at night are rendered
@@ -183,12 +194,16 @@ with some neon flickering or broken, so that the city moves when the player stan
 - **THEN** between 4 % and 12 % of them change brightness at least once, and the others stay steady
 
 ### Requirement: Detail settings
-The settings SHALL offer street detail (low, medium, high), reflections and per-pixel lighting, with defaults by device
+The settings SHALL offer street detail (low, medium, high), reflections, per-pixel lighting and brightness, with defaults by device
 class, and SHALL keep chunk meshes, near sprites, draws and frame lights within the budgets for the chosen level.
 
 #### Scenario: Detail setting
 - **WHEN** street detail is lowered from high to low
 - **THEN** every prop that carries a light is still drawn, and the number of other props drops to about a third
+
+#### Scenario: Brightness lifts the dark
+- **WHEN** the brightness setting is raised from 0 to +2
+- **THEN** the darkest tones of the image get brighter while the fog distance and the emissive colours stay the same
 
 #### Scenario: Atmosphere within budget
 - **WHEN** the benchmark route is built at each detail level

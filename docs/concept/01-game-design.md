@@ -1,12 +1,12 @@
 # Silverrock — Game Design Concept
 
-> *The sun hasn't risen in forty years. Rent is due on Friday.*
+> *Nobody has seen the sun in forty years. Rent is due on Friday.*
 
 | | |
 |---|---|
 | **Working title** | Silverrock |
 | **Genre** | First-person cyberpunk RPG / immersive sim in a procedurally generated, living city |
-| **Look** | Retro low-poly 3D (late-90s style), low-resolution rendering, neon-lit permanent night |
+| **Look** | Retro low-poly 3D (late-90s style), low-resolution rendering, neon-lit, rain-soaked, near-permanent night |
 | **Platforms** | Windows, Linux, Web (desktop browsers, and mobile browsers with touch controls) |
 | **Technology** | C17, SDL3, OpenGL 3.3 Core / OpenGL ES 3.0 (WebGL 2), Emscripten |
 | **Players** | Single-player |
@@ -60,13 +60,14 @@ Every feature is checked against these five pillars.
 ## 3. Setting — life under the Pall
 
 - Forty years ago a geoengineering programme meant to cool an overheating planet overshot. A persistent
-  stratospheric aerosol layer — **the Pall** — now covers the region. Daylight never reaches the streets. The sky is
-  a dull ceiling that glows with the reflected light of the city itself.
+  stratospheric aerosol layer — **the Pall** — now covers the region. For a few grey hours around noon a dim half-light seeps through, and at
+  dawn and dusk a red smear shows low under the clouds, but nobody has seen the sun itself. The rest of the time
+  the sky is a low, heavy ceiling that glows with the reflected light of the city.
 - The corporations that built the Pall maintain it, and sell back what it took: UV booths, vitamin supplements,
   synthfood grown under lamps, "daylight apartments" with simulated sun panels. Light is a commodity, and neon is its
   cheapest form.
-- The city still keeps time — clocks, shifts, opening hours — but it is **always night**. People talk about
-  "first shift" instead of morning. The world clock drives routines, not the sky.
+- The city still keeps time — clocks, shifts, opening hours — but it is **nearly always night**: about 19 of
+  every 24 hours. People talk about "first shift" instead of morning, and "the grey" for the short dim day. The world clock drives routines, not the sky.
 - Each seed creates a **city-state** (for example *Port Vesper*, *New Kessling* or *Saint Orrin*) with its own
   coastline, districts, corporations, gangs and government. Officially, a mayor and council rule it. In practice, it
   belongs to whoever is winning the corporate game this quarter.
@@ -215,9 +216,15 @@ Entertainment and Undercity district. The others are optional.
 
 ### 6.6 Environment
 
-- **Permanent night.** No sun, ever (with one exception, see §9.4). The Pall glows faintly over the brightest
-  districts.
-- **Weather** changes deterministically over time: clear, drizzle, downpour, fog, smog alert, acid-rain advisory.
+- **Long nights, short grey days.** Night lasts about 19 hours. Dawn comes around 10:00, a dark overcast day
+  ("the grey") lasts until about 14:00, and dusk ends by 15:00. Dawns and dusks show a red-orange band low under
+  the clouds; the sun itself is never seen (with one exception, see §9.4). Even at noon, the neon is brighter than
+  the sky.
+- **The Pall** hangs as a low, heavy cloud deck that swallows the tallest towers. At night it glows with the colours
+  of the districts below; by day it is dark slate grey.
+- **Rain and fog almost always.** It rains about 90 % of the time and there is always some fog. The player sees one
+  or two blocks; beyond that, only neon halos glow through the murk: a corporate logo, a billboard, a red beacon.
+- **Weather** changes deterministically over time: overcast, drizzle, downpour, fog, smog alert, acid-rain advisory.
   Weather affects visibility, sound, NPC behaviour (umbrellas, sheltering under awnings, empty streets) and stealth.
 
 ### 6.7 Example city — seed `VESPER-7Q4K-2NMA`
@@ -451,7 +458,7 @@ Five endings, depending on the scenario and the player's choices:
 | **Defector** | You flip at the decisive moment. A new patron, a new target on your back. |
 | **Burn the Board** | You leak everything through the Matrix and the media. Chaos; no one wins; the street remembers. |
 | **Kingmaker** | You play everyone and walk away as the fixer everyone needs. |
-| **Sunrise** | You bring down the Pall. The only time in the game the sun rises over the city. |
+| **Sunrise** | You bring down the Pall. The only time in the game the clouds break, the rain stops and the sun is seen over the city. |
 
 After the ending the player can keep playing the sandbox in the changed city.
 
@@ -810,7 +817,8 @@ Below the city grid lie ruins of pre-Pall networks: unstable, uncharted, home to
 - Optional retro artefacts — vertex snapping (wobble) and affine texture warping — each with its own toggle.
 - Emissive surfaces (neon, windows, holo-ads, landmark logos) glow through fog and rain. Cheap low-res bloom.
 - Wet streets: puddle reflections of neon, rain streaks, steam from vents.
-- An always-present skyline silhouette with lit windows on the horizon — the city never ends in a void.
+- The city never ends in a void: at street level the fog swallows the distance and neon halos glow through it;
+  from rooftops on rare clearer nights, a skyline with lit windows and beacons fills the horizon.
 - Optional CRT and VHS post effects.
 
 ### 16.2 Telling places apart

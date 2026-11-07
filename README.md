@@ -93,7 +93,7 @@ and spec deltas (22 capabilities, 206 requirements, 310 scenarios). Implemented 
 | M4 The Matrix | [`add-matrix`](openspec/changes/add-matrix) | matrix-navigation, matrix-world-link |
 | M5 Corporate Chess | [`add-corporate-chess`](openspec/changes/add-corporate-chess) | faction-simulation, city-politics, corporate-market, news-media, story-campaign |
 | Playability pass | [`improve-playability`](openspec/changes/improve-playability) | job-system, faction-simulation, character-progression, player-life, law-and-heat, story-campaign, news-media |
-| City atmosphere (proposed) | [`improve-city-atmosphere`](openspec/changes/improve-city-atmosphere) | retro-rendering, city-generation, world-environment, news-media |
+| City atmosphere (proposed) | [`improve-city-atmosphere`](openspec/changes/improve-city-atmosphere) | retro-rendering, city-generation, world-environment, news-media, story-campaign |
 
 Validate the specs:
 
