@@ -12,7 +12,7 @@ alone refers to a scenario in this change's deltas, and "D1"…"D18" refer to de
 - [x] 1.3 Additive glow pass (`SR_PASS_GLOW`): blending on, no depth write, faded by fog (spec: "Glows fade with fog")
 - [x] 1.4 Contrast: ambient −35 %, remove the window highlight boost, bloom keyed on emissive (spec: "No white walls of windows", "Neon is the brightest")
 - [x] 1.5 `u_time` and `u_hour` shader uniforms; per-vertex seed in the `pad` byte (D3, D11)
-- [x] 1.6 Reference views: 14 views × 3 seeds in the platform tests, `SR_ATMOS_SHOTS=1` writes `docs/screenshots/atmosphere/`; before sheet (spec: D15)
+- [x] 1.6 Reference views: 16 views × 3 seeds in the platform tests, `SR_ATMOS_SHOTS=1` writes `docs/screenshots/atmosphere/`; before sheet (spec: D15)
 - [x] 1.7 Image metrics in the platform tests: clipped pixels, emissive saturation, district distinctness, horizon (spec: "No white walls of windows", "Neon is the brightest", "Districts apart by shape and colour")
 
 ## 2. The gloom: light cycle, climate and neon through fog (about 1 week)
@@ -95,12 +95,12 @@ alone refers to a scenario in this change's deltas, and "D1"…"D18" refer to de
 
 ## 11. Lighting, settings and verification (about 1 week)
 
-- [ ] 11.1 Light pool decals on the ground and wall splashes for lamps, shopfronts, signs, vending and fires (spec: "Lamp light pools on the pavement")
-- [ ] 11.2 Per-block draws within one ring of the camera; tessellated ground near the camera (spec: "Night lighting near the camera")
-- [ ] 11.3 Optional per-pixel lighting for the ground and lower facades on desktop
-- [ ] 11.4 Colour grading per district, blended across borders; vignette; chromatic offset with VHS (spec: "Grading follows the district")
-- [ ] 11.5 Settings: street detail, reflections, pixel lighting, brightness; defaults by device; budgets from D13 (spec: "Detail setting", "Atmosphere within budget", "Brightness lifts the dark")
-- [ ] 11.6 Benchmark route on high and low inside the frame-rate budget on desktop and the phone profile (spec: "Desktop benchmark route", "Dynamic resolution engages")
-- [ ] 11.7 Update goldens; after sheet; refresh `docs/screenshots/m5` as `docs/screenshots/atmosphere`; write `docs/reviews/visuals-<date>-after.md` against V1–V13 and the vision
+- [x] 11.1 Light pool decals on the ground and wall splashes for lamps, shopfronts, signs, vending and fires (spec: "Lamp light pools on the pavement")
+- [x] 11.2 Per-block draws within one ring of the camera; tessellated ground near the camera (spec: "Night lighting near the camera")
+- [x] 11.3 Optional per-pixel lighting for the ground and lower facades on desktop
+- [x] 11.4 Colour grading per district, blended across borders; vignette; chromatic offset with VHS (spec: "Grading follows the district")
+- [x] 11.5 Settings: street detail, reflections, pixel lighting, brightness; defaults by device; budgets from D13 (spec: "Detail setting", "Atmosphere within budget", "Brightness lifts the dark")
+- [x] 11.6 Benchmark route on high and low inside the frame-rate budget on desktop and the phone profile (spec: "Desktop benchmark route", "Dynamic resolution engages")
+- [x] 11.7 Update goldens; after sheet; refresh `docs/screenshots/m5` as `docs/screenshots/atmosphere`; write `docs/reviews/visuals-<date>-after.md` against V1–V13 and the vision
 - [ ] 11.8 Manual look on desktop and phone (six districts, dawn, noon, dusk, rain, fog, smog, under a highway, a rooftop); record in `tests/manual-verification.md`
-- [ ] 11.9 Coverage at 95 % or above; traceability covers every scenario of this change
+- [x] 11.9 Coverage at 95 % or above; traceability covers every scenario of this change

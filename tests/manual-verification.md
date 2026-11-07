@@ -4,6 +4,7 @@ Scenarios that need reference hardware or a human eye. Format (read by `tools/sp
 `- capability: Scenario name -- why it cannot be fully automated, and how it is checked`
 
 - retro-rendering: Desktop benchmark route -- needs the reference desktop GPU (Iris Xe class); CI renders on software GL where frame times are meaningless. Checked per milestone by playing the benchmark route with the frame-time overlay; the automated part (draw-call and triangle counts, dynamic resolution) is unit-tested.
+- world-environment: Night at noon -- superseded by improve-city-atmosphere: noon is now a short, dark overcast day. Its scenarios "Night at midnight", "Noon stays dark" and "Short days" are tested in tests/unit/test_world.c.
 
 ## Results log
 
@@ -47,3 +48,17 @@ Automated proxy: `bash tests/balance/run_playtests.sh` (16 runs of 26 weeks, 12 
 | Linux or Windows desktop | reach Heat 4 or a patron hunt and survive one ambush (fight, flee or pay) | not yet run | | |
 | Linux or Windows desktop | reach Act III, take the climax set piece, crown a king or pick another ending, continue playing | not yet run | | |
 | Phone (touch) | Jobs tab by tap (select, then tap again to accept), abandon a job, read the Story tab log | not yet run | | |
+
+## City atmosphere (improve-city-atmosphere 11.8)
+
+Automated proxy: the reference views and image metrics in `tests/platform/test_platform.c`
+(`test_atmosphere_*`, run in CI on Mesa llvmpipe), the budget test in `tests/unit/test_atmos.c`, and
+the sheets in `docs/screenshots/atmosphere/`. The manual look judges the mood and the frame rate on
+real hardware.
+
+| Target | Check | Result | Date | Tester |
+|---|---|---|---|---|
+| Linux or Windows desktop | walk six districts at night in rain; dawn, noon and dusk; fog and smog; under a highway; a rooftop | not yet run | | |
+| Linux or Windows desktop | benchmark route at street detail high: 60 FPS | not yet run | | |
+| Android phone | the same walk at the phone defaults (medium detail): 30 FPS on the 95th percentile | not yet run | | |
+| iPhone (home-screen app) | the same walk; brightness setting at +2 in a bright room | not yet run | | |

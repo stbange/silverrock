@@ -30,9 +30,10 @@ flowchart LR
 
 M0–M5 are implemented, followed by the playability pass (`improve-playability`) after the first long
 playtests: jobs from the faction game, a slower rise, money that matters, real danger and a paced story.
-Next, before M6, is `improve-city-atmosphere`, proposed after a visual review
-(`docs/reviews/visuals-2026-11-07.md`): facades, silhouettes, street dressing, signs and adverts, the Pall, wet
-streets, district kits and motion. Open items are the manual checks on Windows hardware and real phones (one exit demo per
+After it came `improve-city-atmosphere` (`docs/reviews/visuals-2026-11-07-after.md`): long nights and short
+grey days, rain and fog with neon glowing through, facades, silhouettes, street dressing, signs and adverts that
+follow the board, the Pall as a cloud deck, wet streets, district kits, highways, skyways, the elevated metro and
+motion. Open items are the manual checks on Windows hardware and real phones (one exit demo per
 milestone), including a full campaign on two seeds for M5. Unit, platform, scenario, browser and gate tests all pass in CI; line coverage is 98.2 %. The
 web build is deployed to GitHub Pages from the default branch.
 

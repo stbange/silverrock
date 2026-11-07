@@ -398,7 +398,7 @@ applies.
 
 ### D15 — Verification
 
-**Reference views.** The platform tests render 14 fixed views on 3 seeds:
+**Reference views.** The platform tests render 16 fixed views on 3 seeds:
 - street level in six district types, at night;
 - the same street at dawn, at noon and at dusk;
 - an alley;
@@ -406,7 +406,9 @@ applies.
 - a rooftop;
 - rain at night;
 - fog;
-- smog.
+- smog;
+- an aerial view over the roofs;
+- a shopping street's fronts (signs and blade signs).
 
 The images are written to `docs/screenshots/atmosphere/` with `SR_ATMOS_SHOTS=1`, and before/after
 sheets go into the review.
