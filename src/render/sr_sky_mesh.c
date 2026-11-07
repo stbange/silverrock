@@ -22,6 +22,8 @@ void sr_sky_prepare(SrSceneCache *s, const SrCity *c) {
   if (s->sky_seed == c->seed + 1 && s->beacons) return;
   s->sky_seed = c->seed + 1;
   for (int i = 0; i < 16; i++) s->prop_cache[i].used = 0; /* another city: forget its props */
+  s->distant_built = false;
+  s->skyline_built = false;
   free(s->beacons);
   int cap = c->building_count * 3 + c->factions.corp_count + c->grid * c->grid + 8;
   s->beacons = (SrBeacon *)calloc((size_t)cap, sizeof *s->beacons);
@@ -229,4 +231,172 @@ void sr_build_sun(SrVec3 eye, const SrBillboard *bb, SrMesh *out) {
   SrVec3 p = sr_v3_add(eye, sr_v3_scale(dir, 900.0f));
   sr_mesh_sprite(out, bb, p, 160, 160, SR_SPR_GLOW, SR_SPRITE_FACING, 0, (SrColor){255, 230, 170, 255}, 255);
   sr_mesh_sprite(out, bb, p, 60, 60, SR_SPR_FLARE, SR_SPRITE_FACING, 0, (SrColor){255, 250, 230, 255}, 255);
+}
+
+/* ---- sky details ------------------------------------------------------------------------------- */
+
+/* A beam from base along dir, facing the camera around its axis, apex at the base. */
+static void beam(SrMesh *m, SrVec3 eye, SrVec3 base, SrVec3 dir, float len, float w0, float w1, SrColor col) {
+  SrVec3 top = sr_v3_add(base, sr_v3_scale(dir, len));
+  SrVec3 mid = sr_v3_scale(sr_v3_add(base, top), 0.5f);
+  SrVec3 side = sr_v3_cross(dir, sr_v3_sub(mid, eye));
+  float sl = sqrtf(side.x * side.x + side.y * side.y + side.z * side.z);
+  if (sl < 1e-4f) return;
+  side = sr_v3_scale(side, 1.0f / sl);
+  SrAtlasCell c = sr_atlas_cell(SR_LAYER_SPRITES, SR_SPR_CONE);
+  sr_mesh_quad(m, sr_v3_sub(base, sr_v3_scale(side, w0)), sr_v3_add(base, sr_v3_scale(side, w0)),
+               sr_v3_add(top, sr_v3_scale(side, w1)), sr_v3_sub(top, sr_v3_scale(side, w1)), c.u0, c.v1, c.u1, c.v0,
+               col, c.layer, 255, 0);
+}
+
+int sr_build_searchlights(const SrCity *c, SrVec3 eye, float time_s, float vis, uint32_t alert_mask, SrMesh *out) {
+  sr_mesh_clear(out);
+  int n = 0;
+  for (int f = 0; f < c->factions.corp_count; f++) {
+    int hq = c->factions.f[f].hq_building;
+    if (hq < 0) continue;
+    const SrBuilding *b = &c->buildings[hq];
+    float cx = (float)(b->x0 + b->x1) / 200.0f, cz = (float)(b->y0 + b->y1) / 200.0f, h = (float)b->height_cm / 100.0f;
+    float dx = cx - eye.x, dz = cz - eye.z, d = sqrtf(dx * dx + dz * dz);
+    float k = 1.0f / (1.0f + (d / vis) * (d / vis) * 0.35f); /* the fog swallows far beams */
+    bool alert = (alert_mask >> f) & 1u;
+    float bright = (alert ? 0.5f : 0.22f) * k;
+    if (bright < 0.01f) continue;
+    SrColor col = sr_corp_color(c->factions.f[f].hue);
+    SrColor bc = {(uint8_t)(((float)col.r * 0.5f + 128.0f) * bright),
+                  (uint8_t)(((float)col.g * 0.5f + 128.0f) * bright),
+                  (uint8_t)(((float)col.b * 0.5f + 128.0f) * bright), 255};
+    int beams = 2 + (int)(b->id % 3u);
+    for (int i = 0; i < beams; i++) {
+      float ph = (float)i * 2.1f + (float)f;
+      float sweep = time_s * (alert ? 0.9f : 0.35f) + ph;
+      float tilt = 0.35f + 0.2f * sinf(sweep * 0.7f);
+      SrVec3 dir = sr_v3_norm(sr_v3(cosf(sweep) * tilt, 1.0f, sinf(sweep) * tilt));
+      float base = SR_MIN(h + 1.0f, 210.0f); /* towers above the clouds light them from below */
+      float len = (262.0f - base) / dir.y;   /* up into the cloud deck */
+      beam(out, eye, sr_v3(cx + (float)(i % 2) * 4.0f - 2.0f, base, cz), dir, len, 0.8f, 18.0f, bc);
+      n++;
+    }
+  }
+  /* the neon-crowned towers sweep the clouds too */
+  int crowns = 0;
+  for (int i = 0; i < c->building_count && crowns < 6; i++) {
+    const SrBuilding *b = &c->buildings[i];
+    if (b->height_cm < 9000) continue;
+    float cx = (float)(b->x0 + b->x1) / 200.0f, cz = (float)(b->y0 + b->y1) / 200.0f;
+    float dx = cx - eye.x, dz = cz - eye.z, d = sqrtf(dx * dx + dz * dz);
+    if (d > 3.0f * vis) continue;
+    SrFacade f;
+    sr_facade_for(c, i, &f);
+    if (f.roof != SR_ROOF_NEON_CROWN) continue;
+    float k = 0.18f / (1.0f + (d / vis) * (d / vis) * 0.35f);
+    SrColor bc = {(uint8_t)(220.0f * k), (uint8_t)(230.0f * k), (uint8_t)(255.0f * k), 255};
+    float sweep = time_s * 0.3f + (float)i;
+    SrVec3 dir = sr_v3_norm(sr_v3(cosf(sweep) * 0.3f, 1.0f, sinf(sweep) * 0.3f));
+    float base = SR_MIN((float)b->height_cm / 100.0f + 1.0f, 210.0f);
+    beam(out, eye, sr_v3(cx, base, cz), dir, (262.0f - base) / dir.y, 0.6f, 14.0f, bc);
+    crowns++;
+    n++;
+  }
+  return n;
+}
+
+void sr_build_blimps(const SrCity *c, const SrAdContext *ads, SrVec3 eye, float time_s, const float fog[3],
+                     float fog_end, float vis, SrMesh *body, SrMesh *glow) {
+  sr_mesh_clear(body);
+  sr_mesh_clear(glow);
+  float cx = (float)c->grid * SR_BLOCK_CM / 200.0f, cz = cx;
+  int count = 2 + (int)(c->seed % 2u);
+  SrBillboard bb = sr_billboard(eye, 0, 0);
+  for (int i = 0; i < count; i++) {
+    float r = cx * (0.35f + 0.25f * (float)i), ang = time_s * 0.004f * (i % 2 ? -1.0f : 1.0f) + (float)i * 2.4f;
+    float y = 150.0f + 40.0f * (float)i;
+    SrVec3 p = sr_v3(cx + cosf(ang) * r, y, cz + sinf(ang) * r);
+    float yaw = -ang + (i % 2 ? -SR_PI / 2 : SR_PI / 2); /* nose along the loop */
+    float dx = p.x - eye.x, dz = p.z - eye.z, d = sqrtf(dx * dx + dz * dz);
+    float far = d <= fog_end ? 0.0f : SR_MIN(1.0f, (d - fog_end) / (2.0f * vis));
+    if (far >= 1.0f) continue;
+    SrColor hull = {(uint8_t)(50.0f + (fog[0] * 255.0f - 50.0f) * far),
+                    (uint8_t)(52.0f + (fog[1] * 255.0f - 52.0f) * far),
+                    (uint8_t)(60.0f + (fog[2] * 255.0f - 60.0f) * far), 255};
+    SrStreetProp frame = {0, 0, 0, 0, p.x, p.z, yaw};
+    (void)frame;
+    float cy = cosf(yaw), sy = sinf(yaw);
+    /* hull: three boxes, the middle one longest */
+    for (int k = 0; k < 3; k++) {
+      float len = k == 1 ? 34.0f : 24.0f, hh = k == 1 ? 9.0f : 7.0f, ww = k == 1 ? 9.0f : 7.0f;
+      sr_mesh_part(body, p, yaw, sr_v3(0, 0, 0), 0.0f, sr_v3(-ww / 2, -hh / 2, -len / 2),
+                   sr_v3(ww / 2, hh / 2, len / 2), hull, SR_LAYER_METAL, 0);
+    }
+    /* screens on both flanks with an advert */
+    SrBillboardSlot slot = {0};
+    slot.seed = (uint32_t)(c->seed >> (i * 5)) + (uint32_t)i * 977u;
+    SrAd ad = ads ? sr_ad_for_slot(ads, &slot, -1) : (SrAd){0, false, false};
+    if (ad.corp < 0) ad.corp = 0;
+    SrColor sc = sr_corp_color(c->factions.f[ad.corp].hue);
+    float k = 1.0f - far * 0.7f;
+    SrColor scr = {(uint8_t)((float)sc.r * k), (uint8_t)((float)sc.g * k), (uint8_t)((float)sc.b * k), 255};
+    SrAtlasCell lay = sr_ad_cell(SR_LAYER_ADS, (int)(slot.seed % SR_AD_LAYOUTS));
+    for (int side = -1; side <= 1; side += 2) {
+      float ox = (float)side * 4.6f;
+      SrVec3 a = sr_v3(p.x + cy * ox + sy * -11.0f, p.y - 3.0f, p.z - sy * ox + cy * -11.0f);
+      SrVec3 b = sr_v3(p.x + cy * ox + sy * 11.0f, p.y - 3.0f, p.z - sy * ox + cy * 11.0f);
+      if (side < 0) {
+        SrVec3 t = a;
+        a = b;
+        b = t;
+      }
+      sr_mesh_quad(body, a, b, sr_v3(b.x, b.y + 6.0f, b.z), sr_v3(a.x, a.y + 6.0f, a.z), lay.u0, lay.v1, lay.u1, lay.v0,
+                   scr, lay.layer, 230, 0);
+    }
+    /* navigation lights, blinking, and the screen's glow in the haze */
+    bool on = fmodf(time_s + (float)i * 0.4f, 1.6f) < 0.25f;
+    if (on) {
+      sr_mesh_sprite(glow, &bb, sr_v3(p.x + cy * 5.0f, p.y, p.z - sy * 5.0f), 4.0f, 4.0f, SR_SPR_GLOW, SR_SPRITE_FACING,
+                     0, (SrColor){(uint8_t)(255 * k), 30, 30, 255}, 255);
+      sr_mesh_sprite(glow, &bb, sr_v3(p.x - cy * 5.0f, p.y, p.z + sy * 5.0f), 4.0f, 4.0f, SR_SPR_GLOW, SR_SPRITE_FACING,
+                     0, (SrColor){30, (uint8_t)(255 * k), 60, 255}, 255);
+    }
+    SrColor halo = {(uint8_t)(scr.r / 3), (uint8_t)(scr.g / 3), (uint8_t)(scr.b / 3), 255};
+    sr_mesh_sprite(glow, &bb, sr_v3(p.x, p.y, p.z), 48.0f, 30.0f, SR_SPR_HALO, SR_SPRITE_FACING, 0, halo, 255);
+  }
+}
+
+void sr_build_distant_city(const SrCity *c, SrMesh *out) {
+  sr_mesh_clear(out);
+  for (int i = 0; i < c->building_count; i++) {
+    const SrBuilding *b = &c->buildings[i];
+    float h = (float)b->height_cm / 100.0f;
+    if (h < 14.0f) continue;
+    SrFacade f;
+    sr_facade_for(c, i, &f);
+    /* a little inside the real footprint, so the streamed chunks always win where both exist */
+    float x0 = (float)b->x0 / 100.0f + 0.4f, z0 = (float)b->y0 / 100.0f + 0.4f;
+    float x1 = (float)b->x1 / 100.0f - 0.4f, z1 = (float)b->y1 / 100.0f - 0.4f;
+    int first = out->nv;
+    sr_mesh_box(out, sr_v3(x0, 0, z0), sr_v3(x1, h - 0.5f, z1), (SrColor){f.tint[0], f.tint[1], f.tint[2], 255},
+                SR_LAYER_WINMOD_FIRST + SR_WIN_OFFICE, 0.15f, 0);
+    for (int v = first; v < out->nv; v++) out->v[v].pad = (uint8_t)(f.use << 6 | (f.seed & 63u));
+  }
+}
+
+void sr_build_skyline_glow(const SrCity *c, SrMesh *out) {
+  sr_mesh_clear(out);
+  float cx = (float)c->grid * SR_BLOCK_CM / 200.0f, cz = cx;
+  float radius = cx * 1.6f + 600.0f;
+  const int segments = 90;
+  SrColor glow = {70, 40, 90, 255}, none = {0, 0, 0, 255};
+  for (int i = 0; i < segments; i++) { /* the city's light caught in the clouds above the horizon */
+    float a0 = (float)i / segments * 2.0f * SR_PI, a1 = (float)(i + 1) / segments * 2.0f * SR_PI;
+    SrVec3 p0 = sr_v3(cx + cosf(a0) * radius, 120.0f, cz + sinf(a0) * radius);
+    SrVec3 p1 = sr_v3(cx + cosf(a1) * radius, 120.0f, cz + sinf(a1) * radius);
+    int nv = out->nv;
+    sr_mesh_quad(out, p1, p0, sr_v3(p0.x, 420.0f, p0.z), sr_v3(p1.x, 420.0f, p1.z), 0, 0, 1, 1, glow, SR_LAYER_WHITE,
+                 255, 0);
+    for (int k = 2; k < 4; k++) { /* fading upward */
+      out->v[nv + k].r = none.r;
+      out->v[nv + k].g = none.g;
+      out->v[nv + k].b = none.b;
+    }
+  }
 }

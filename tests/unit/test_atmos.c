@@ -830,6 +830,49 @@ static void test_signs_and_adverts(void) {
   sr_mesh_free(&m);
 }
 
+static void test_sky_details(void) {
+  SR_SPEC("world-environment", "Searchlights");
+  SR_SPEC("retro-rendering", "No void at the horizon");
+  SrGame *g = g_game;
+  const SrCity *c = g->city;
+  SrMesh m, glow;
+  sr_mesh_init(&m);
+  sr_mesh_init(&glow);
+  /* near an HQ: beams sweep up into the clouds, brighter while the corp is on alert */
+  int hq = c->factions.f[0].hq_building;
+  const SrBuilding *b = &c->buildings[hq];
+  SrVec3 eye = sr_v3((float)(b->x0 + b->x1) / 200.0f + 40.0f, 1.7f, (float)(b->y0 + b->y1) / 200.0f + 40.0f);
+  int calm = sr_build_searchlights(c, eye, 10.0f, 150.0f, 0u, &m);
+  SR_CHECK(calm >= 2);
+  float top = 0;
+  int calm_bright = 0;
+  for (int v = 0; v < m.nv; v++) {
+    top = SR_MAX(top, m.v[v].y);
+    calm_bright = SR_MAX(calm_bright, m.v[v].r + m.v[v].g + m.v[v].b);
+  }
+  SR_CHECK(top > 240.0f); /* into the cloud deck */
+  uint64_t d0 = sr_mesh_digest(&m);
+  sr_build_searchlights(c, eye, 13.0f, 150.0f, 0u, &m);
+  SR_CHECK(sr_mesh_digest(&m) != d0); /* they sweep */
+  sr_build_searchlights(c, eye, 10.0f, 150.0f, 1u, &m);
+  int alert_bright = 0;
+  for (int v = 0; v < m.nv; v++) alert_bright = SR_MAX(alert_bright, m.v[v].r + m.v[v].g + m.v[v].b);
+  SR_CHECK(alert_bright > calm_bright);
+  /* blimps under the clouds, with screens */
+  float fog[3] = {0.1f, 0.05f, 0.1f};
+  float cx = (float)c->grid * SR_BLOCK_CM / 200.0f;
+  sr_build_blimps(c, NULL, sr_v3(cx, 100.0f, cx), 0.0f, fog, 2000.0f, 2000.0f, &m, &glow);
+  SR_CHECK(m.nv > 0 && glow.nv > 0);
+  for (int v = 0; v < m.nv; v++) SR_CHECK(m.v[v].y > 120.0f && m.v[v].y < 260.0f);
+  /* the distant city: one box per tall building; the skyline's glow above the horizon */
+  sr_build_distant_city(c, &m);
+  SR_CHECK(m.nv > 20 * 20);
+  sr_build_skyline_glow(c, &glow);
+  SR_CHECK(glow.nv == 90 * 4);
+  sr_mesh_free(&m);
+  sr_mesh_free(&glow);
+}
+
 void suite_atmos(void) {
   g_game = sr_game_create();
   sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Atmos");
@@ -846,5 +889,6 @@ void suite_atmos(void) {
   SR_RUN(test_street_dressing);
   SR_RUN(test_props_collide_and_shops);
   SR_RUN(test_signs_and_adverts);
+  SR_RUN(test_sky_details);
   sr_game_destroy(g_game);
 }

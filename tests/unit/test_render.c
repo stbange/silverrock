@@ -175,7 +175,7 @@ static void test_scene_frame(void) {
   SR_CHECK(nofog >= 2); /* landmark logos, the cloud deck (and the skyline on clearer nights) skip the fog */
   SR_CHECK(s->landmarks.nv == g->city->factions.corp_count * 8);
   /* skyline: a closed ring of geometry around the city */
-  SR_CHECK(s->skyline.nv == 180 * 4);
+  SR_CHECK(s->skyline.nv >= 180 * 4); /* 180 segments, beacons on the tallest */
   float r0 = 0;
   for (int i = 0; i < s->skyline.nv; i++) {
     float dx = s->skyline.v[i].x - (float)g->city->grid * SR_BLOCK_CM / 200.0f;

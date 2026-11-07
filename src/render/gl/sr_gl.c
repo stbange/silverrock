@@ -717,6 +717,8 @@ static void scene_pass(SrGlBackend *b, const SrFrame *f, unsigned fbo, int iw, i
       continue; /* glows after the solid geometry */
     if (d->pass == SR_PASS_WORLD)
       pUniform2f(b->u_fogr, f->fog_start, f->fog_end);
+    else if (d->pass == SR_PASS_FAR)
+      pUniform2f(b->u_fogr, f->fog_end, f->fog_end * 3.5f);
     else
       pUniform2f(b->u_fogr, 1e6f, 2e6f);
     if (d->pass == SR_PASS_XRAY) pDisable(GL_DEPTH_TEST);

@@ -261,7 +261,8 @@ typedef enum SrPass {
   SR_PASS_XRAY,
   SR_PASS_GLOW,
   SR_PASS_HALO,
-  SR_PASS_SKY /* drawn first without depth writes, fully fogged: the sky dome takes the fog colour */
+  SR_PASS_SKY, /* drawn first without depth writes, fully fogged: the sky dome takes the fog colour */
+  SR_PASS_FAR  /* the distant city: fog stretched to three and a half times the fog end */
 } SrPass;
 
 typedef struct SrDraw {
@@ -354,6 +355,8 @@ typedef struct SrSceneCache {
   int view_chunks; /* radius in chunks */
   /* the gloom (sr_sky_mesh.c) */
   SrMesh sky, deck, deck_glow, halos, near_glow, silhouettes, sun;
+  SrMesh beams, blimps, blimp_glow, distant, skyline_glow;
+  bool distant_built;
   SrBeacon *beacons;
   int nbeacons;
   uint64_t sky_seed;
@@ -441,6 +444,16 @@ int sr_build_halos(const SrBeacon *b, int n, const SrBillboard *bb, float fog_en
 void sr_build_near_halos(const SrLight *l, int n, const SrBillboard *bb, float wet_air, SrMesh *out);
 /* Tall buildings just beyond the fog end as flat shapes one shade darker than the fog. */
 void sr_build_silhouettes(const SrCity *c, SrVec3 eye, float fog_end, const float fog[3], SrMesh *out);
+/* Searchlights from the HQs up into the clouds, brighter for corps on alert; returns the beams. */
+int sr_build_searchlights(const SrCity *c, SrVec3 eye, float time_s, float visibility, uint32_t alert_mask,
+                          SrMesh *out);
+/* Advertising blimps on slow loops just under the clouds (hull and screens, glows). */
+void sr_build_blimps(const SrCity *c, const SrAdContext *ads, SrVec3 eye, float time_s, const float fog[3],
+                     float fog_end, float visibility, SrMesh *body, SrMesh *glow);
+/* One box per building with lit windows, for rooftops and clearer nights. */
+void sr_build_distant_city(const SrCity *c, SrMesh *out);
+/* The city's light in the clouds above the skyline. */
+void sr_build_skyline_glow(const SrCity *c, SrMesh *out);
 /* The sun of the Sunrise ending. */
 void sr_build_sun(SrVec3 eye, const SrBillboard *bb, SrMesh *out);
 

@@ -1114,18 +1114,10 @@ static bool atmos_place(SrGame *g, const AtmosView *v) {
     g->player.pos = sr_v3(x0 + 8.0f, 75.0f, z0 + 8.0f);
     g->player.yaw = -SR_PI / 4;
     g->player.pitch = -0.5f;
-  } else { /* rooftop of the tallest building nearby, looking over the city */
-    const SrBlock *k = &c->blocks[blk];
-    const SrBuilding *top = &c->buildings[k->first_building]; /* the lowest roof above 12 m: the street shows */
-    for (int i = 1; i < k->building_count; i++) {
-      const SrBuilding *o = &c->buildings[k->first_building + i];
-      if (o->height_cm >= 1200 && (top->height_cm < 1200 || o->height_cm < top->height_cm)) top = o;
-    }
-    /* on the front corner, above the parapet, looking along the street below */
-    g->player.pos =
-        sr_v3((float)top->x1 / 100.0f - 0.6f, (float)top->height_cm / 100.0f + 2.6f, (float)top->y1 / 100.0f - 0.6f);
-    g->player.yaw = -SR_PI / 2 - 0.35f;
-    g->player.pitch = -0.32f;
+  } else { /* up on a roof at 40 m over the home corner, looking down the street to the skyline */
+    g->player.pos = sr_v3(x0 + 8.0f, 40.0f, z0 + 8.0f);
+    g->player.yaw = -SR_PI / 2 + 0.12f;
+    g->player.pitch = -0.3f;
   }
   return true;
 }

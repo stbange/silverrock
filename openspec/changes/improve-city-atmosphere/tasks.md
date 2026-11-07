@@ -72,10 +72,10 @@ alone refers to a scenario in this change's deltas, and "D1"…"D18" refer to de
 
 ## 8. Sky details (about 3–4 days)
 
-- [ ] 8.1 Searchlights from HQs and the Spire in the glow pass, cutting into the cloud deck, brighter on alert (spec: "Searchlights")
-- [ ] 8.2 Advertising blimps on loops just under the clouds, with screens and navigation lights
-- [ ] 8.3 Distant city mesh for rooftops and overcast weather above 150 m visibility (spec: "No void at the horizon")
-- [ ] 8.4 Skyline ring with lit windows, beacons and the cloud glow above it
+- [x] 8.1 Searchlights from HQs and the Spire in the glow pass, cutting into the cloud deck, brighter on alert (spec: "Searchlights")
+- [x] 8.2 Advertising blimps on loops just under the clouds, with screens and navigation lights
+- [x] 8.3 Distant city mesh for rooftops and overcast weather above 150 m visibility (spec: "No void at the horizon")
+- [x] 8.4 Skyline ring with lit windows, beacons and the cloud glow above it
 
 ## 9. District kits and vertical layers (about 1.5 weeks)
 

@@ -599,6 +599,11 @@ void sr_build_skyline(const SrCity *c, SrMesh *out) {
     SrVec3 p1 = sr_v3(cx + cosf(a1) * radius, -5, cz + sinf(a1) * radius);
     SrColor col = {18, 16, 26, 255};
     sr_mesh_quad(out, p1, p0, sr_v3(p0.x, h, p0.z), sr_v3(p1.x, h, p1.z), 0, 8, 2, 0, col, SR_LAYER_WIN_GLASS, 40, 0);
+    if (h > 200.0f) { /* a red beacon on the tallest towers of the skyline */
+      SrVec3 m = sr_v3((p0.x + p1.x) * 0.5f, h, (p0.z + p1.z) * 0.5f);
+      sr_mesh_quad(out, sr_v3(m.x - 2.0f, h, m.z), sr_v3(m.x + 2.0f, h, m.z), sr_v3(m.x + 2.0f, h + 4.0f, m.z),
+                   sr_v3(m.x - 2.0f, h + 4.0f, m.z), 0, 0, 1, 1, (SrColor){255, 40, 40, 255}, SR_LAYER_WHITE, 255, 0);
+    }
   }
 }
 
@@ -645,6 +650,8 @@ void sr_scene_free(SrSceneCache *s) {
   sr_mesh_free(&s->air);
   sr_mesh_free(&s->grid);
   sr_mesh_free(&s->host);
+  SrMesh *sky2[] = {&s->beams, &s->blimps, &s->blimp_glow, &s->distant, &s->skyline_glow};
+  for (size_t i = 0; i < sizeof sky2 / sizeof sky2[0]; i++) sr_mesh_free(sky2[i]);
   SrMesh *gloom[] = {&s->sky,         &s->deck, &s->deck_glow, &s->halos, &s->near_glow,
                      &s->silhouettes, &s->sun,  &s->wet,       &s->fronts};
   for (size_t i = 0; i < sizeof gloom / sizeof gloom[0]; i++) sr_mesh_free(gloom[i]);
@@ -863,8 +870,17 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
     sr_build_skyline(c, &s->skyline);
     s->skyline_built = true;
   }
-  if (w.visibility > 150.0f || p->pos.y > 40.0f) /* the skyline only shows on clearer nights or from up high */
+  bool clear_view = w.visibility > 150.0f || p->pos.y > 40.0f;
+  if (clear_view) { /* the skyline and the distant city only show on clearer nights or from up high */
     add_draw(f, &s->skyline, SR_PASS_NOFOG, p->pos);
+    if (!s->distant_built) {
+      sr_build_distant_city(c, &s->distant);
+      sr_build_skyline_glow(c, &s->skyline_glow);
+      s->distant_built = true;
+    }
+    add_draw(f, &s->distant, SR_PASS_FAR, p->pos);
+    if (!g->pall_removed) add_draw(f, &s->skyline_glow, SR_PASS_HALO, p->pos);
+  }
   sr_build_landmarks(c, (float)(g->steps) / 60.0f, &s->landmarks);
   for (int v = 0; v + 7 < s->landmarks.nv; v += 8) { /* logos dim with distance; their halos carry them */
     float dx = s->landmarks.v[v].x - p->pos.x, dz = s->landmarks.v[v].z - p->pos.z, d = sqrtf(dx * dx + dz * dz);
@@ -888,6 +904,19 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   } else if (sky.phase == SR_LIGHT_DAY) {
     sr_build_sun(p->pos, &bb, &s->sun);
     add_draw(f, &s->sun, SR_PASS_HALO, p->pos);
+  }
+  if (!g->pall_removed) { /* searchlights cut up into the clouds; blimps drift just under them */
+    uint32_t alert = 0;
+    for (int k = 0; k < c->factions.corp_count; k++) {
+      int hq = c->factions.f[k].hq_building;
+      if (g->chess.f[k].retaliate_against >= 0 || (hq >= 0 && sr_game_host_alert(g, hq) > 0)) alert |= 1u << k;
+    }
+    sr_build_searchlights(c, p->pos, f->time_s, w.visibility, alert, &s->beams);
+    add_draw(f, &s->beams, SR_PASS_HALO, p->pos);
+    sr_ads_context(&s->ads, &g->chess, c, t);
+    sr_build_blimps(c, &s->ads, p->pos, f->time_s, f->fog, f->fog_end, w.visibility, &s->blimps, &s->blimp_glow);
+    add_draw(f, &s->blimps, SR_PASS_NOFOG, p->pos);
+    add_draw(f, &s->blimp_glow, SR_PASS_HALO, p->pos);
   }
   f->halo_count = sr_build_halos(s->beacons, s->nbeacons, &bb, f->fog_end, w.visibility, &s->halos);
   add_draw(f, &s->halos, SR_PASS_HALO, p->pos);
