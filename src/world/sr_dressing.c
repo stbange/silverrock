@@ -307,7 +307,15 @@ int sr_dressing_block(const SrCity *c, int block, SrStreetProp *out, int max) {
       if (((h ^ (uint64_t)a) >> 7) % 3u == 0) out[n - 1].flags |= SR_SPF_STEAM;
     }
   }
-  /* puddles, more in poor districts; barrels in empty lots of the Barrens and Undercity */
+  /* burning barrels in the empty lots of the Barrens and the Undercity */
+  if ((t == SR_D_BARRENS || t == SR_D_UNDERCITY) && b->building_count < 3) {
+    for (int k = 0; k < 2 - (b->building_count > 1); k++) {
+      uint64_t h = sr_mix64(c->seed ^ ((uint64_t)block * 31u + (uint64_t)k));
+      float x = (float)ox / 100.0f + 22.0f + (float)(h % 50), z = (float)oy / 100.0f + 22.0f + (float)((h >> 16) % 50);
+      if (!in_building(c, b, x, z, 2.0f)) push(out, &n, max, SR_SP_BARREL, SR_BAND_BUILDING, x, z, 0, h);
+    }
+  }
+  /* puddles, more in poor districts */
   for (int i = 0; i < kit->puddles; i++) {
     uint64_t h = hash(c, block, 10, (uint32_t)i);
     float x = x0 + (float)(h % 9600u) / 100.0f, z = z0 + (float)((h >> 16) % 9600u) / 100.0f;

@@ -53,12 +53,12 @@ alone refers to a scenario in this change's deltas, and "D1"…"D18" refer to de
 
 ## 6. Street level (about 1–1.5 weeks)
 
-- [ ] 6.1 Ground-floor bands: shopfront, lobby, shutter, loading dock, stall front, blank with posters; POI door under the sign; closed shops shuttered (spec: "Shops at street level", "Closed shops are shuttered")
-- [ ] 6.2 Kerb faces and gutters; crosswalks, stop lines, lane arrows, manholes, drains, stains and cracks as decals (spec: "The pavement has a kerb")
-- [ ] 6.3 `sr_dressing_block`: prop table with per-district weights, kerb and building bands, clear lane; lamps every 24 m (spec: "Street furniture by district", "Lamps along every street", "The walking lane stays clear")
-- [ ] 6.4 Solid props in the game's collision query; connectivity validator run with props (spec: "Solid props block movement")
-- [ ] 6.5 Alleys in gaps of 4 m or more: dumpsters, fire escapes, a weak light, puddles, steam vent (spec: "Alleys")
-- [ ] 6.6 Overhead cables, lantern strings and laundry lines across narrow streets
+- [x] 6.1 Ground-floor bands: shopfront, lobby, shutter, loading dock, stall front, blank with posters; POI door under the sign; closed shops shuttered (spec: "Shops at street level", "Closed shops are shuttered")
+- [x] 6.2 Kerb faces and gutters; crosswalks, stop lines, lane arrows, manholes, drains, stains and cracks as decals (spec: "The pavement has a kerb")
+- [x] 6.3 `sr_dressing_block`: prop table with per-district weights, kerb and building bands, clear lane; lamps every 24 m (spec: "Street furniture by district", "Lamps along every street", "The walking lane stays clear")
+- [x] 6.4 Solid props in the game's collision query; connectivity validator run with props (spec: "Solid props block movement")
+- [x] 6.5 Alleys in gaps of 4 m or more: dumpsters, fire escapes, a weak light, puddles, steam vent (spec: "Alleys")
+- [x] 6.6 Overhead cables, lantern strings and laundry lines across narrow streets
 
 ## 7. Signs and adverts (about 1 week)
 

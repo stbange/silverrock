@@ -411,7 +411,7 @@ static void test_facades(void) {
     if (seed == 1) { /* pinned: the derived detail changes only on purpose (and alike on every target) */
       printf("  facade digest %016llx, dressing digest %016llx\n", (unsigned long long)fd, (unsigned long long)dd);
       SR_CHECK(fd == 0x7706771d161b6111ull);
-      SR_CHECK(dd == 0x1f0373e9f75829edull);
+      SR_CHECK(dd == 0xeda0522fea2ab5d1ull);
     }
     int pairs = 0, across = 0;
     for (int blk = 0; blk < c->grid * c->grid; blk++) {
@@ -511,6 +511,211 @@ static void test_shapes_and_roofs(void) {
   sr_mesh_free(&m);
 }
 
+/* Distance of a point from the nearest kerb of its block and which kerb (-1 if not on the lot). */
+static float kerb_dist(const SrCity *c, int blk, float x, float z, int *which) {
+  int32_t ox, oy;
+  sr_city_block_origin(blk, c->grid, &ox, &oy);
+  float lx0 = (float)(ox + SR_STREET_CM) / 100.0f, lz0 = (float)(oy + SR_STREET_CM) / 100.0f;
+  float lx1 = (float)(ox + SR_BLOCK_CM) / 100.0f, lz1 = (float)(oy + SR_BLOCK_CM) / 100.0f;
+  float d[4] = {x - lx0, z - lz0, lx1 - x, lz1 - z};
+  *which = -1;
+  float best = 1e9f;
+  for (int k = 0; k < 4; k++)
+    if (d[k] >= 0 && d[k] < best) {
+      best = d[k];
+      *which = k;
+    }
+  if (d[0] < 0 || d[1] < 0 || d[2] < 0 || d[3] < 0) *which = -1;
+  return best;
+}
+
+static void test_street_dressing(void) {
+  SR_SPEC("city-generation", "Street furniture by district");
+  SR_SPEC("city-generation", "Lamps along every street");
+  SR_SPEC("city-generation", "The walking lane stays clear");
+  SR_SPEC("city-generation", "Alleys");
+  SR_SPEC("retro-rendering", "The pavement has a kerb");
+  for (int seed = 1; seed <= 5; seed++) {
+    SrCity *c = sr_city_create((uint64_t)seed * 7919u, NULL);
+    float props_per_type[SR_D_COUNT] = {0}, kerb_m[SR_D_COUNT] = {0};
+    int alleys = 0, alleys_ok = 0;
+    SrStreetProp p[SR_MAX_BLOCK_PROPS];
+    for (int blk = 0; blk < c->grid * c->grid; blk++) {
+      if (c->blocks[blk].water) {
+        SR_CHECK_EQ(sr_dressing_block(c, blk, p, SR_MAX_BLOCK_PROPS), 0);
+        continue;
+      }
+      SrDistrictType t = c->districts[c->blocks[blk].district].type;
+      int n = sr_dressing_block(c, blk, p, SR_MAX_BLOCK_PROPS);
+      float pav[4];
+      sr_block_pavements(c, blk, pav);
+      kerb_m[t] += 4.0f * (float)(SR_BLOCK_CM - SR_STREET_CM) / 100.0f;
+      /* lamps: along each kerb no gap over 24 m */
+      for (int k = 0; k < 4; k++) {
+        float pos[8];
+        int np = 0;
+        for (int i = 0; i < n; i++) {
+          if (p[i].kind != SR_SP_LAMP || p[i].band != SR_BAND_KERB) continue;
+          int w;
+          float kd = kerb_dist(c, blk, p[i].x, p[i].z, &w);
+          if (w != k || kd > 1.0f || np >= 8) continue;
+          pos[np++] = (k == 0 || k == 2) ? p[i].z : p[i].x;
+        }
+        SR_CHECK(np >= 3);
+        for (int a = 1; a < np; a++) SR_CHECK(fabsf(pos[a] - pos[a - 1]) <= 24.01f);
+      }
+      for (int i = 0; i < n; i++) {
+        if (p[i].band == SR_BAND_KERB || p[i].band == SR_BAND_BUILDING) props_per_type[t] += 1.0f;
+        if (!(p[i].flags & SR_SPF_SOLID) || p[i].band == SR_BAND_ROAD || p[i].band == SR_BAND_ALLEY) continue;
+        /* solid props: never in the clear walking lane */
+        int w;
+        float kd = kerb_dist(c, blk, p[i].x, p[i].z, &w);
+        if (w < 0) continue;
+        float lane = sr_walk_lane(pav[w]);
+        SR_CHECK(fabsf(kd - lane) > 0.5f);
+      }
+      /* alleys: a light and at least two props per gap of 4 m or more */
+      const SrBlock *b = &c->blocks[blk];
+      for (int i = 0; i < b->building_count; i++)
+        for (int j = 0; j < b->building_count; j++) {
+          const SrBuilding *pa = &c->buildings[b->first_building + i], *qa = &c->buildings[b->first_building + j];
+          if (qa->x0 - pa->x1 < 400 || qa->y0 >= pa->y1 || pa->y0 >= qa->y1) continue;
+          alleys++;
+          float mid = (float)(pa->x1 + qa->x0) / 200.0f;
+          int lights = 0, things = 0;
+          for (int k = 0; k < n; k++) {
+            if (fabsf(p[k].x - mid) > (float)(qa->x0 - pa->x1) / 200.0f + 0.1f || !(p[k].flags & SR_SPF_ALLEY))
+              continue;
+            lights += p[k].kind == SR_SP_LAMP;
+            things += p[k].kind != SR_SP_LAMP && p[k].kind != SR_SP_FIRE_ESCAPE;
+          }
+          alleys_ok += lights >= 1 && things >= 2;
+        }
+    }
+    for (int t = 0; t < SR_D_COUNT; t++) {
+      if (kerb_m[t] < 400.0f || t == SR_D_BARRENS) continue;
+      float per100 = props_per_type[t] / kerb_m[t] * 100.0f;
+      SR_CHECK(per100 >= 6.0f);
+    }
+    SR_CHECK(alleys > 0 && alleys_ok == alleys);
+    sr_city_destroy(c);
+  }
+  /* the street mesh: kerb faces down to the road and crosswalks around the corner */
+  SrGame *g = g_game;
+  const SrCity *c = g->city;
+  int blk = c->buildings[c->home_building].block;
+  SrMesh m;
+  sr_mesh_init(&m);
+  sr_build_block_props(c, blk, 2, &m);
+  int vertical = 0, crosswalks = 0;
+  SrAtlasCell cw = sr_atlas_cell(SR_LAYER_DECALS, SR_DECAL_CROSSWALK);
+  for (int q = 0; q + 3 < m.nv; q += 4) {
+    bool kerb = fabsf(m.v[q].y) < 1e-4f && fabsf(m.v[q + 2].y - 0.12f) < 1e-4f;
+    vertical += kerb;
+    crosswalks += m.v[q].layer == cw.layer && fabsf(m.v[q].u - cw.u0) < 1e-4f;
+  }
+  SR_CHECK(vertical >= 4);
+  SR_CHECK(crosswalks >= 16); /* four tiles on each of the four sides */
+  int full = m.nv;
+  sr_build_block_props(c, blk, 0, &m);
+  SR_CHECK(m.nv < full); /* low detail drops props */
+  sr_build_block_props(c, -1, 2, &m);
+  SR_CHECK_EQ(m.nv, 0);
+  sr_mesh_free(&m);
+}
+
+static void test_props_collide_and_shops(void) {
+  SR_SPEC("city-generation", "Solid props block movement");
+  SR_SPEC("retro-rendering", "Shops at street level");
+  SR_SPEC("retro-rendering", "Closed shops are shuttered");
+  SrGame *g = g_game;
+  const SrCity *c = g->city;
+  /* a solid prop stops the player; the walking lanes and the doors stay free */
+  int solid_blk = -1, solid_i = -1;
+  SrStreetProp p[SR_MAX_BLOCK_PROPS];
+  for (int blk = 0; blk < c->grid * c->grid && solid_i < 0; blk++) {
+    int n = sr_dressing_block(c, blk, p, SR_MAX_BLOCK_PROPS);
+    for (int i = 0; i < n; i++)
+      if ((p[i].flags & SR_SPF_SOLID) && p[i].band == SR_BAND_BUILDING) {
+        solid_blk = blk;
+        solid_i = i;
+        break;
+      }
+  }
+  SR_CHECK(solid_i >= 0);
+  if (solid_i >= 0) {
+    SR_CHECK(sr_game_blocked(g, p[solid_i].x, p[solid_i].z));
+    SR_CHECK(sr_dressing_blocks(c, p[solid_i].x, p[solid_i].z));
+  }
+  (void)solid_blk;
+  int checked = 0;
+  for (int blk = 0; blk < c->grid * c->grid; blk++) {
+    if (c->blocks[blk].water) continue;
+    int32_t ox, oy;
+    sr_city_block_origin(blk, c->grid, &ox, &oy);
+    float pav[4];
+    sr_block_pavements(c, blk, pav);
+    /* walk the lane on the north kerb: never blocked by a prop */
+    float lz = (float)(oy + SR_STREET_CM) / 100.0f + sr_walk_lane(pav[1]);
+    for (float x = (float)(ox + SR_STREET_CM) / 100.0f + 3.0f; x < (float)(ox + SR_BLOCK_CM) / 100.0f - 3.0f;
+         x += 0.5f) {
+      SR_CHECK(!sr_dressing_blocks(c, x, lz));
+      checked++;
+    }
+  }
+  SR_CHECK(checked > 1000);
+  for (int bi = 0; bi < c->building_count; bi++) { /* every place is reachable at its door */
+    const SrBuilding *b = &c->buildings[bi];
+    if (b->poi == SR_POI_NONE) continue;
+    SR_CHECK(!sr_dressing_blocks(c, (float)(b->x0 + b->x1) / 200.0f, (float)b->y1 / 100.0f + 1.5f));
+  }
+  /* shops: lit fronts while open, shutters when closed */
+  int shop = -1;
+  for (int bi = 0; bi < c->building_count && shop < 0; bi++) {
+    SrFacade f;
+    sr_facade_for(c, bi, &f);
+    if (c->buildings[bi].poi != SR_POI_NONE && f.base == SR_BASE_SHOPFRONT) shop = bi;
+  }
+  SR_CHECK(shop >= 0);
+  if (shop < 0) return;
+  const SrBuilding *b = &c->buildings[shop];
+  SrVec3 eye = sr_v3((float)(b->x0 + b->x1) / 200.0f, 1.7f, (float)b->y1 / 100.0f + 5.0f);
+  int64_t open_t = -1, closed_t = -1;
+  for (int64_t t = 0; t < 7 * 86400 && (open_t < 0 || closed_t < 0); t += 1800) {
+    bool o = sr_poi_open(c, shop, t);
+    if (o && open_t < 0) open_t = t;
+    if (!o && closed_t < 0) closed_t = t;
+  }
+  SrMesh m;
+  sr_mesh_init(&m);
+  sr_build_poi_fronts(c, &g->deltas, eye, open_t, &m);
+  SR_CHECK(m.nv >= 4);
+  bool lit_front = false;
+  for (int v = 0; v < m.nv; v++)
+    lit_front = lit_front || (m.v[v].layer == SR_LAYER_BASE_FIRST + SR_BASE_SHOPFRONT && m.v[v].emissive > 60 &&
+                              fabsf(m.v[v].z - (float)b->y1 / 100.0f) < 0.1f);
+  SR_CHECK(lit_front);
+  if (closed_t >= 0) {
+    sr_build_poi_fronts(c, &g->deltas, eye, closed_t, &m);
+    bool still = false;
+    for (int v = 0; v < m.nv; v++)
+      still = still || (fabsf(m.v[v].x - eye.x) < 1.0f && fabsf(m.v[v].z - (float)b->y1 / 100.0f) < 0.1f);
+    SR_CHECK(!still);
+  }
+  /* the chunk's own front is the shutter */
+  SrFacade f;
+  sr_facade_for(c, shop, &f);
+  sr_mesh_clear(&m);
+  sr_build_box_facade(&m, &f, (float)b->x0 / 100.0f, (float)b->y0 / 100.0f, (float)b->x1 / 100.0f,
+                      (float)b->y1 / 100.0f, 0.0f, 10.0f, true, 0);
+  bool shutter = false;
+  for (int v = 0; v < m.nv; v++)
+    shutter = shutter || (m.v[v].layer == SR_LAYER_BASE_FIRST + SR_BASE_SHUTTER &&
+                          fabsf(m.v[v].z - (float)b->y1 / 100.0f) < 1e-3f);
+  SR_CHECK(shutter);
+  sr_mesh_free(&m);
+}
+
 void suite_atmos(void) {
   g_game = sr_game_create();
   sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Atmos");
@@ -524,5 +729,7 @@ void suite_atmos(void) {
   SR_RUN(test_wet_streets);
   SR_RUN(test_facades);
   SR_RUN(test_shapes_and_roofs);
+  SR_RUN(test_street_dressing);
+  SR_RUN(test_props_collide_and_shops);
   sr_game_destroy(g_game);
 }

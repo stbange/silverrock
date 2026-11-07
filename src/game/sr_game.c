@@ -96,6 +96,7 @@ SrResult sr_game_new(SrGame *g, uint64_t seed, const SrCityOptions *opt, SrBackg
   g->hostiles_near = 0;
   g->pall_removed = false;
   g->force_weather = -1;
+  g->dress_block = -1;
   g->started = true;
   g->screen = SR_SCREEN_PLAY;
   g->active_job = -1;
@@ -203,6 +204,23 @@ bool sr_game_blocked(const SrGame *g, float x, float z) {
   for (int i = 0; i < blk->building_count; i++) {
     const SrBuilding *bd = &g->city->buildings[blk->first_building + i];
     if (cx > bd->x0 - r && cx < bd->x1 + r && cz > bd->y0 - r && cz < bd->y1 + r) return true;
+  }
+  /* solid street props: dumpsters, vending machines, stalls, parked cars, booths */
+  SrGame *mut = (SrGame *)g; /* the collision cache is not game state */
+  if (mut->dress_block != b) {
+    SrStreetProp all[SR_MAX_BLOCK_PROPS];
+    int n = sr_dressing_block(g->city, b, all, SR_MAX_BLOCK_PROPS);
+    mut->dress_n = 0;
+    for (int i = 0; i < n && mut->dress_n < 48; i++)
+      if (all[i].flags & SR_SPF_SOLID) mut->dress[mut->dress_n++] = all[i];
+    mut->dress_block = b;
+  }
+  for (int i = 0; i < g->dress_n; i++) {
+    const SrStreetProp *p = &g->dress[i];
+    const SrStreetPropInfo *in = sr_street_prop_info(p->kind);
+    float dx = x - p->x, dz = z - p->z, cy = cosf(p->yaw), sy = sinf(p->yaw);
+    float lx = dx * cy - dz * sy, lz = dx * sy + dz * cy;
+    if (fabsf(lx) <= in->w * 0.5f + PLAYER_RADIUS && fabsf(lz) <= in->d * 0.5f + PLAYER_RADIUS) return true;
   }
   return false;
 }

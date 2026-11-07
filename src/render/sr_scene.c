@@ -108,45 +108,11 @@ static SrColor neon_for(const SrCity *c, int building) {
   return pal->neon[b->id % 3];
 }
 
-/* Barrens and Undercity blocks with empty lots get burning barrels: a light where there is none. */
-static int barrels(const SrCity *c, int blk, SrVec3 out[2]) {
-  const SrBlock *b = &c->blocks[blk];
-  SrDistrictType t = c->districts[b->district].type;
-  if (b->water || (t != SR_D_BARRENS && t != SR_D_UNDERCITY) || b->building_count >= 3) return 0;
-  int32_t ox, oy;
-  sr_city_block_origin(blk, c->grid, &ox, &oy);
-  int n = 0;
-  for (int k = 0; k < 2 - (b->building_count > 1); k++) {
-    uint64_t h = sr_mix64(c->seed ^ ((uint64_t)blk * 31u + (uint64_t)k));
-    float x = (float)ox / 100.0f + 22.0f + (float)(h % 50), z = (float)oy / 100.0f + 22.0f + (float)((h >> 16) % 50);
-    bool inside = false;
-    for (int i = 0; i < b->building_count; i++) {
-      const SrBuilding *bd = &c->buildings[b->first_building + i];
-      inside = inside ||
-               (x * 100 > bd->x0 - 200 && x * 100 < bd->x1 + 200 && z * 100 > bd->y0 - 200 && z * 100 < bd->y1 + 200);
-    }
-    if (!inside) out[n++] = sr_v3(x, 0, z);
-  }
-  return n;
-}
-
 static int block_lights(const SrCity *c, int blk, SrLight *out, int max) {
   int n = 0;
   const SrBlock *b = &c->blocks[blk];
   if (b->water) return 0;
-  int32_t ox, oy;
-  sr_city_block_origin(blk, c->grid, &ox, &oy);
-  SrColor col = sr_palette(c->districts[b->district].type)->neon[blk % 3];
-  if (n < max) { /* street lamp */
-    SrLight *l = &out[n++];
-    float st = (float)SR_STREET_CM / 100.0f;
-    l->pos = sr_v3((float)ox / 100.0f + st - 1.1f, 6.2f, (float)oy / 100.0f + st - 1.1f);
-    l->radius = 26.0f;
-    l->r = col.r / 255.0f * 0.9f;
-    l->g = col.g / 255.0f * 0.9f;
-    l->b = col.b / 255.0f * 0.9f;
-  }
-  for (int i = 0; i < b->building_count && n < max; i++) {
+  for (int i = 0; i < b->building_count && n < max; i++) { /* neon signs of places */
     int bi = b->first_building + i;
     const SrBuilding *bd = &c->buildings[bi];
     if (bd->poi == SR_POI_NONE) continue;
@@ -158,29 +124,20 @@ static int block_lights(const SrCity *c, int blk, SrLight *out, int max) {
     l->g = nc.g / 255.0f;
     l->b = nc.b / 255.0f;
   }
-  SrVec3 fire[2];
-  int nf = barrels(c, blk, fire);
-  for (int i = 0; i < nf && n < max; i++) {
-    SrLight *l = &out[n++];
-    l->pos = sr_v3(fire[i].x, 1.6f, fire[i].z);
-    l->radius = 16.0f;
-    l->r = 1.0f;
-    l->g = 0.45f;
-    l->b = 0.12f;
-  }
-  return n;
+  /* street lamps, alley lamps, fires, vending machines, booths and stalls */
+  return n + sr_block_prop_lights(c, blk, out + n, max - n);
 }
 
 void sr_light_grid_build(SrLightGrid *lg, const SrCity *c) {
   sr_light_grid_free(lg);
   int blocks = c->grid * c->grid;
-  lg->lights = (SrLight *)malloc(sizeof(SrLight) * (size_t)blocks * 7);
+  lg->lights = (SrLight *)malloc(sizeof(SrLight) * (size_t)blocks * SR_BLOCK_LIGHTS);
   if (!lg->lights) return; /* GCOVR_EXCL_LINE reason: malloc failure not injectable */
   lg->blocks = blocks;
   lg->city_seed = c->seed;
   for (int b = 0; b < blocks; b++) {
     lg->start[b] = (uint16_t)lg->count;
-    lg->count += block_lights(c, b, lg->lights + lg->count, 7);
+    lg->count += block_lights(c, b, lg->lights + lg->count, SR_BLOCK_LIGHTS);
   }
   lg->start[blocks] = (uint16_t)lg->count;
 }
@@ -225,44 +182,6 @@ static SrColor shade(SrColor c, int pct) {
   return (SrColor){(uint8_t)(c.r * pct / 100), (uint8_t)(c.g * pct / 100), (uint8_t)(c.b * pct / 100), c.a};
 }
 
-/* A flat decal from the decal atlas, turned by yaw. */
-static void decal(SrMesh *m, float x, float y, float z, float w, float d, float yaw, int id, SrColor col, int em,
-                  int ground) {
-  SrAtlasCell a = sr_atlas_cell(SR_LAYER_DECALS, id);
-  float cy = cosf(yaw), sy = sinf(yaw), hw = w * 0.5f, hd = d * 0.5f;
-  float ax = cy * hw, az = -sy * hw, bx = sy * hd, bz = cy * hd;
-  sr_mesh_quad(m, sr_v3(x - ax + bx, y, z - az + bz), sr_v3(x + ax + bx, y, z + az + bz),
-               sr_v3(x + ax - bx, y, z + az - bz), sr_v3(x - ax - bx, y, z - az - bz), a.u0, a.v1, a.u1, a.v0, col,
-               a.layer, em, ground);
-}
-
-/* Road decals of a block: manholes, drains and puddles (wet, so lights shine in them). */
-static void road_decals(const SrCity *c, int blk, SrMesh *m) {
-  SrStreetProp props[SR_MAX_BLOCK_PROPS];
-  int n = sr_dressing_block(c, blk, props, SR_MAX_BLOCK_PROPS);
-  int32_t ox, oy;
-  sr_city_block_origin(blk, c->grid, &ox, &oy);
-  float st = (float)SR_STREET_CM / 100.0f;
-  for (int i = 0; i < n; i++) {
-    const SrStreetProp *p = &props[i];
-    bool lot = p->x - (float)ox / 100.0f >= st && p->z - (float)oy / 100.0f >= st;
-    float y = lot ? 0.135f : 0.015f;
-    switch (p->kind) {
-      case SR_SP_MANHOLE:
-        decal(m, p->x, y, p->z, 0.9f, 0.9f, p->yaw, SR_DECAL_MANHOLE, (SrColor){150, 150, 160, 255}, 0, 1);
-        break;
-      case SR_SP_DRAIN:
-        decal(m, p->x, y, p->z, 0.9f, 0.4f, p->yaw, SR_DECAL_DRAIN, (SrColor){150, 150, 160, 255}, 0, 1);
-        break;
-      case SR_SP_PUDDLE:
-        decal(m, p->x, y + 0.005f, p->z, 2.4f + (float)p->variant * 0.4f, 1.6f, p->yaw,
-              SR_DECAL_PUDDLE + (p->variant & 1), (SrColor){120, 130, 150, 255}, 0, 1);
-        break;
-      default: break;
-    }
-  }
-}
-
 static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) {
   const SrBlock *b = &c->blocks[blk];
   int32_t ox, oy;
@@ -286,22 +205,6 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
                0, (s - st) / st, 1, white, SR_LAYER_ASPHALT, 0, 1);
   sr_mesh_quad(m, sr_v3(x0 + st, 0.12f, z0 + s), sr_v3(x0 + s, 0.12f, z0 + s), sr_v3(x0 + s, 0.12f, z0 + st),
                sr_v3(x0 + st, 0.12f, z0 + st), 0, 0, (s - st) / 4, (s - st) / 4, pal->ground, SR_LAYER_SIDEWALK, 0, 1);
-  road_decals(c, blk, m);
-  { /* street lamp at the intersection */
-    SrColor lamp = pal->neon[blk % 3];
-    sr_mesh_box(m, sr_v3(x0 + st - 1.2f, 0, z0 + st - 1.2f), sr_v3(x0 + st - 1.0f, 6.5f, z0 + st - 1.0f),
-                (SrColor){60, 60, 66, 255}, SR_LAYER_WHITE, 0, 0);
-    sr_mesh_box(m, sr_v3(x0 + st - 1.6f, 6.5f, z0 + st - 1.6f), sr_v3(x0 + st - 0.6f, 6.8f, z0 + st - 0.6f), lamp,
-                SR_LAYER_WHITE, 0, 255);
-  }
-  SrVec3 fire[2];
-  for (int i = 0, nf = barrels(c, blk, fire); i < nf; i++) { /* burning barrels */
-    sr_mesh_box(m, sr_v3(fire[i].x - 0.35f, 0, fire[i].z - 0.35f), sr_v3(fire[i].x + 0.35f, 0.9f, fire[i].z + 0.35f),
-                (SrColor){70, 50, 40, 255}, SR_LAYER_METAL, 0.5f, 0);
-    sr_mesh_box(m, sr_v3(fire[i].x - 0.28f, 0.9f, fire[i].z - 0.28f),
-                sr_v3(fire[i].x + 0.28f, 1.35f, fire[i].z + 0.28f), (SrColor){255, 140, 40, 255}, SR_LAYER_WHITE, 0,
-                255);
-  }
   if (b->highway) { /* elevated highway deck overhead */
     sr_mesh_box(m, sr_v3(x0, 11.0f, z0 + 2), sr_v3(x0 + s, 12.0f, z0 + st - 2), shade(pal->ground, 80),
                 SR_LAYER_CONCRETE, 0.2f, 0);
@@ -636,6 +539,23 @@ void sr_build_rain_lit(SrVec3 cam, float intensity, uint64_t frame, const SrCity
   }
 }
 
+SrMesh *sr_scene_street(SrSceneCache *s, const SrCity *c, int block) {
+  s->street_tick++;
+  int oldest = 0;
+  for (int i = 0; i < 32; i++) {
+    if (s->street[i].used && s->street[i].block == block && s->street[i].detail == s->street_detail) {
+      s->street[i].used = s->street_tick;
+      return &s->street[i].mesh;
+    }
+    if (s->street[i].used < s->street[oldest].used) oldest = i;
+  }
+  s->street[oldest].block = block;
+  s->street[oldest].detail = s->street_detail;
+  s->street[oldest].used = s->street_tick;
+  sr_build_block_props(c, block, s->street_detail, &s->street[oldest].mesh);
+  return &s->street[oldest].mesh;
+}
+
 const SrStreetProp *sr_scene_props(SrSceneCache *s, const SrCity *c, int block, int *n) {
   s->prop_tick++;
   int oldest = 0;
@@ -696,6 +616,7 @@ void sr_scene_init(SrSceneCache *s, bool mobile) {
   memset(s, 0, sizeof *s);
   sr_chunk_cache_init(&s->chunks, mobile ? 48 : SR_CHUNK_CACHE);
   s->view_chunks = mobile ? 2 : 3;
+  s->street_detail = mobile ? 1 : 2;
 }
 
 void sr_scene_free(SrSceneCache *s) {
@@ -715,6 +636,7 @@ void sr_scene_free(SrSceneCache *s) {
   SrMesh *gloom[] = {&s->sky,         &s->deck, &s->deck_glow, &s->halos, &s->near_glow,
                      &s->silhouettes, &s->sun,  &s->wet,       &s->fronts};
   for (size_t i = 0; i < sizeof gloom / sizeof gloom[0]; i++) sr_mesh_free(gloom[i]);
+  for (int i = 0; i < 32; i++) sr_mesh_free(&s->street[i].mesh);
   free(s->beacons);
   s->beacons = NULL;
 }
@@ -975,6 +897,22 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
       s->deck.v[v].b = (uint8_t)((float)s->deck.v[v].b * tb);
     }
   }
+  /* the street around the camera: kerbs, markings and props, a draw (and lights) per block */
+  if (s->sky_seed != s->street_seed) {
+    for (int i = 0; i < 32; i++) s->street[i].used = 0;
+    s->street_seed = s->sky_seed;
+  }
+  int sring = s->street_detail >= 2 ? 2 : 1;
+  int cb = sr_city_block_at(c, (int32_t)(p->pos.x * 100.0f), (int32_t)(p->pos.z * 100.0f));
+  for (int dy = -sring; cb >= 0 && dy <= sring; dy++)
+    for (int dx = -sring; dx <= sring; dx++) {
+      int bx = cb % c->grid + dx, by = cb / c->grid + dy;
+      if (bx < 0 || by < 0 || bx >= c->grid || by >= c->grid) continue;
+      SrMesh *sm = sr_scene_street(s, c, by * c->grid + bx);
+      int32_t sox, soy;
+      sr_city_block_origin(by * c->grid + bx, c->grid, &sox, &soy);
+      add_draw(f, sm, SR_PASS_WORLD, sr_v3((float)sox / 100.0f + 48.0f, 2.0f, (float)soy / 100.0f + 48.0f));
+    }
   sr_build_poi_fronts(c, &g->deltas, p->pos, t, &s->fronts); /* open shops light up their fronts */
   add_draw(f, &s->fronts, SR_PASS_WORLD, p->pos);
   /* wet streets: reflections, splashes, drips, lamp cones, steam and ripples */

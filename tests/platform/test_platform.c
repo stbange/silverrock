@@ -1116,11 +1116,11 @@ static bool atmos_place(SrGame *g, const AtmosView *v) {
       const SrBuilding *o = &c->buildings[k->first_building + i];
       if (o->height_cm >= 1200 && (top->height_cm < 1200 || o->height_cm < top->height_cm)) top = o;
     }
-    /* at the front edge, above the parapet, looking out over the street */
-    g->player.pos = sr_v3((float)(top->x0 + top->x1) / 200.0f, (float)top->height_cm / 100.0f + 2.6f,
-                          (float)top->y1 / 100.0f - 0.2f);
-    g->player.yaw = SR_PI + 0.3f;
-    g->player.pitch = -0.55f; /* down into the lit street */
+    /* on the front corner, above the parapet, looking along the street below */
+    g->player.pos =
+        sr_v3((float)top->x1 / 100.0f - 0.6f, (float)top->height_cm / 100.0f + 2.6f, (float)top->y1 / 100.0f - 0.6f);
+    g->player.yaw = -SR_PI / 2 - 0.35f;
+    g->player.pitch = -0.32f;
   }
   return true;
 }

@@ -13,6 +13,7 @@
 #include "sim/sr_combat.h"
 #include "sim/sr_crowd.h"
 #include "sim/sr_jobs.h"
+#include "world/sr_dressing.h"
 #include "world/sr_environ.h"
 
 #define SR_STEP_DT             (1.0 / 60.0)
@@ -119,6 +120,10 @@ typedef struct SrGame {
   bool hardcore;
   bool pall_removed;
   int8_t force_weather; /* -1: the seed's weather; else a fixed SrWeather (reference views) */
+  /* solid street props of the block last walked in (collision cache, rebuilt on demand) */
+  int dress_block;
+  int dress_n;
+  SrStreetProp dress[48];
   bool started;
   SrScreen screen;
   bool resume_needs_confirm;

@@ -11,7 +11,8 @@
 #define SR_TEX_SIZE            128
 #define SR_TEX_LAYERS          64
 #define SR_MAX_LIGHTS_PER_DRAW 8
-#define SR_MAX_FRAME_LIGHTS    96
+#define SR_MAX_FRAME_LIGHTS    160
+#define SR_BLOCK_LIGHTS        32 /* lights of one block in the light grid */
 #define SR_MAX_DRAWS           256
 #define SR_CHUNK_BLOCKS        4
 
@@ -348,6 +349,14 @@ typedef struct SrSceneCache {
   /* wet streets (sr_wet_mesh.c) and the props of the blocks around the camera */
   SrMesh wet, fronts;
   struct {
+    int block, detail;
+    uint64_t used;
+    SrMesh mesh;
+  } street[32]; /* street meshes of the blocks around the camera */
+  uint64_t street_tick;
+  int street_detail; /* 0 low, 1 medium, 2 high */
+  uint64_t street_seed;
+  struct {
     int block;
     int n;
     uint64_t used;
@@ -367,6 +376,14 @@ void sr_build_door(SrMesh *m, float cx, float z, SrColor frame);
 /* A whole building: volumes with facades, crowns, roof kits, landmark crowns. */
 void sr_build_building(const SrCity *c, int building, SrColor neon, SrMesh *m);
 
+/* The street of a block (sr_street_mesh.c): kerbs, markings, props, overhead lines. detail 0..2. */
+void sr_build_block_props(const SrCity *c, int block, int detail, SrMesh *out);
+/* Lights of a block's lit props (lamps, fires, vending machines, booths, stalls). */
+int sr_block_prop_lights(const SrCity *c, int block, SrLight *out, int max);
+SrColor sr_lamp_color(SrDistrictType t);
+
+/* The cached street mesh of a block at the current detail level. */
+SrMesh *sr_scene_street(SrSceneCache *s, const SrCity *c, int block);
 /* Props of a block, cached (for sprites and lights around the camera). */
 const SrStreetProp *sr_scene_props(SrSceneCache *s, const SrCity *c, int block, int *n);
 

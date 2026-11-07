@@ -1,6 +1,7 @@
 #include "sim/sr_crowd.h"
 
 #include "core/sr_rng.h"
+#include "world/sr_dressing.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -41,16 +42,30 @@ static bool may_pop(const SrCamera *cam, SrVec3 p) {
 }
 
 static void pick_target(SrAgent *a, const SrCity *c) {
-  /* walk to another corner of the block's sidewalk ring */
+  /* walk to a neighbouring corner of the block's pavement ring, along the clear walking lane
+   * between the kerb props and the building band */
+  int blk = a->block < 0 ? 0 : a->block;
   int32_t ox, oy;
-  sr_city_block_origin(a->block < 0 ? 0 : a->block, c->grid, &ox, &oy);
+  sr_city_block_origin(blk, c->grid, &ox, &oy);
+  float pav[4];
+  sr_block_pavements(c, blk, pav);
+  float lx0 = (float)(ox + SR_STREET_CM) / 100.0f + sr_walk_lane(pav[0]);
+  float lz0 = (float)(oy + SR_STREET_CM) / 100.0f + sr_walk_lane(pav[1]);
+  float lx1 = (float)(ox + SR_BLOCK_CM) / 100.0f - sr_walk_lane(pav[2]);
+  float lz1 = (float)(oy + SR_BLOCK_CM) / 100.0f - sr_walk_lane(pav[3]);
+  float corners[4][2] = {{lx0, lz0}, {lx1, lz0}, {lx1, lz1}, {lx0, lz1}};
+  int near = 0;
+  float best = 1e9f;
+  for (int k = 0; k < 4; k++) {
+    float dx = corners[k][0] - a->pos.x, dz = corners[k][1] - a->pos.z;
+    if (dx * dx + dz * dz < best) {
+      best = dx * dx + dz * dz;
+      near = k;
+    }
+  }
   SrRng r = sr_rng_stream(a->key, "walk", (uint64_t)(a->pos.x * 7 + a->pos.z), 0);
-  float m = (float)(SR_STREET_CM - 300) / 100.0f;
-  float corners[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
-  int k = sr_rng_range(&r, 0, 3);
-  float span = (float)SR_BLOCK_CM / 100.0f;
-  a->target = sr_v3((float)ox / 100.0f + m + corners[k][0] * (span - m), 0,
-                    (float)oy / 100.0f + m + corners[k][1] * (span - m));
+  int k = best > 4.0f ? near : (near + (sr_rng_range(&r, 0, 1) ? 1 : 3)) % 4; /* to the ring, then along it */
+  a->target = sr_v3(corners[k][0], 0, corners[k][1]);
 }
 
 static void spawn(SrCrowd *cr, const SrCity *c, const SrAmbient *amb, int npc, int block) {
