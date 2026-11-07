@@ -456,6 +456,43 @@ static void terminal_home(SrUi *ui, const SrGame *g, float x, float y, float lin
   }
 }
 
+static void job_row(const SrGame *g, const SrJob *j, char *buf, size_t cap);
+
+static void terminal_jobs(SrUi *ui, const SrGame *g, float x, float y, float line, int s) {
+  static const char *const heads[4] = {"YOUR HANDLER", "GANG CONTACTS", "PUBLIC BOARD", "ACCEPTED"};
+  int32_t ids[32];
+  int n = sr_game_terminal_jobs(g, ids, 32), group = -1;
+  if (g->chess.camp.hunter >= 0) { /* bounties on the player */
+    char b[96];
+    snprintf(b, sizeof b, "BOUNTY: %s want you dead", g->city->factions.f[g->chess.camp.hunter].name);
+    sr_ui_text(ui, x, y, b, k_red, s);
+    y += line * 1.3f;
+  }
+  if (n == 0) sr_ui_text(ui, x, y, "NO OFFERS. VISIT A FIXER OR WAIT FOR A CALL.", k_white, s);
+  for (int i = 0; i < n && y < (float)ui->h - 3 * line; i++) {
+    const SrJob *j = NULL;
+    for (int k = 0; k < g->jobs.count; k++)
+      if (g->jobs.jobs[k].id == ids[i]) j = &g->jobs.jobs[k];
+    if (!j) continue; /* GCOVR_EXCL_LINE reason: the ids come from the board */
+    bool handler = j->client_building == g->player.home;
+    int grp = j->state == SR_JS_ACCEPTED ? 3 : handler ? 0 : j->source == SR_SRC_CONTACT ? 1 : 2;
+    if (grp != group) {
+      sr_ui_text(ui, x, y, heads[grp], k_amber, s);
+      y += line;
+      group = grp;
+    }
+    char row[200], b[210];
+    job_row(g, j, row, sizeof row);
+    snprintf(b, sizeof b, "%s %s", i == g->term_sel ? ">" : " ", row);
+    text_fit(ui, x, y, b,
+             sr_game_job_against_patron(g, j) ? k_red
+             : i == g->term_sel               ? k_cyan
+                                              : k_white,
+             s, (float)ui->w - 2 * x);
+    y += line;
+  }
+}
+
 static void terminal_news(SrUi *ui, const SrGame *g, float x, float y, float line, int s) {
   char buf[160];
   int n = sr_news_size(&g->chess.news);
@@ -542,7 +579,7 @@ static void terminal_story(SrUi *ui, const SrGame *g, float x, float y, float li
 }
 
 static void terminal(SrUi *ui, const SrGame *g) {
-  static const char *const tabs[SR_TAB_COUNT] = {"HOME", "NEWS", "MARKET", "BOARD", "STORY"};
+  static const char *const tabs[SR_TAB_COUNT] = {"HOME", "JOBS", "NEWS", "MARKET", "BOARD", "STORY"};
   int s = ui->scale;
   float m = 10.0f * (float)s, line = 10.0f * (float)s;
   sr_ui_rect(ui, m, m, (float)ui->w - 2 * m, (float)ui->h - 2 * m, (SrColor){4, 14, 8, 235});
@@ -560,14 +597,16 @@ static void terminal(SrUi *ui, const SrGame *g) {
   }
   y += line * 1.5f;
   switch ((SrTermTab)g->term_tab) {
+    case SR_TAB_JOBS: terminal_jobs(ui, g, x, y, line, s); break;
     case SR_TAB_NEWS: terminal_news(ui, g, x, y, line, s); break;
     case SR_TAB_MARKET: terminal_market(ui, g, x, y, line, s); break;
     case SR_TAB_BOARD: terminal_board(ui, g, x, y, line, s); break;
     case SR_TAB_STORY: terminal_story(ui, g, x, y, line, s); break;
     default: terminal_home(ui, g, x, y, line, s); break;
   }
-  const char *hint = g->term_tab == SR_TAB_MARKET  ? "LEFT/RIGHT TABS  [E] BUY 10  [R] SELL 10  [ESC] CLOSE"
-                     : g->term_tab == SR_TAB_STORY ? "LEFT/RIGHT TABS  UP/DOWN CHOOSE  [E] CONFIRM  [ESC] CLOSE"
+  const char *hint = g->term_tab == SR_TAB_JOBS     ? "LEFT/RIGHT TABS  UP/DOWN CHOOSE  [E] ACCEPT  [ESC] CLOSE"
+                     : g->term_tab == SR_TAB_MARKET ? "LEFT/RIGHT TABS  [E] BUY 10  [R] SELL 10  [ESC] CLOSE"
+                     : g->term_tab == SR_TAB_STORY  ? "LEFT/RIGHT TABS  UP/DOWN CHOOSE  [E] CONFIRM  [ESC] CLOSE"
                      : g->term_tab == SR_TAB_HOME && g->site.active && g->site.in.apartment
                          ? "LEFT/RIGHT TABS  [E] APARTMENTS  [ESC] CLOSE"
                          : "LEFT/RIGHT TABS  [ESC] CLOSE";
@@ -654,6 +693,23 @@ static void create_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
            k_amber, s, (float)ui->w - 2 * x);
 }
 
+/* One line for a job offer: tier, type and target, district, pay, hours left, approaches, warnings. */
+static void job_row(const SrGame *g, const SrJob *j, char *buf, size_t cap) {
+  const SrCity *c = g->city;
+  const SrBuilding *b = &c->buildings[j->target_building];
+  const char *who =
+      j->target_faction >= 0 ? c->factions.f[j->target_faction].name : (b->name[0] ? b->name : "a client");
+  const char *client = j->client_faction >= 0 ? c->factions.f[j->client_faction].name : "private";
+  int64_t left = (j->deadline - sr_game_time(g)) / 3600;
+  char ap[5] = "----";
+  static const char letters[4] = {'G', 'F', 'R', 'H'};
+  for (int a = 0; a < 4; a++)
+    if (j->approaches & (1u << a)) ap[a] = letters[a];
+  snprintf(buf, cap, "[T%d] %s: %s (%s) for %s  %d CR  %lldh  %s%s", j->tier, sr_job_type_name((SrJobType)j->type), who,
+           c->districts[c->blocks[b->block].district].name, client, j->pay, (long long)(left > 0 ? left : 0), ap,
+           sr_game_job_against_patron(g, j) ? "  PATRON" : "");
+}
+
 static void shop_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
   int s = ui->scale;
   float m = 10.0f * (float)s, line = 11.0f * (float)s;
@@ -664,11 +720,47 @@ static void shop_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
   if (mn->node_menu)
     snprintf(buf, sizeof buf, "%s // %s", g->city->buildings[mn->building].name,
              sr_node_type_name((SrNodeType)g->dive.host.nodes[mn->node].type));
+  else if (mn->job_menu)
+    snprintf(buf, sizeof buf, "FIXER // %s  //  WORK ON OFFER", g->city->buildings[mn->building].name);
+  else if (mn->encounter)
+    snprintf(buf, sizeof buf, "%s // %s HITTERS", g->enc.raid ? "RAID" : "AMBUSH",
+             g->enc.faction >= 0 ? g->city->factions.f[g->enc.faction].name : "UNKNOWN");
   else
     snprintf(buf, sizeof buf, "%s  //  %lld CRED", g->city->buildings[mn->building].name, (long long)g->player.cred);
   sr_ui_text(ui, x, y, buf, k_cyan, s);
   y += line * 1.5f;
-  for (int i = 0; i < mn->count; i++) {
+  for (int i = 0; i < mn->count && mn->job_menu; i++) {
+    const SrJob *j = NULL;
+    for (int k = 0; k < g->jobs.count; k++)
+      if (g->jobs.jobs[k].id == mn->job[i]) j = &g->jobs.jobs[k];
+    if (!j) continue;
+    char row[200];
+    job_row(g, j, row, sizeof row);
+    bool warn = sr_game_job_against_patron(g, j);
+    if (i == mn->sel) sr_ui_rect(ui, x - 4, y - 2, (float)ui->w - 2 * x + 8, line, (SrColor){40, 60, 110, 200});
+    text_fit(ui, x, y, row, warn ? k_red : i == mn->sel ? k_amber : k_white, s, (float)ui->w - 2 * x);
+    y += line;
+  }
+  if (mn->job_menu && mn->sel >= 0 && mn->sel < mn->count) { /* the briefing of the selected offer */
+    const SrJob *j = NULL;
+    for (int k = 0; k < g->jobs.count; k++)
+      if (g->jobs.jobs[k].id == mn->job[mn->sel]) j = &g->jobs.jobs[k];
+    if (j) {
+      char brief[400];
+      sr_job_briefing(g->city, j, brief, sizeof brief);
+      text_fit(ui, x, (float)ui->h - m - line * 3.0f, brief, k_cyan, s, (float)ui->w - 2 * x);
+    }
+  }
+  for (int i = 0; i < mn->count && mn->encounter; i++) {
+    if (i == SR_ENC_PAY)
+      snprintf(buf, sizeof buf, "Pay them off  %d CRED", g->enc.payoff);
+    else
+      snprintf(buf, sizeof buf, "%s", i == SR_ENC_FIGHT ? "Fight" : "Run");
+    if (i == mn->sel) sr_ui_rect(ui, x - 4, y - 2, (float)ui->w - 2 * x + 8, line, (SrColor){110, 30, 30, 200});
+    text_fit(ui, x, y, buf, i == mn->sel ? k_amber : k_white, s, (float)ui->w - 2 * x);
+    y += line;
+  }
+  for (int i = 0; i < mn->count && !mn->job_menu && !mn->encounter; i++) {
     char name[SR_NAME_LEN];
     if (mn->node_menu)
       snprintf(name, sizeof name, "%s", sr_node_action_name((SrNodeAction)mn->action[i]));
@@ -685,9 +777,11 @@ static void shop_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
     y += line;
   }
   bool touch = in && in->scheme == SR_SCHEME_TOUCH;
-  text_fit(ui, x, (float)ui->h - m - line,
-           touch ? "TAP A ROW TO BUY  //  TAP HERE TO LEAVE" : "W/S SELECT  E BUY  ESC LEAVE", k_amber, s,
-           (float)ui->w - 2 * x);
+  const char *hint = mn->job_menu ? (touch ? "TAP TO SELECT, TAP AGAIN TO ACCEPT  //  TAP HERE TO LEAVE"
+                                           : "W/S SELECT  E ACCEPT  ESC LEAVE    G GHOST F FACE R RUNNER H HAMMER")
+                     : touch      ? "TAP A ROW TO BUY  //  TAP HERE TO LEAVE"
+                                  : "W/S SELECT  E BUY  ESC LEAVE";
+  text_fit(ui, x, (float)ui->h - m - line, hint, k_amber, s, (float)ui->w - 2 * x);
 }
 
 int sr_ui_shop_row_at(const SrUi *ui, float y) {

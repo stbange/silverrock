@@ -404,7 +404,7 @@ static SrResult command(ScriptState *st, char *line, char *out, size_t cap) {
   if (strcmp(cmd, "job") == 0 && n >= 2) {
     static int32_t first_offer = -1; /* "first": the first job of the latest fixer offers */
     if (strcmp(tok[1], "offers") == 0) {
-      int ids[4];
+      int ids[SR_FIXER_OFFERS];
       int fixer = g->city->factions.fixer_building[g->city->blocks[g->city->buildings[g->player.home].block].district];
       int k = sr_game_fixer(g, fixer, ids);
       first_offer = k > 0 ? ids[0] : -1;
@@ -555,6 +555,20 @@ static bool find_open_food(SrGame *g, int *out) {
   return best >= 0;
 }
 
+/* Work from the terminal's Jobs tab (the handler's calls, gang contacts, the board); true when the bot
+ * took a job. Jobs against the patron are declined at the warning, as a loyal player would. */
+static bool terminal_job(SrGame *g, SrStrategy s, int max_tier) {
+  int32_t ids[32];
+  int n = sr_game_terminal_jobs(g, ids, 32);
+  for (int i = 0; i < n; i++) {
+    SrJob *j = sr_jobs_get(&g->jobs, ids[i]);
+    SrApproach a;
+    if (!j || j->state != SR_JS_OFFERED || (j->tier > max_tier && j->tier != 4) || !approach_for(s, j, &a)) continue;
+    if (sr_game_accept(g, j->id) == SR_OK) return true;
+  }
+  return false;
+}
+
 /* The story bot's choices; true when it took a job. */
 static bool story_bot(SrGame *g, int max_tier) {
   SrStory *st = &g->chess.story;
@@ -655,6 +669,13 @@ SrAutoplayStats sr_autoplay(SrGame *g, SrStrategy s, int days, int max_tier) {
       sr_game_skip(g, 3600, false);
       continue;
     }
+    if (g->enc.active) { /* hunters: pay if it is cheap for us, fight when healthy, else run */
+      SrEncChoice c = p->cred >= 3 * g->enc.payoff       ? SR_ENC_PAY
+                      : p->health > p->max_health * 0.6f ? SR_ENC_FIGHT
+                                                         : SR_ENC_FLEE;
+      sr_game_encounter(g, c);
+      continue;
+    }
     SrJob *job = g->active_job >= 0 ? sr_jobs_get(&g->jobs, g->active_job) : NULL;
     if (job && job->state != SR_JS_ACCEPTED) {
       if (job->state == SR_JS_FAILED) st.jobs_failed++;
@@ -662,11 +683,12 @@ SrAutoplayStats sr_autoplay(SrGame *g, SrStrategy s, int days, int max_tier) {
       job = NULL;
     }
     if (!job && s == SR_STRAT_STORY && story_bot(g, max_tier)) continue;
+    if (!job && s != SR_STRAT_GIG && s != SR_STRAT_LIVE && terminal_job(g, s, max_tier)) continue;
     if (!job) {
       int district = g->city->blocks[g->city->buildings[p->home].block].district;
       int fixer = g->city->factions.fixer_building[district];
       travel(g, fixer);
-      int ids[4];
+      int ids[SR_FIXER_OFFERS];
       int k = sr_game_fixer(g, fixer, ids);
       bool took = false;
       for (int i = 0; i < k && !took; i++) {

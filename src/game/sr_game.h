@@ -86,6 +86,9 @@ typedef struct SrMenu {
   bool ripperdoc;
   bool housing;   /* rows are apartments for rent (item type = housing tier) */
   bool node_menu; /* rows are Matrix node actions */
+  bool job_menu;  /* rows are a fixer's job offers */
+  bool encounter; /* rows are the choices of a hunt encounter */
+  int32_t job[SR_MENU_MAX];
   int16_t node;
   uint8_t action[SR_MENU_MAX];
   int count;
@@ -160,6 +163,14 @@ typedef struct SrGame {
   int64_t curfew_stop_at;
   int term_tab, term_sel, term_axis_x, term_axis_y;
   int32_t confirm_job; /* job whose patron warning was shown; accepting it again goes ahead */
+  /* a hunt encounter waiting for the player's choice */
+  struct {
+    bool active;
+    bool raid;      /* at home at night (else an ambush in the street) */
+    int8_t faction; /* the hunters */
+    int32_t payoff;
+  } enc;
+  int64_t last_raid;
   /* character creation */
   uint64_t create_seed;
   uint64_t create_look;
@@ -195,7 +206,10 @@ SrResult sr_game_sleep(SrGame *g, int hours, SrSleepPlace place);
 SrResult sr_game_metro(SrGame *g, int to_station);
 SrResult sr_game_cab(SrGame *g, int to_building);
 SrResult sr_game_walk_to(SrGame *g, int building);
-int sr_game_fixer(SrGame *g, int fixer_building, int out_ids[4]);
+#define SR_FIXER_OFFERS 6
+/* A fixer's offers: steps of operations around the fixer's district (started on demand when there
+ * is too little work). Returns the number of job ids written. */
+int sr_game_fixer(SrGame *g, int fixer_building, int out_ids[SR_FIXER_OFFERS]);
 SrResult sr_game_accept(SrGame *g, int32_t job);
 SrMissionResult sr_game_execute(SrGame *g, int32_t job, SrApproach a);
 int32_t sr_game_report(SrGame *g, int32_t job);
@@ -273,7 +287,26 @@ void sr_game_node_menu(SrGame *g, int node);
 bool sr_game_blackout_at(const SrGame *g, int district);
 
 /* The corporate game (sr_game_chess.c). */
-typedef enum SrTermTab { SR_TAB_HOME, SR_TAB_NEWS, SR_TAB_MARKET, SR_TAB_BOARD, SR_TAB_STORY, SR_TAB_COUNT } SrTermTab;
+typedef enum SrTermTab {
+  SR_TAB_HOME,
+  SR_TAB_JOBS,
+  SR_TAB_NEWS,
+  SR_TAB_MARKET,
+  SR_TAB_BOARD,
+  SR_TAB_STORY,
+  SR_TAB_COUNT
+} SrTermTab;
+typedef enum SrEncChoice { SR_ENC_FIGHT, SR_ENC_FLEE, SR_ENC_PAY } SrEncChoice;
+/* Starts a hunt encounter (ambush or raid) by a faction. */
+void sr_game_encounter_start(SrGame *g, int faction, bool raid);
+/* Shows the waiting encounter's choices when the player is in play. */
+void sr_game_encounter_menu(SrGame *g);
+/* Resolves the waiting encounter with a choice; SR_ERR_DENIED when the payoff cannot be paid. */
+SrResult sr_game_encounter(SrGame *g, SrEncChoice c);
+/* Opens a fixer's offers as a menu; false when there is no work. */
+bool sr_game_jobs_open(SrGame *g, int fixer);
+/* Jobs on the terminal: the handler's work, gang contacts, the public board, then accepted jobs. */
+int sr_game_terminal_jobs(const SrGame *g, int32_t *out, int max);
 void sr_game_chess_init(SrGame *g);
 /* Every in-game minute: the board, news, contracts as jobs, job outcomes, world effects. */
 void sr_game_chess_minute(SrGame *g, int64_t t);

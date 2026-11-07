@@ -340,7 +340,12 @@ void sr_app_shop_tap(SrApp *a, float ny) {
     return;
   }
   int row = sr_ui_shop_row_at(&a->ui, ny * (float)a->ui.h);
-  if (row >= 0 && row < a->game->menu.count) sr_game_shop_buy(a->game, row);
+  if (row < 0 || row >= a->game->menu.count) return;
+  if (a->game->menu.job_menu && row != a->game->menu.sel) { /* jobs: a tap selects, a second tap accepts */
+    a->game->menu.sel = row;
+    return;
+  }
+  sr_game_shop_buy(a->game, row);
 }
 
 void sr_app_event(SrApp *a, const SDL_Event *e) {

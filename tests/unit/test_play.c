@@ -2,6 +2,7 @@
 #include "core/sr_rng.h"
 #include "game/sr_script.h"
 #include "sr_test.h"
+#include "ui/sr_ui.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -129,7 +130,7 @@ static void test_defection_limits(void) {
   }
   /* the new patron turns on the player: offers come again, never from a betrayed corp */
   st->trust = 1;
-  sr_story_job_done(&g->chess, g->city, -1, rival, true, true, sr_game_time(g));
+  sr_story_discovered(&g->chess, g->city, sr_game_time(g));
   SR_CHECK(st->patron < 0);
   SR_CHECK(sr_story_blacklisted(&g->chess, rival));
   for (int64_t t = sr_game_time(g); t < sr_game_time(g) + 30 * SR_WEEK_S && st->rival_offer < 0; t += SR_TICK_S)
@@ -165,9 +166,193 @@ static void test_mission_risk(void) {
   SR_CHECK(story_ok);
 }
 
+/* ---- phase 2 --------------------------------------------------------------------------------- */
+
+static int home_fixer(const SrGame *g) {
+  return g->city->factions.fixer_building[g->city->blocks[g->city->buildings[g->player.home].block].district];
+}
+
+static void test_offers_from_contracts(void) {
+  SR_SPEC("faction-simulation", "Fixer offers come from contracts");
+  SR_SPEC("faction-simulation", "Operations on demand");
+  SrGame *g = game(44);
+  int ops = g->chess.op_count;
+  int ids[SR_FIXER_OFFERS];
+  int n = sr_game_fixer(g, home_fixer(g), ids);
+  SR_CHECK(n >= 1 && n <= SR_FIXER_OFFERS);
+  SR_CHECK(g->chess.op_count > ops); /* nothing around yet: operations started on demand */
+  for (int i = 0; i < n; i++) {
+    SrContract *k = sr_chess_contract_for_job(&g->chess, ids[i]);
+    SR_CHECK(k != NULL);
+    if (k) SR_CHECK(sr_chess_op(&g->chess, k->op) != NULL);
+  }
+  /* at most one operation on demand per district and day */
+  int d = g->city->blocks[g->city->buildings[g->player.home].block].district;
+  SR_CHECK_EQ(sr_chess_demand_op(&g->chess, g->city, d, 0, sr_game_time(g)), -1);
+  SR_CHECK(sr_chess_demand_op(&g->chess, g->city, d, 0, sr_game_time(g) + 86400) >= 0);
+  SR_CHECK_EQ(sr_chess_demand_op(&g->chess, g->city, -1, 0, 0), -1);
+  for (int tier = 1; tier <= 3; tier++)
+    SR_CHECK(sr_chess_demand_op(&g->chess, g->city, (d + tier) % g->city->district_count, tier, sr_game_time(g)) >= 0);
+  /* completing an offer advances its operation */
+  SrJob *j = sr_jobs_get(&g->jobs, ids[0]);
+  SrContract *k = sr_chess_contract_for_job(&g->chess, ids[0]);
+  int32_t kid = k->id;
+  SR_CHECK_EQ(sr_game_accept(g, ids[0]), SR_OK);
+  j->executed = true;
+  sr_game_report(g, ids[0]);
+  sr_game_skip(g, 120, false);
+  SR_CHECK(!sr_chess_contract(&g->chess, kid)->open);
+  SR_CHECK(sr_chess_contract(&g->chess, kid)->by_player);
+  SR_CHECK_STR(sr_op_name(SR_OP_ERRAND), "errand");
+  sr_game_destroy(g);
+}
+
+static void test_terminal_jobs(void) {
+  SR_SPEC("job-system", "Job board listings");
+  SR_SPEC("job-system", "Accepting from the terminal");
+  SrGame *g = game(45);
+  g->chess.story.offer_open = true;
+  sr_game_accept_retainer(g);
+  int patron = g->chess.story.patron;
+  int op = sr_chess_start_op(&g->chess, g->city, SR_OP_THEFT, patron, (patron + 1) % g->city->factions.corp_count,
+                             facility_of(g->city, (patron + 1) % g->city->factions.corp_count), -1, sr_game_time(g));
+  SR_CHECK(op > 0);
+  g->player.prog.street_cred = 30;
+  sr_game_skip(g, 3600, false); /* contracts are posted on the hour */
+  int32_t ids[32];
+  int n = sr_game_terminal_jobs(g, ids, 32);
+  SR_CHECK(n >= 1);
+  SrJob *j = sr_jobs_get(&g->jobs, ids[0]);
+  SR_CHECK(j && j->client_building == g->player.home); /* the handler's work first */
+  /* accept on the Jobs tab, without visiting anyone */
+  g->screen = SR_SCREEN_TERMINAL;
+  g->term_tab = SR_TAB_JOBS;
+  g->term_sel = 0;
+  SR_CHECK(sr_game_term_rows(g) >= 1);
+  SrActionState a;
+  memset(&a, 0, sizeof a);
+  a.pressed[SR_ACT_INTERACT] = true;
+  sr_game_step(g, &a);
+  SR_CHECK_EQ(j->state, SR_JS_ACCEPTED);
+  n = sr_game_terminal_jobs(g, ids, 32);
+  bool listed = false;
+  for (int i = 0; i < n; i++) listed |= ids[i] == j->id;
+  SR_CHECK(listed); /* accepted jobs stay on the list */
+  SrUi ui;
+  sr_ui_init(&ui);
+  sr_ui_begin(&ui, 1280, 720, 2);
+  g->chess.camp.hunter = (int8_t)patron;
+  sr_ui_build(&ui, g, NULL, false);
+  sr_ui_free(&ui);
+  /* the fixer menu draws its rows and the briefing */
+  g->screen = SR_SCREEN_PLAY;
+  SR_CHECK(sr_game_jobs_open(g, home_fixer(g)));
+  sr_ui_init(&ui);
+  sr_ui_begin(&ui, 1280, 720, 2);
+  sr_ui_build(&ui, g, NULL, false);
+  sr_ui_free(&ui);
+  sr_game_shop_close(g);
+  sr_game_destroy(g);
+}
+
+static void test_discovery(void) {
+  SR_SPEC("story-campaign", "Betrayal discovered");
+  SR_SPEC("story-campaign", "Framed betrayal stays hidden");
+  int found = 0;
+  for (int k = 0; k < 12; k++) {
+    SrGame *g = game(600 + (uint64_t)k);
+    SrStory *st = &g->chess.story;
+    st->offer_open = true;
+    sr_game_accept_retainer(g);
+    int trust = st->trust;
+    int64_t t = sr_game_time(g);
+    sr_story_job_done(&g->chess, g->city, -1, st->patron, true, 3, false, t); /* loud: certain */
+    SR_CHECK_EQ(st->trust, trust);                                            /* not yet */
+    sr_story_tick(&g->chess, g->city, g->pop, t + 3 * 86400 + 1);
+    found += st->trust <= trust - SR_BETRAYAL;
+    /* framed: never found out */
+    int before = st->trust;
+    sr_story_job_done(&g->chess, g->city, -1, st->patron, true, 3, true, t);
+    sr_story_tick(&g->chess, g->city, g->pop, t + 6 * 86400);
+    SR_CHECK_EQ(st->trust, before);
+    sr_game_destroy(g);
+  }
+  SR_CHECK_EQ(found, 12);
+}
+
+static void test_hunters(void) {
+  SR_SPEC("law-and-heat", "Hostile patron sends hunters");
+  SR_SPEC("law-and-heat", "Paying off the hunters");
+  SR_SPEC("law-and-heat", "Heat brings raids");
+  SR_SPEC("law-and-heat", "Bounty listing");
+  SrGame *g = game(46);
+  SrStory *st = &g->chess.story;
+  st->offer_open = true;
+  sr_game_accept_retainer(g);
+  int patron = st->patron;
+  st->trust = 10;
+  sr_story_discovered(&g->chess, g->city, sr_game_time(g));
+  SR_CHECK_EQ(st->hostile, patron);
+  /* the hunt operation completes: hunters strike the next time the player is out */
+  int64_t t0 = sr_game_time(g);
+  for (int h = 0; h < 48 && !g->enc.active; h++) sr_game_skip(g, 3600, false);
+  SR_CHECK(g->enc.active);
+  SR_CHECK(sr_game_time(g) - t0 <= 2 * 86400);
+  SR_CHECK_EQ(g->enc.faction, patron);
+  SR_CHECK_EQ(g->chess.camp.hunter, patron); /* listed as a bounty */
+  g->player.cred = 0;
+  SR_CHECK_EQ(sr_game_encounter(g, SR_ENC_PAY), SR_ERR_DENIED);
+  g->player.cred = 100000;
+  int64_t cash = g->player.cred;
+  float hp = g->player.health;
+  SR_CHECK_EQ(sr_game_encounter(g, SR_ENC_PAY), SR_OK);
+  SR_CHECK_EQ(g->player.cred, cash - g->enc.payoff);
+  SR_CHECK(g->player.health == hp);
+  SR_CHECK(!g->enc.active);
+  SR_CHECK(g->chess.camp.hunter < 0);
+  SR_CHECK_EQ(sr_game_encounter(g, SR_ENC_FIGHT), SR_ERR_INVALID);
+  /* fight and flight */
+  for (int c = SR_ENC_FIGHT; c <= SR_ENC_FLEE; c++)
+    for (int k = 0; k < 6; k++) {
+      g->player.health = g->player.max_health;
+      sr_game_encounter_start(g, (patron + 1) % g->city->factions.corp_count, false);
+      SR_CHECK(g->enc.active);
+      sr_game_skip(g, 600, false);
+      SR_CHECK_EQ(sr_game_encounter(g, (SrEncChoice)c), SR_OK);
+    }
+  /* Heat 4: a raid on the apartment at night */
+  int pol = sr_game_police(g);
+  sr_game_teleport_building(g, g->player.home);
+  sr_game_enter(g, g->player.home, SR_ENTRY_FRONT);
+  int64_t night = (sr_game_time(g) / 86400 + 1) * 86400 + 23 * 3600;
+  g->last_raid = -SR_WEEK_S;
+  sr_game_skip(g, night - 60 - sr_game_time(g), true);
+  g->heat.level[pol] = 4; /* wanted, asleep at home */
+  g->heat.decay_from[pol] = sr_game_time(g) + 86400;
+  sr_game_skip(g, 120, true);
+  SR_CHECK(g->enc.active && g->enc.raid);
+  /* the menu shows the choices when play resumes */
+  SrActionState a;
+  memset(&a, 0, sizeof a);
+  g->screen = SR_SCREEN_PLAY;
+  sr_game_step(g, &a);
+  SR_CHECK(g->screen == SR_SCREEN_SHOP && g->menu.encounter);
+  SrUi ui;
+  sr_ui_init(&ui);
+  sr_ui_begin(&ui, 1280, 720, 2);
+  sr_ui_build(&ui, g, NULL, false);
+  sr_ui_free(&ui);
+  SR_CHECK_EQ(sr_game_shop_buy(g, SR_ENC_PAY), SR_OK);
+  sr_game_destroy(g);
+}
+
 void suite_play(void) {
   SR_RUN(test_headlines);
   SR_RUN(test_patron_warning);
   SR_RUN(test_defection_limits);
   SR_RUN(test_mission_risk);
+  SR_RUN(test_offers_from_contracts);
+  SR_RUN(test_terminal_jobs);
+  SR_RUN(test_discovery);
+  SR_RUN(test_hunters);
 }

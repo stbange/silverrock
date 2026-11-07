@@ -473,6 +473,21 @@ SrResult sr_game_shop_buy(SrGame *g, int row) {
     sr_game_shop_close(g);
     return r;
   }
+  if (m->encounter) return sr_game_encounter(g, (SrEncChoice)row);
+  if (m->job_menu) {
+    SrJob *j = sr_jobs_get(&g->jobs, m->job[row]);
+    SrResult r = j ? sr_game_accept(g, j->id) : SR_ERR_NOT_FOUND;
+    if (r == SR_OK) {
+      j->client_building = m->building; /* report back to this fixer */
+      char msg[128];
+      snprintf(msg, sizeof msg, "Job accepted: %s", j->title);
+      sr_game_toast(g, msg);
+      sr_game_shop_close(g);
+    } else if (r == SR_ERR_DENIED) {
+      sr_game_toast(g, "You are not ready for that one.");
+    }
+    return r;
+  }
   if (m->housing) {
     SrResult r = sr_game_move_home(g, m->items[row].type);
     if (r == SR_OK) sr_game_shop_close(g);

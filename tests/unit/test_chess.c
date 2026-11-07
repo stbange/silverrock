@@ -65,7 +65,7 @@ static void test_soak_bounds(void) {
   }
   int ops = 0, done = 0;
   for (int f = 0; f < w.c->factions.count; f++)
-    for (int t = 0; t < SR_OP_COUNT; t++) ops += w.ch->f[f].ops_by_type[t];
+    for (int t = 0; t < SR_OP_TRACKED; t++) ops += w.ch->f[f].ops_by_type[t];
   for (int i = 0; i < w.ch->op_count; i++) done += w.ch->ops[i].succeeded;
   SR_CHECK(done > 0);
   printf("  soak: %d ops, %d news, %d elections, act %d, ending %d, arcs %d/%d\n", ops, w.ch->news.count,
@@ -626,7 +626,7 @@ static void test_patron(void) {
   sr_game_destroy(h);
   /* the first gig is the patron's test: completing it brings the handler's offer within 2 days */
   SrStory *st = &g->chess.story;
-  int ids[4];
+  int ids[SR_FIXER_OFFERS];
   int fixer = g->city->factions.fixer_building[district_of(g->city, g->player.home)];
   int k = sr_game_fixer(g, fixer, ids);
   SR_CHECK(k > 0);
@@ -674,19 +674,19 @@ static void test_trust(void) {
   SR_CHECK_EQ(bo->client_faction, st->patron);
   SR_CHECK_EQ(sr_game_accept(g, bo->id), SR_OK);
   /* deniable work for the patron builds trust; failures cost it */
-  sr_story_job_done(&g->chess, g->city, st->patron, 1, true, false, 0);
+  sr_story_job_done(&g->chess, g->city, st->patron, 1, true, 0, false, 0);
   SR_CHECK_EQ(st->trust, 66);
-  sr_story_job_done(&g->chess, g->city, st->patron, 1, false, false, 0);
+  sr_story_job_done(&g->chess, g->city, st->patron, 1, false, 0, false, 0);
   SR_CHECK_EQ(st->trust, 58);
   /* a job against the patron that it pins on the player */
   int patron = st->patron;
   int rival = (patron + 1) % g->city->factions.corp_count;
-  sr_story_job_done(&g->chess, g->city, rival, patron, true, false, 0); /* unseen: nothing */
+  sr_story_job_done(&g->chess, g->city, rival, patron, true, 0, true, 0); /* framed someone: nothing */
   SR_CHECK_EQ(st->trust, 58);
-  sr_story_job_done(&g->chess, g->city, rival, patron, true, true, 0);
+  sr_story_discovered(&g->chess, g->city, 0); /* the patron finds out */
   SR_CHECK_EQ(st->trust, 58 - SR_BETRAYAL);
   st->trust = 20;
-  sr_story_job_done(&g->chess, g->city, rival, patron, true, true, sr_game_time(g));
+  sr_story_discovered(&g->chess, g->city, sr_game_time(g));
   SR_CHECK_EQ(st->trust, 0);
   SR_CHECK_EQ(st->hostile, patron);
   SR_CHECK(st->patron < 0);

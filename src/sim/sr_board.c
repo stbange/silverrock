@@ -15,8 +15,9 @@ void sr_resource_bounds(SrResource r, int16_t *lo, int16_t *hi) {
 }
 
 const char *sr_op_name(SrOpType t) {
-  static const char *const n[SR_OP_COUNT] = {"sabotage", "data theft", "takeover", "smear campaign", "bribery",
-                                             "turf war", "fortify",    "expand",   "retaliation",    "manhunt"};
+  static const char *const n[SR_OP_COUNT] = {"sabotage",    "data theft", "takeover", "smear campaign",
+                                             "bribery",     "turf war",   "fortify",  "expand",
+                                             "retaliation", "manhunt",    "errand"};
   return (unsigned)t < SR_OP_COUNT ? n[t] : "?";
 }
 
@@ -116,6 +117,7 @@ void sr_chess_init(SrChess *ch, SrCity *c, uint64_t seed, int patron_choice, int
     if (c->factions.council[s].patron >= 0) add_link(ch, c->factions.council[s].patron, s, SR_LINK_BRIBES);
   sr_market_init(&ch->market, ch, c);
   sr_story_init(&ch->story, c, seed, patron_choice);
+  ch->camp.hunter = -1;
   ch->story.act_started = now;
 }
 
@@ -254,8 +256,9 @@ static uint8_t job_for(SrOpType t, int step) {
     case SR_OP_THEFT:
     case SR_OP_SMEAR: return 6;                    /* SR_JT_STEAL_DATA */
     case SR_OP_TAKEOVER: return step == 0 ? 6 : 8; /* steal plans, then SR_JT_RAID */
-    case SR_OP_BRIBE: return 0;                    /* SR_JT_DELIVER the envelope */
-    default: return 8;                             /* SR_JT_RAID (turf) */
+    case SR_OP_BRIBE:
+    case SR_OP_ERRAND: return 0; /* SR_JT_DELIVER (an errand's job is chosen when it is demanded) */
+    default: return 8;           /* SR_JT_RAID (turf) */
   }
 }
 
@@ -323,10 +326,89 @@ int sr_chess_start_op(SrChess *ch, SrCity *c, SrOpType type, int client, int tar
   op->arc = -1;
   op->contract = -1;
   op->started = now;
-  if (client >= 0 && client < SR_MAX_FACTIONS) ch->f[client].ops_by_type[type]++;
+  if (client >= 0 && client < SR_MAX_FACTIONS && type < SR_OP_TRACKED) ch->f[client].ops_by_type[type]++;
   if (op->steps > 0) post_contract(ch, c, op, now);
   (void)c;
   return op->id;
+}
+
+/* ---- operations on demand --------------------------------------------------------------------- */
+
+static int pick_rival_corp(const SrCity *c, SrRng *r, int self);
+
+static int district_of_building(const SrCity *c, int b) { return c->blocks[c->buildings[b].block].district; }
+
+/* A building of a faction in the district (or any of its buildings when none is there). */
+static int faction_building_in(const SrCity *c, int f, int d, uint64_t key) {
+  const SrFaction *fa = &c->factions.f[f];
+  int any = fa->facility_count > 0 ? fa->facilities[key % fa->facility_count] : fa->hq_building;
+  for (int i = 0; i < fa->facility_count; i++)
+    if (district_of_building(c, fa->facilities[(i + key) % fa->facility_count]) == d)
+      return fa->facilities[(i + key) % fa->facility_count];
+  return any;
+}
+
+/* A place of business in the district (shops, bars, clinics) for errands. */
+static int business_in(const SrCity *c, int d, uint64_t key) {
+  int n = 0;
+  for (int b = 0; b < c->building_count; b++)
+    n += c->buildings[b].poi != SR_POI_NONE && c->buildings[b].poi < SR_POI_FIRST_SPECIAL &&
+         district_of_building(c, b) == d;
+  if (n == 0) return -1;
+  int want = (int)(key % (uint64_t)n);
+  for (int b = 0; b < c->building_count; b++)
+    if (c->buildings[b].poi != SR_POI_NONE && c->buildings[b].poi < SR_POI_FIRST_SPECIAL &&
+        district_of_building(c, b) == d && want-- == 0)
+      return b;
+  return -1; /* GCOVR_EXCL_LINE reason: the count above guarantees a match */
+}
+
+int32_t sr_chess_demand_op(SrChess *ch, SrCity *c, int district, int tier, int64_t now) {
+  if (district < 0 || district >= c->district_count) return -1;
+  int32_t day = (int32_t)(now / 86400) + 1;
+  if (ch->camp.demand_day[district] == day) return -1;
+  ch->camp.demand_day[district] = day;
+  SrRng r = sr_rng_stream(ch->seed, "demand", (uint64_t)day, (uint64_t)district * 8u + (uint64_t)tier);
+  int id = -1;
+  uint8_t job = 0;
+  if (tier <= 0) { /* street business for the gang that runs the district, or a minor faction */
+    int client = sr_chess_gang_of(c, district);
+    if (client < 0 || ch->f[client].dissolved) {
+      static const int minors[3] = {0, 1, 2};
+      int pick = minors[sr_rng_range(&r, 0, 2)];
+      client = pick == 0 ? c->factions.union_ : pick == 1 ? c->factions.church : c->factions.collective;
+    }
+    int b = business_in(c, district, sr_rng_u32(&r));
+    if (b < 0) return -1;
+    static const uint8_t errands[3] = {0, 1, 2}; /* deliver, collect, find */
+    job = errands[sr_rng_range(&r, 0, 2)];
+    id = sr_chess_start_op(ch, c, SR_OP_ERRAND, client, -1, b, district, now);
+  } else {
+    /* a megacorp moves against a rival's site in or near the district */
+    int client = sr_rng_range(&r, 0, c->factions.corp_count - 1);
+    int target = pick_rival_corp(c, &r, client);
+    if (target < 0) return -1; /* GCOVR_EXCL_LINE reason: every city has several corps */
+    int b = faction_building_in(c, target, district, sr_rng_u32(&r));
+    SrOpType type;
+    if (tier == 1) {
+      static const uint8_t small[3] = {3, 4, 5}; /* plant a bug, surveil, steal an item */
+      job = small[sr_rng_range(&r, 0, 2)];
+      type = job == 3 ? SR_OP_SMEAR : SR_OP_THEFT;
+    } else {
+      static const SrOpType big[3] = {SR_OP_SABOTAGE, SR_OP_THEFT, SR_OP_TAKEOVER};
+      type = big[sr_rng_range(&r, 0, 2)];
+      if (type == SR_OP_TAKEOVER && (b < 0 || b == c->factions.f[target].hq_building)) type = SR_OP_SABOTAGE;
+    }
+    add_res(ch, c, client, SR_RES_CAPITAL, -3);
+    id = sr_chess_start_op(ch, c, type, client, target, b, -1, now);
+    if (tier >= 2) job = 255; /* the operation's own job */
+  }
+  SrOperation *op = sr_chess_op(ch, id);
+  if (!op) return -1; /* GCOVR_EXCL_LINE reason: operations are recycled when the list is full */
+  SrContract *k = sr_chess_contract(ch, op->contract);
+  if (!k) return -1; /* GCOVR_EXCL_LINE reason: every demanded operation has a step */
+  if (job != 255) k->job_type = job;
+  return k->id;
 }
 
 /* People connected to the target may pay for it. */
@@ -451,8 +533,17 @@ static void apply_success(SrChess *ch, SrCity *c, SrPopulation *pop, SrEventLog 
       add_res(ch, c, cl, SR_RES_FORCE, 3);
       if (is_corp(c, cl)) ch->market.shock[cl] += 25;
       break;
-    case SR_OP_HUNT: break; /* the game layer sends the hit squad */
-    default: break;         /* GCOVR_EXCL_LINE reason: every operation type is listed */
+    case SR_OP_HUNT: /* the hunters are on their way: the game layer stages the encounter */
+      if (cl >= 0) {
+        ch->camp.hunter = (int8_t)cl;
+        ch->camp.hunt_at = now;
+      }
+      break;
+    case SR_OP_ERRAND: /* street business: a little money and goodwill */
+      add_res(ch, c, cl, SR_RES_CAPITAL, 3);
+      add_res(ch, c, cl, SR_RES_INFLUENCE, 1);
+      break;
+    default: break; /* GCOVR_EXCL_LINE reason: every operation type is listed */
   }
   if (op->type != SR_OP_FORTIFY && op->type != SR_OP_EXPAND && op->type != SR_OP_HUNT)
     outcome_event(log, c, op, op->blamed, now);

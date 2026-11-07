@@ -54,8 +54,11 @@ typedef enum SrOpType {
   SR_OP_EXPAND,    /* invest: capital and force */
   SR_OP_RETALIATE, /* strike back at whoever the evidence points to */
   SR_OP_HUNT,      /* a hostile patron hunts the player */
+  SR_OP_ERRAND,    /* street business: a delivery, a collection, a find (small gains) */
   SR_OP_COUNT
 } SrOpType;
+
+#define SR_OP_TRACKED 10 /* operation types counted per faction (kept for save compatibility) */
 
 typedef enum SrChannel { SR_CH_BOARD, SR_CH_FIXER, SR_CH_GANG, SR_CH_HANDLER } SrChannel;
 
@@ -68,9 +71,9 @@ typedef struct SrFactionSim {
   int64_t cooldown_until;
   bool dissolved;
   int64_t reborn_at;
-  uint8_t generation;     /* gangs: how often the slot was refilled */
-  char name[SR_NAME_LEN]; /* gangs: name of the current generation (kept for loading) */
-  uint16_t ops_by_type[SR_OP_COUNT];
+  uint8_t generation;                  /* gangs: how often the slot was refilled */
+  char name[SR_NAME_LEN];              /* gangs: name of the current generation (kept for loading) */
+  uint16_t ops_by_type[SR_OP_TRACKED]; /* the strategic operation types (errands are not counted) */
 } SrFactionSim;
 
 typedef struct SrOperation {
@@ -297,9 +300,23 @@ typedef struct SrStory {
 
 #define SR_TRUST_DEFECT 25 /* trust with a new patron after a defection */
 
+#define SR_MAX_SUSPECTS 8
+
+/* A job against the patron the patron may still find out about. */
+typedef struct SrSuspect {
+  int64_t at;       /* when the patron's people finish looking into it */
+  uint8_t evidence; /* alarms, kills, witnesses: each adds 25 % to the chance */
+  bool active;
+} SrSuspect;
+
 typedef struct SrCampaign {
-  uint16_t blacklist; /* megacorps the player betrayed: no offers, never the patron again */
-  uint8_t defections; /* voluntary defections so far (one per campaign) */
+  uint16_t blacklist;                   /* megacorps the player betrayed: no offers, never the patron again */
+  uint8_t defections;                   /* voluntary defections so far (one per campaign) */
+  int32_t demand_day[SR_MAX_DISTRICTS]; /* last day an operation was started on demand there (+1) */
+  SrSuspect suspects[SR_MAX_SUSPECTS];
+  int discoveries; /* betrayals the patron found out about */
+  int8_t hunter;   /* faction whose hunters are coming for the player, -1 none */
+  int64_t hunt_at; /* when they strike (the next time the player is reachable) */
 } SrCampaign;
 
 /* ---- the whole corporate game ---------------------------------------------------------------- */
@@ -350,6 +367,10 @@ void sr_chess_advance(SrChess *ch, SrCity *c, SrPopulation *pop, SrEventLog *log
 int sr_chess_start_op(SrChess *ch, SrCity *c, SrOpType type, int client, int target, int building, int district,
                       int64_t now);
 SrOperation *sr_chess_op(SrChess *ch, int32_t id);
+/* Work wanted near a fixer: a faction active in the district starts an operation whose step fits
+ * the tier (0: an errand; 1: a bug, surveillance or theft; 2+: a strategic operation). At most one
+ * per district and day. Returns the contract id, or -1. */
+int32_t sr_chess_demand_op(SrChess *ch, SrCity *c, int district, int tier, int64_t now);
 SrContract *sr_chess_contract(SrChess *ch, int32_t id);
 SrContract *sr_chess_contract_for_job(SrChess *ch, int32_t job_id);
 /* Resolves a contract (by the player or off-screen) and applies its step outcome. */
@@ -440,7 +461,15 @@ void sr_story_beat_done(SrChess *ch, SrCity *c, int arc, bool success, int64_t n
 void sr_story_test_done(SrStory *s, int64_t now);
 void sr_story_accept_retainer(SrStory *s, int64_t now);
 /* A job the player finished: trust for the patron's work, betrayal when attributed against it. */
-void sr_story_job_done(SrChess *ch, SrCity *c, int client, int target, bool success, bool attributed, int64_t now);
+/* A job the player finished: trust for the patron's work; a job against the patron is looked into
+ * and discovered 1-3 days later with a chance of 25 % + 25 % per piece of evidence, unless the
+ * player framed someone else. */
+void sr_story_job_done(SrChess *ch, SrCity *c, int client, int target, bool success, int evidence, bool framed,
+                       int64_t now);
+/* The patron finds out about a betrayal: trust drops sharply, at zero the patron turns hostile. */
+void sr_story_discovered(SrChess *ch, SrCity *c, int64_t now);
+/* The job's target is the patron or a faction the patron funds or owns. */
+bool sr_story_against_patron(const SrChess *ch, int target);
 /* Defects to a rival megacorp; refused for a blacklisted one. Returns true when it happened. */
 bool sr_story_defect(SrChess *ch, const SrCity *c, int corp, int64_t now);
 bool sr_story_blacklisted(const SrChess *ch, int corp);

@@ -238,17 +238,59 @@ static void turn_hostile(SrChess *ch, const SrCity *c, int64_t now) {
   sr_chess_note(ch, now, msg);
 }
 
-void sr_story_job_done(SrChess *ch, SrCity *c, int client, int target, bool success, bool attributed, int64_t now) {
+bool sr_story_against_patron(const SrChess *ch, int target) {
+  int p = ch->story.patron;
+  if (p < 0 || target < 0) return false;
+  if (target == p) return true;
+  for (int i = 0; i < ch->link_count; i++) {
+    const SrLink *l = &ch->links[i];
+    if (l->a == p && l->b == target && (l->type == SR_LINK_FUNDS || l->type == SR_LINK_OWNS)) return true;
+  }
+  return false;
+}
+
+void sr_story_discovered(SrChess *ch, SrCity *c, int64_t now) {
+  SrStory *s = &ch->story;
+  if (s->patron < 0) return;
+  ch->camp.discoveries++;
+  sr_story_trust(s, -SR_BETRAYAL);
+  char msg[72];
+  snprintf(msg, sizeof msg, "%s learns the player worked against it", c->factions.f[s->patron].name);
+  sr_chess_note(ch, now, msg);
+  if (s->trust == 0) turn_hostile(ch, c, now);
+}
+
+void sr_story_job_done(SrChess *ch, SrCity *c, int client, int target, bool success, int evidence, bool framed,
+                       int64_t now) {
   SrStory *s = &ch->story;
   if (s->act == SR_ACT_EPILOGUE) return;
   if (s->act == SR_ACT_PROMOTION && client >= 0) s->corps_worked[client]++;
   if (s->patron < 0) return;
-  if (target == s->patron && attributed) {
-    sr_story_trust(s, -SR_BETRAYAL);
-    if (s->trust == 0) turn_hostile(ch, c, now);
+  if (sr_story_against_patron(ch, target) && success) {
+    if (framed) return; /* the evidence points elsewhere: the patron never knows */
+    for (int i = 0; i < SR_MAX_SUSPECTS; i++)
+      if (!ch->camp.suspects[i].active) {
+        uint64_t h = sr_mix64(sr_hash_combine(ch->seed, (uint64_t)now * 3u + (uint64_t)i));
+        ch->camp.suspects[i].active = true;
+        ch->camp.suspects[i].evidence = (uint8_t)SR_MIN(evidence, 3);
+        ch->camp.suspects[i].at = now + 86400 + (int64_t)(h % (2 * 86400));
+        break;
+      }
     return;
   }
-  if (client == s->patron) sr_story_trust(s, success ? (attributed ? 3 : 6) : -8);
+  if (client == s->patron) sr_story_trust(s, success ? (evidence > 0 ? 3 : 6) : -8);
+}
+
+/* The patron's people finish looking into the player's jobs against it. */
+static void look_into_suspects(SrChess *ch, SrCity *c, int64_t now) {
+  for (int i = 0; i < SR_MAX_SUSPECTS; i++) {
+    SrSuspect *q = &ch->camp.suspects[i];
+    if (!q->active || now < q->at) continue;
+    q->active = false;
+    int chance = 25 + 25 * q->evidence;
+    if ((int)(sr_mix64(sr_hash_combine(ch->seed, (uint64_t)q->at + (uint64_t)i * 977u)) % 100u) < chance)
+      sr_story_discovered(ch, c, now);
+  }
 }
 
 bool sr_story_defect(SrChess *ch, const SrCity *c, int corp, int64_t now) {
@@ -389,6 +431,7 @@ static void begin_act3(SrChess *ch, SrCity *c, const SrPopulation *pop, int lead
 
 void sr_story_tick(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_t now) {
   SrStory *s = &ch->story;
+  look_into_suspects(ch, c, now);
   if (sr_story_succession(s, ch->seed, now) > 0) sr_chess_note(ch, now, "A successor steps into a vacant role");
   /* the handler calls with the retainer: after the test, or at the end of the first week */
   if (!s->retainer && s->act == SR_ACT_PROLOGUE && s->patron >= 0) {

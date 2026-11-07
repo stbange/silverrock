@@ -10,12 +10,15 @@
 
 static int64_t now_of(const SrGame *g) { return sr_game_time(g); }
 static void sync_world(SrGame *g, int64_t t);
+static void hunters(SrGame *g, int64_t t);
 
 void sr_game_chess_init(SrGame *g) {
   sr_chess_init(&g->chess, g->city, sr_hash_combine(g->seed, 0xC4E55u), g->patron_choice, now_of(g));
   g->chess.news.events_seen = g->events.count;
   g->curfew_stop_at = 0;
   g->confirm_job = -1;
+  g->enc.active = false;
+  g->last_raid = -SR_WEEK_S; /* no raid cooldown at the start */
   g->term_tab = SR_TAB_HOME;
   g->term_sel = 0;
 }
@@ -27,14 +30,7 @@ void sr_game_chess_loaded(SrGame *g) {
 }
 
 bool sr_game_job_against_patron(const SrGame *g, const SrJob *j) {
-  int p = g->chess.story.patron, t = j->target_faction;
-  if (p < 0 || t < 0 || !g->chess.story.retainer) return false;
-  if (t == p) return true;
-  for (int i = 0; i < g->chess.link_count; i++) { /* the patron's gangs and stations */
-    const SrLink *l = &g->chess.links[i];
-    if (l->a == p && l->b == t && (l->type == SR_LINK_FUNDS || l->type == SR_LINK_OWNS)) return true;
-  }
-  return false;
+  return g->chess.story.retainer && sr_story_against_patron(&g->chess, j->target_faction);
 }
 
 int sr_game_police(const SrGame *g) { return sr_politics_police(&g->chess.pol, g->city); }
@@ -92,8 +88,17 @@ static void post_contracts(SrGame *g, int64_t t) {
     j.source = source_of(k->channel);
     j.deadline = k->deadline;
     int d = g->city->blocks[g->city->buildings[j.target_building].block].district;
-    j.client_building = k->channel == SR_CH_FIXER ? g->city->factions.fixer_building[d] : g->player.home;
+    /* the district's fixer brokers everything but the handler's work */
+    j.client_building = k->channel == SR_CH_HANDLER ? g->player.home : g->city->factions.fixer_building[d];
     if (j.client_building < 0) j.client_building = g->player.home;
+    if (j.tier == 2 && sr_max_tier_for_cred(g->player.prog.street_cred) >= 3 && key % 10u < 4u &&
+        j.client_faction >= 0 && j.client_faction < g->city->factions.corp_count) {
+      int32_t lo, hi; /* an Operator-level variant of the job */
+      j.tier = 3;
+      sr_tier_pay_range(3, &lo, &hi);
+      j.pay = lo + (int32_t)((key >> 8) % (uint64_t)(hi - lo));
+      j.upfront = j.pay / 4;
+    }
     SrJob *s = sr_jobs_push(&g->jobs, &j);
     if (!s) return;
     k->job_id = s->id;
@@ -103,6 +108,94 @@ static void post_contracts(SrGame *g, int64_t t) {
       handler_says(g, msg);
     }
   }
+}
+
+/* ---- fixers -------------------------------------------------------------------------------- */
+
+static int district_at(const SrCity *c, int b) { return c->blocks[c->buildings[b].block].district; }
+
+/* The district and its two nearest neighbours. */
+static int area_of(const SrCity *c, int d, int out[3]) {
+  int n = 0;
+  out[n++] = d;
+  for (int pass = 0; pass < 2; pass++) {
+    int best = -1;
+    int64_t bd = INT64_MAX;
+    for (int k = 0; k < c->district_count; k++) {
+      if (k == out[0] || (n > 1 && k == out[1])) continue;
+      int64_t dx = c->districts[k].cx - c->districts[d].cx, dy = c->districts[k].cy - c->districts[d].cy;
+      if (dx * dx + dy * dy < bd) bd = dx * dx + dy * dy, best = k;
+    }
+    if (best >= 0) out[n++] = best;
+  }
+  return n;
+}
+
+static int collect_offers(SrGame *g, const int *area, int na, int out[SR_FIXER_OFFERS]) {
+  int n = 0, max = sr_max_tier_for_cred(g->player.prog.street_cred);
+  for (int i = 0; i < g->jobs.count && n < SR_FIXER_OFFERS; i++) {
+    const SrJob *j = &g->jobs.jobs[i];
+    if (j->state != SR_JS_OFFERED || j->tier > max || j->client_building == g->player.home) continue;
+    if (!sr_chess_contract_for_job(&g->chess, j->id)) continue; /* only steps of operations */
+    int d = district_at(g->city, j->target_building);
+    for (int a = 0; a < na; a++)
+      if (d == area[a]) {
+        out[n++] = j->id;
+        break;
+      }
+  }
+  return n;
+}
+
+int sr_game_fixer(SrGame *g, int fixer, int out[SR_FIXER_OFFERS]) {
+  int64_t t = now_of(g);
+  if (fixer < 0) return 0;
+  int area[3];
+  int na = area_of(g->city, district_at(g->city, fixer), area);
+  post_contracts(g, t);
+  int n = collect_offers(g, area, na, out);
+  /* too little work around: the district's factions start operations of fitting tiers */
+  int max = sr_max_tier_for_cred(g->player.prog.street_cred);
+  for (int a = 0; a < na && n < 3; a++) {
+    int tier = (int)(sr_mix64(sr_hash_combine(g->chess.seed, (uint64_t)(t / 86400) * 7u + (uint64_t)a)) % 2u)
+                   ? max
+                   : (int)(sr_mix64((uint64_t)t + (uint64_t)a) % (uint64_t)(max + 1));
+    if (sr_chess_demand_op(&g->chess, g->city, area[a], SR_MIN(tier, 2), t) < 0) continue;
+    post_contracts(g, t);
+    n = collect_offers(g, area, na, out);
+  }
+  return n;
+}
+
+bool sr_game_jobs_open(SrGame *g, int fixer) {
+  int ids[SR_FIXER_OFFERS];
+  int n = sr_game_fixer(g, fixer, ids);
+  if (n == 0) return false;
+  SrMenu *m = &g->menu;
+  memset(m, 0, sizeof *m);
+  m->building = fixer;
+  m->job_menu = true;
+  for (int i = 0; i < n && i < SR_MENU_MAX; i++) m->job[m->count++] = ids[i];
+  g->screen = SR_SCREEN_SHOP;
+  g->confirm_job = -1;
+  return true;
+}
+
+int sr_game_terminal_jobs(const SrGame *g, int32_t *out, int max) {
+  int n = 0;
+  /* 0 handler, 1 gang contacts, 2 public board, 3 accepted */
+  for (int group = 0; group < 4; group++)
+    for (int i = 0; i < g->jobs.count && n < max; i++) {
+      const SrJob *j = &g->jobs.jobs[i];
+      bool offered = j->state == SR_JS_OFFERED, handler = j->client_building == g->player.home;
+      bool in = group == 0   ? offered && handler
+                : group == 1 ? offered && !handler && j->source == SR_SRC_CONTACT
+                : group == 2 ? offered && !handler && j->source == SR_SRC_BOARD
+                             : j->state == SR_JS_ACCEPTED;
+      if (in && group < 3 && j->tier > sr_max_tier_for_cred(g->player.prog.street_cred) && j->tier != 4) in = false;
+      if (in) out[n++] = j->id;
+    }
+  return n;
 }
 
 int sr_game_handler_offers(SrGame *g) {
@@ -155,14 +248,13 @@ static void book_jobs(SrGame *g, int64_t t) {
     }
     if (!done && !failed) continue;
     j->booked = true;
-    bool evidence = j->alarms > 0 || j->kills > 0;
-    bool attributed = evidence && j->framed < 0;
+    int evidence = (j->alarms > 0) + (j->kills > 0) + (j->alarms > 1);
     if (k && k->open) {
       k->framed = j->framed;
-      k->player_evidence = evidence;
+      k->player_evidence = evidence > 0;
       sr_chess_resolve(ch, g->city, g->pop, &g->events, k, done, true, t);
     }
-    sr_story_job_done(ch, g->city, j->client_faction, j->target_faction, done, attributed, t);
+    sr_story_job_done(ch, g->city, j->client_faction, j->target_faction, done, evidence, j->framed >= 0, t);
     if (done && j->id == ch->story.test_job) {
       sr_story_test_done(&ch->story, t);
       ch->story.test_job = -2; /* used */
@@ -234,9 +326,107 @@ void sr_game_chess_minute(SrGame *g, int64_t t) {
     post_contracts(g, t);
     sync_world(g, t);
     story_messages(g);
-    if (t % 86400 == 9 * 3600) sr_game_handler_offers(g);
+    if (t % 86400 == 9 * 3600) {
+      sr_game_handler_offers(g);
+      /* gangs and minor groups post street work on the board and through their contacts */
+      int d = (int)(sr_mix64(sr_hash_combine(ch->seed, (uint64_t)t)) % (uint64_t)g->city->district_count);
+      if (sr_chess_demand_op(ch, g->city, d, 0, t) >= 0) post_contracts(g, t);
+    }
   }
   curfew_checks(g, t);
+  hunters(g, t);
+}
+
+/* ---- hunters --------------------------------------------------------------------------------- */
+
+static bool at_home(const SrGame *g) { return g->site.active && g->site.in.apartment; }
+
+void sr_game_encounter_start(SrGame *g, int f, bool raid) {
+  if (f < 0 || f >= g->city->factions.count || g->enc.active) return;
+  g->enc.active = true;
+  g->enc.raid = raid;
+  g->enc.faction = (int8_t)f;
+  g->enc.payoff = 400 + 20 * g->chess.f[f].res[SR_RES_FORCE];
+  char msg[112];
+  snprintf(msg, sizeof msg, raid ? "%s hitters kick in your door." : "%s hitters block the street ahead.",
+           g->city->factions.f[f].name);
+  sr_player_story_message(&g->player, "Street", msg, now_of(g));
+  sr_game_toast(g, raid ? "RAID! Fight, run or pay." : "AMBUSH! Fight, run or pay.");
+  sr_game_encounter_menu(g);
+}
+
+void sr_game_encounter_menu(SrGame *g) {
+  if (!g->enc.active || g->screen != SR_SCREEN_PLAY) return;
+  SrMenu *m = &g->menu; /* the choice as a menu */
+  memset(m, 0, sizeof *m);
+  m->building = g->player.home;
+  m->encounter = true;
+  m->count = 3;
+  g->screen = SR_SCREEN_SHOP;
+}
+
+static void end_hunt(SrGame *g) {
+  if (g->chess.camp.hunter == g->enc.faction) g->chess.camp.hunter = -1;
+  if (g->screen == SR_SCREEN_SHOP && g->menu.encounter) g->screen = SR_SCREEN_PLAY;
+  g->enc.active = false;
+}
+
+SrResult sr_game_encounter(SrGame *g, SrEncChoice c) {
+  if (!g->enc.active) return SR_ERR_INVALID;
+  int f = g->enc.faction, force = g->chess.f[f].res[SR_RES_FORCE];
+  int64_t t = now_of(g);
+  uint64_t h = sr_mix64(sr_hash_combine(g->chess.seed, (uint64_t)t * 7u + (uint64_t)c));
+  SrPlayer *p = &g->player;
+  if (c == SR_ENC_PAY) {
+    if (p->cred < g->enc.payoff) return SR_ERR_DENIED;
+    sr_player_tx(p, t, -g->enc.payoff, "paid off hunters");
+    if (g->heat.level[f] > 0) g->heat.level[f]--;
+    sr_game_toast(g, "They count the cred and walk away.");
+    end_hunt(g);
+    return SR_OK;
+  }
+  int best_gun = SR_MAX(p->prog.skill_rank[SR_SK_PISTOLS], p->prog.skill_rank[SR_SK_LONGGUNS]);
+  int chance = c == SR_ENC_FIGHT ? SR_CLAMP(35 + best_gun * 6 - force / 4, 10, 85)
+                                 : SR_CLAMP(55 + p->prog.skill_rank[SR_SK_ATHLETICS] * 5 - force / 5, 15, 90);
+  bool won = (int)(h % 100u) < chance;
+  float damage = (float)(10 + (int)((h >> 8) % (uint64_t)(10 + force / 2)));
+  if (c == SR_ENC_FLEE && won) damage = 0;
+  if (c == SR_ENC_FIGHT && won) damage *= 0.5f;
+  p->health -= damage;
+  if (c == SR_ENC_FIGHT && won) {
+    g->chess.f[f].res[SR_RES_FORCE] = (int16_t)SR_MAX(0, force - 5);
+    sr_game_toast(g, "You drop them. Nobody else is coming. Today.");
+    end_hunt(g);
+  } else {
+    sr_game_toast(g, c == SR_ENC_FLEE && won ? "You lose them in the crowd." : "You get away, bleeding.");
+    if (g->chess.camp.hunter == f) g->chess.camp.hunt_at = t + 2 * 86400; /* they will try again */
+    if (g->screen == SR_SCREEN_SHOP && g->menu.encounter) g->screen = SR_SCREEN_PLAY;
+    g->enc.active = false;
+  }
+  if (p->health <= 0) sr_game_flatline(g);
+  return SR_OK;
+}
+
+static void hunters(SrGame *g, int64_t t) {
+  if (g->enc.active || g->dive.active) return;
+  int hour = (int)((t % 86400) / 3600);
+  bool night = hour >= 22 || hour < 6, home = at_home(g);
+  SrCampaign *cp = &g->chess.camp;
+  if (cp->hunter >= 0 && t >= cp->hunt_at) {
+    if (home && night)
+      sr_game_encounter_start(g, cp->hunter, true);
+    else if (!g->site.active)
+      sr_game_encounter_start(g, cp->hunter, false);
+    return;
+  }
+  /* high Heat: raids on the apartment at night */
+  if (home && night && t - g->last_raid >= 3 * 86400)
+    for (int f = 0; f < g->city->factions.count; f++)
+      if (g->heat.level[f] >= 4) {
+        g->last_raid = t;
+        sr_game_encounter_start(g, f, true);
+        return;
+      }
 }
 
 /* ---- player choices --------------------------------------------------------------------------- */
@@ -405,6 +595,10 @@ const char *sr_game_story_option(const SrGame *g, int i, int *kind) {
 int sr_game_term_rows(const SrGame *g) {
   switch ((SrTermTab)g->term_tab) {
     case SR_TAB_MARKET: return g->city->factions.corp_count;
+    case SR_TAB_JOBS: {
+      int32_t ids[32];
+      return sr_game_terminal_jobs(g, ids, 32);
+    }
     case SR_TAB_STORY: {
       int n = 0, k;
       while (sr_game_story_option(g, n, &k)) n++;
@@ -430,6 +624,18 @@ void sr_game_term_input(SrGame *g, const SrActionState *a) {
       sr_game_toast(g, sr_game_trade(g, g->term_sel, 10) == SR_OK ? "Bought 10 shares." : "Not enough cred.");
     if (a->pressed[SR_ACT_RELOAD])
       sr_game_toast(g, sr_game_trade(g, g->term_sel, -10) == SR_OK ? "Sold 10 shares." : "Margin limit reached.");
+  }
+  if (g->term_tab == SR_TAB_JOBS && rows > 0 && a->pressed[SR_ACT_INTERACT]) {
+    int32_t ids[32];
+    sr_game_terminal_jobs(g, ids, 32);
+    SrJob *j = sr_jobs_get(&g->jobs, ids[SR_MIN(g->term_sel, rows - 1)]);
+    if (j && j->state == SR_JS_OFFERED) {
+      SrResult r = sr_game_accept(g, j->id);
+      if (r == SR_OK)
+        sr_game_toast(g, "Job accepted. It's on your list.");
+      else if (r == SR_ERR_DENIED)
+        sr_game_toast(g, "You are not ready for that one.");
+    }
   }
   if (g->term_tab == SR_TAB_STORY && rows > 0 && a->pressed[SR_ACT_INTERACT]) {
     int kind = 0;

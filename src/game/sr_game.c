@@ -265,6 +265,7 @@ static void move_player(SrGame *g, const SrActionState *a, float dt) {
 
 void sr_game_step(SrGame *g, const SrActionState *a) {
   if (!g->started) return;
+  sr_game_encounter_menu(g); /* an encounter that began while time was skipped */
   if (g->screen == SR_SCREEN_SHOP) {
     if (a) {
       int dir = a->move_y > 0.5f ? -1 : a->move_y < -0.5f ? 1 : 0;
@@ -531,10 +532,6 @@ SrResult sr_game_walk_to(SrGame *g, int to) {
   return SR_OK;
 }
 
-int sr_game_fixer(SrGame *g, int fixer, int out_ids[4]) {
-  return sr_jobs_fixer_offers(&g->jobs, g->city, fixer, sr_game_time(g), g->player.prog.street_cred, out_ids);
-}
-
 SrResult sr_game_accept(SrGame *g, int32_t id) {
   SrJob *j = sr_jobs_get(&g->jobs, id);
   if (!j) return SR_ERR_NOT_FOUND;
@@ -702,21 +699,10 @@ SrResult sr_game_interact(SrGame *g) {
       }
       return sr_game_enter(g, c.building, SR_ENTRY_FRONT);
     case SR_CTX_CAPSULE: return sr_game_sleep(g, 8, SR_SLEEP_CAPSULE);
-    case SR_CTX_FIXER: {
-      int ids[4];
-      int n = sr_game_fixer(g, c.building, ids);
-      for (int i = 0; i < n; i++) {
-        SrJob *j = sr_jobs_get(&g->jobs, ids[i]);
-        if (j && j->state == SR_JS_OFFERED && sr_game_accept(g, ids[i]) == SR_OK) {
-          char msg[128];
-          snprintf(msg, sizeof msg, "Job accepted: %s", j->title);
-          sr_game_toast(g, msg);
-          return SR_OK;
-        }
-      }
+    case SR_CTX_FIXER:
+      if (sr_game_jobs_open(g, c.building)) return SR_OK;
       sr_game_toast(g, "No work for you today, choom.");
       return SR_ERR_NOT_FOUND;
-    }
     case SR_CTX_JOB_TARGET: {
       SrJob *j = sr_jobs_get(&g->jobs, c.job);
       if (sr_job_is_site((SrJobType)j->type)) /* site jobs are played inside */

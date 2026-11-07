@@ -288,7 +288,7 @@ static void test_ui(void) {
   static const SrScreen screens[] = {SR_SCREEN_TITLE, SR_SCREEN_PLAY, SR_SCREEN_PAUSE, SR_SCREEN_TERMINAL,
                                      SR_SCREEN_DEAD};
   sr_game_toast(g, "toast");
-  int ids[4];
+  int ids[SR_FIXER_OFFERS];
   int k = sr_game_fixer(g, g->city->factions.fixer_building[0], ids);
   if (k) sr_game_accept(g, ids[0]);
   g->ctx.kind = SR_CTX_FOOD;

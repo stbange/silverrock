@@ -252,7 +252,13 @@ static void test_job_interactions(void) {
   sr_poi_hours(g->city, fixer, &open, &hours);
   sr_game_teleport_building(g, fixer);
   SR_CHECK_EQ(sr_game_context(g).kind, SR_CTX_FIXER);
-  SR_CHECK_EQ(sr_game_interact(g), SR_OK); /* takes the first offered job */
+  SR_SPEC("job-system", "Fixer offers jobs");
+  SR_CHECK_EQ(sr_game_interact(g), SR_OK); /* the fixer's offers open as a list */
+  SR_CHECK_EQ(g->screen, SR_SCREEN_SHOP);
+  SR_CHECK(g->menu.job_menu && g->menu.count >= 1 && g->menu.count <= 6);
+  SR_CHECK(g->active_job < 0); /* nothing is taken until the player picks */
+  SR_CHECK_EQ(sr_game_shop_buy(g, 0), SR_OK);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_PLAY);
   SR_CHECK(g->active_job >= 0);
   SrJob *j = sr_jobs_get(&g->jobs, g->active_job);
   sr_game_teleport_building(g, j->target_building);
@@ -382,7 +388,7 @@ static void test_save_roundtrip(void) {
   SrHeat *h = &g->heat;
   SrCrime cr = {0, 2, true, true, false, 9, sr_game_time(g)};
   sr_heat_crime(h, &cr);
-  int ids[4];
+  int ids[SR_FIXER_OFFERS];
   sr_game_fixer(g, g->city->factions.fixer_building[0], ids);
   sr_game_accept(g, ids[0]);
   SrAutoplayStats st = sr_autoplay(g, SR_STRAT_GIG, 70, 0); /* ten weeks */

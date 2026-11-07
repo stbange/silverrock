@@ -374,8 +374,8 @@ static void test_gameplay_screenshots(void) {
   sr_chess_reveal_faction(&g->chess, (g->chess.story.patron + 1) % c->factions.corp_count);
   sr_game_trade(g, 1, 20);
   g->screen = SR_SCREEN_TERMINAL;
-  static const char *const tabs[SR_TAB_COUNT] = {"07_terminal_home", "08_terminal_news", "09_terminal_market",
-                                                 "10_terminal_board", "11_terminal_story"};
+  static const char *const tabs[SR_TAB_COUNT] = {"07_terminal_home",   "07b_terminal_jobs", "08_terminal_news",
+                                                 "09_terminal_market", "10_terminal_board", "11_terminal_story"};
   for (int tab = 0; tab < SR_TAB_COUNT; tab++) {
     g->term_tab = tab;
     g->term_sel = tab == SR_TAB_MARKET ? 1 : 0;
@@ -586,6 +586,21 @@ static void test_shop_taps(void) {
   e.button.y = g_app.css_h * 0.95f;
   sr_app_event(&g_app, &e);
   SR_CHECK_EQ(g->screen, SR_SCREEN_PLAY);
+  /* a fixer's offers by touch: a tap selects, a second tap accepts */
+  SR_SPEC("job-system", "Job selection by touch");
+  sr_game_leave(g);
+  int fixer = g->city->factions.fixer_building[g->city->blocks[g->city->buildings[g->player.home].block].district];
+  SR_CHECK(sr_game_jobs_open(g, fixer));
+  sr_app_iterate(&g_app);
+  float row1 = (top + line * 2.5f + 2) / (float)g_app.ui.h;
+  if (g->menu.count >= 2) {
+    sr_app_shop_tap(&g_app, row1);
+    SR_CHECK_EQ(g->menu.sel, 1);
+    SR_CHECK(g->active_job < 0);
+    sr_app_shop_tap(&g_app, row1);
+    SR_CHECK(g->active_job >= 0);
+  }
+  sr_game_shop_close(g);
 }
 
 static void test_retro_toggles(void) {
