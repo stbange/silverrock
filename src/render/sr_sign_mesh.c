@@ -68,7 +68,7 @@ void sr_build_blade_signs(const SrCity *c, int bi, SrMesh *m) {
     sr_mesh_box(m, sr_v3(x - 0.08f, y0 - 0.2f, z - 0.6f), sr_v3(x + 0.08f, top, z + 0.6f), (SrColor){20, 20, 26, 255},
                 SR_LAYER_WHITE, 0, 0);
     int dead = (int)((h >> 20) % 100u) < (poor ? 20 : 8) ? (int)((h >> 28) % (uint64_t)glyphs) : -1; /* broken neon */
-    uint8_t seed = (uint8_t)(0x80u | ((h >> 34) & 63u));
+    uint8_t seed = (uint8_t)(0x80u | ((h >> 34) % 56u)); /* a sign's seed: broken or steady, never a beacon */
     for (int g = 0; g < glyphs; g++) {
       SrAtlasCell a = sr_script_cell((int)((h >> (g * 6)) & 63u));
       float y = top - 0.3f - gh * (float)(g + 1);
@@ -181,7 +181,9 @@ void sr_build_billboard(SrMesh *m, const SrCity *c, const SrBillboardSlot *s, Sr
   SrColor corp = sr_corp_color(c->factions.f[ad.corp].hue);
   SrAtlasCell lay = sr_ad_cell(SR_LAYER_ADS, (int)((s->seed >> 3) % SR_AD_LAYOUTS));
   int em = ad.vandal ? 120 : 210;
+  int panel = m->nv;
   sr_mesh_quad(m, a, b, cc, d, lay.u0, lay.v1, lay.u1, lay.v0, corp, lay.layer, em, 0);
+  for (int v = panel; v < m->nv; v++) m->v[v].pad = sr_sign_pad(c->seed, s->seed); /* some flicker */
   /* the corp's logo on the left, the product's name along the bottom */
   float ls = s->h * 0.55f;
   SrAtlasCell ic = sr_icon_cell(SR_POI_CORP_HQ);

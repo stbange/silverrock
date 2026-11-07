@@ -429,6 +429,17 @@ void sr_build_metro_tracks(const SrCity *c, SrMesh *m);
 bool sr_metro_train_pos(const SrCity *c, int edge, int64_t t, SrVec3 *pos, SrVec3 *dir);
 int sr_build_trains(const SrCity *c, int64_t t, SrVec3 eye, SrMesh *out);
 
+/* Motion (sr_motion_mesh.c). */
+float sr_neon_level(uint8_t pad, float t); /* brightness of a neon with that pad byte at time t (mirrors the shader) */
+uint8_t sr_sign_pad(uint64_t seed, uint32_t id);
+SrVec3 sr_wind(uint64_t seed, int64_t t, float rain);
+bool sr_vehicle_is_patrol(const SrVehicle *v);
+void sr_build_police_lights(const SrCrowd *cr, SrVec3 eye, float time_s, int heat, SrMesh *out);
+int sr_build_flyers(const SrCity *c, SrVec3 eye, float time_s, SrMesh *out);
+int sr_build_litter(const SrCity *c, SrVec3 eye, float time_s, SrVec3 wind, SrMesh *out);
+void sr_build_sparks(const SrCity *c, SrVec3 eye, float time_s, SrMesh *out);
+void sr_build_fans(const SrCity *c, SrVec3 eye, float time_s, SrMesh *out);
+
 /* Props of a block, cached (for sprites and lights around the camera). */
 const SrStreetProp *sr_scene_props(SrSceneCache *s, const SrCity *c, int block, int *n);
 
@@ -448,7 +459,7 @@ void sr_sky_prepare(SrSceneCache *s, const SrCity *c);
 void sr_build_sky_dome(SrVec3 eye, SrMesh *out);
 /* Cloud deck lit by the districts below at night, slate by day, warmed by dawn and dusk. */
 void sr_build_deck(const SrSceneCache *s, const SrCity *c, SrVec3 eye, const SrSky *sky, const float fog[3],
-                   float time_s, SrMesh *base, SrMesh *glow);
+                   float time_s, int dark_district, SrMesh *base, SrMesh *glow);
 /* Halos of beacons between the fog end and three visibility distances; returns how many. */
 int sr_build_halos(const SrBeacon *b, int n, const SrBillboard *bb, float fog_end, float visibility, SrMesh *out);
 /* Faint halos around lights inside the fog (lamps and signs in wet air). */

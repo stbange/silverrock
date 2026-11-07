@@ -218,6 +218,7 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
       float cx = (bx0 + bx1) / 2, w = SR_MIN(3.0f, (bx1 - bx0) * 0.4f);
       int open = sr_deltas_get(d, bd->id) != 0; /* deltas can switch signs off */
       int em = open ? 255 : 40;
+      int sign_first = m->nv;
       sr_mesh_quad(m, sr_v3(cx - w, 3.2f, bz1 + 0.15f), sr_v3(cx + w, 3.2f, bz1 + 0.15f),
                    sr_v3(cx + w, 5.4f, bz1 + 0.15f), sr_v3(cx - w, 5.4f, bz1 + 0.15f), 0, 1, 1, 0, neon, SR_LAYER_SIGN,
                    em, 0);
@@ -226,6 +227,8 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
                    sr_v3(cx + 1.0f, 5.3f, bz1 + 0.2f), sr_v3(cx - 1.0f, 5.3f, bz1 + 0.2f), ic.u0, ic.v1, ic.u1, ic.v0,
                    neon, ic.layer, em, 0);
       sr_build_shop_name(m, bd, neon, open != 0);
+      uint8_t sign_pad = sr_sign_pad(c->seed, bd->id);
+      for (int v = sign_first; v < m->nv; v++) m->v[v].pad = sign_pad; /* about 8 % of signs are broken */
       /* awning: shelter from the rain */
       sr_mesh_quad(m, sr_v3(cx - w - 1, 3.0f, bz1 + 2.0f), sr_v3(cx + w + 1, 3.0f, bz1 + 2.0f),
                    sr_v3(cx + w + 1, 3.0f, bz1), sr_v3(cx - w - 1, 3.0f, bz1), 0, 0, 1, 1, shade(neon, 40),
@@ -484,6 +487,9 @@ void sr_build_vehicles(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *ou
                 (SrColor){255, 250, 220, 255}, SR_LAYER_WHITE, 0, 255);
     sr_mesh_box(out, sr_v3(b.x - 0.4f, 0.6f, b.z - 0.4f), sr_v3(b.x + 0.4f, 0.9f, b.z + 0.4f),
                 v->stopped ? (SrColor){255, 30, 30, 255} : (SrColor){150, 20, 20, 255}, SR_LAYER_WHITE, 0, 255);
+    if (sr_vehicle_is_patrol(v)) /* a light bar on the patrol cars (it flashes at Heat 3) */
+      sr_mesh_box(out, sr_v3(v->pos.x - 0.5f, 1.3f, v->pos.z - 0.5f), sr_v3(v->pos.x + 0.5f, 1.5f, v->pos.z + 0.5f),
+                  (SrColor){60, 60, 90, 255}, SR_LAYER_WHITE, 0, 40);
   }
 }
 
@@ -598,8 +604,10 @@ void sr_build_skyline(const SrCity *c, SrMesh *out) {
     sr_mesh_quad(out, p1, p0, sr_v3(p0.x, h, p0.z), sr_v3(p1.x, h, p1.z), 0, 8, 2, 0, col, SR_LAYER_WIN_GLASS, 40, 0);
     if (h > 200.0f) { /* a red beacon on the tallest towers of the skyline */
       SrVec3 m = sr_v3((p0.x + p1.x) * 0.5f, h, (p0.z + p1.z) * 0.5f);
+      int first = out->nv;
       sr_mesh_quad(out, sr_v3(m.x - 2.0f, h, m.z), sr_v3(m.x + 2.0f, h, m.z), sr_v3(m.x + 2.0f, h + 4.0f, m.z),
                    sr_v3(m.x - 2.0f, h + 4.0f, m.z), 0, 0, 1, 1, (SrColor){255, 40, 40, 255}, SR_LAYER_WHITE, 255, 0);
+      for (int v = first; v < out->nv; v++) out->v[v].pad = (uint8_t)(0x80 | (56 + i % 8)); /* blinking */
     }
   }
 }
@@ -903,7 +911,10 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   sr_build_sky_dome(p->pos, &s->sky);
   add_draw(f, &s->sky, SR_PASS_SKY, p->pos);
   if (!g->pall_removed) {
-    sr_build_deck(s, c, p->pos, &sky, f->fog, f->time_s, &s->deck, &s->deck_glow);
+    int dark = g->net.blackout_district >= 0 && sr_game_blackout_at(g, g->net.blackout_district)
+                   ? g->net.blackout_district
+                   : -2;
+    sr_build_deck(s, c, p->pos, &sky, f->fog, f->time_s, dark, &s->deck, &s->deck_glow);
     add_draw(f, &s->deck, SR_PASS_NOFOG, p->pos);
     add_draw(f, &s->deck_glow, SR_PASS_HALO, p->pos);
   } else if (sky.phase == SR_LIGHT_DAY) {
@@ -991,6 +1002,11 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   sr_build_stack_smoke(c, p->pos, f->time_s, &s->wet);
   sr_build_holo_ads(c, &s->ads, p->pos, f->time_s, &s->wet);
   sr_build_highway_traffic(c, p->pos, f->time_s, &s->wet);
+  sr_build_flyers(c, p->pos, f->time_s, &s->wet);
+  sr_build_litter(c, p->pos, f->time_s, sr_wind(g->seed, t, w.rain), &s->wet);
+  sr_build_sparks(c, p->pos, f->time_s, &s->wet);
+  sr_build_police_lights(&g->crowd, p->pos, f->time_s, heat, &s->wet);
+  sr_build_fans(c, p->pos, f->time_s, &s->fronts);
   if (!s->vertical_built) { /* skyways and the elevated metro */
     sr_mesh_clear(&s->vertical);
     sr_build_skyways(c, &s->vertical);

@@ -186,8 +186,10 @@ static void roof_kit(SrMesh *m, const SrFacade *f, const SrVolume *v, uint32_t s
         float hh = 6.0f + (float)(rh(seed, (uint32_t)i) % 9u);
         sr_mesh_box(m, sr_v3(cx - 0.08f, y, cz - 0.08f), sr_v3(cx + 0.08f, y + hh, cz + 0.08f), dark, SR_LAYER_WHITE, 0,
                     0);
+        int bfirst = m->nv;
         sr_mesh_box(m, sr_v3(cx - 0.22f, y + hh, cz - 0.22f), sr_v3(cx + 0.22f, y + hh + 0.4f, cz + 0.22f),
                     (SrColor){255, 40, 40, 255}, SR_LAYER_WHITE, 0, 230);
+        for (int vv = bfirst; vv < m->nv; vv++) m->v[vv].pad = (uint8_t)(0x80u | (56u + seed % 8u)); /* blink in sync */
       }
       break;
     case SR_ROOF_HELIPAD: {

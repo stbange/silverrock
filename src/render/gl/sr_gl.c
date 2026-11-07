@@ -247,6 +247,19 @@ static const char *k_world_fs =
     "      fog_em = 0.0;\n"
     "    }\n"
     "  }\n"
+    "  if (v_em > 0.5 && !(t.a > 0.7 && t.a < 0.86)) {\n" /* neon motion: pad 0x80 | seed */
+    "    float pad = v_usage * 64.0 + v_seed;\n"
+    "    float lvl = 1.0;\n"
+    "    if (pad >= 192.0) lvl = 0.55 + 0.45 * step(0.5, fract(v_wpos.x * 0.8 + v_wpos.z * 0.8 - u_time * 3.0));\n"
+    "    else if (pad >= 128.0 && v_seed < 5.0) {\n" /* broken neon drops out in bursts (sr_neon_level) */
+    "      float k = floor(u_time * 12.0);\n"
+    "      lvl = fract(sin(k * 12.9898 + v_seed * 78.233) * 43758.5453) < 0.28 ? 0.12 : 1.0;\n"
+    "    } else if (pad >= 128.0 && v_seed >= 56.0) {\n" /* tower beacons blink */
+    "      lvl = mod(u_time + (v_seed - 56.0) * 0.17, 1.5) < 0.3 ? 1.0 : 0.15;\n"
+    "    }\n"
+    "    c.rgb *= lvl;\n"
+    "    em *= lvl;\n"
+    "  }\n"
     "  if (u_debug == 1) {\n"
     "    o_color = vec4(vec3(step(0.3, em)), 1.0);\n"
     "    return;\n"

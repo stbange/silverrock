@@ -243,9 +243,8 @@ static void prop_mesh(SrMesh *m, const SrStreetProp *p, SrDistrictType t, float 
       SrVec3 a = sr_v3(o.x - cy * 1.5f + sy * 1.02f, o.y, o.z + sy * 1.5f + cy * 1.02f);
       SrVec3 b = sr_v3(o.x + cy * 1.5f + sy * 1.02f, o.y, o.z - sy * 1.5f + cy * 1.02f);
       int first = m->nv;
-      sr_mesh_quad(m, a, b, sr_v3(b.x, b.y + 0.25f, b.z), sr_v3(a.x, a.y + 0.25f, a.z), bulbs.u0, bulbs.v1,
-                   bulbs.u0 + (bulbs.u1 - bulbs.u0) * 3.0f, bulbs.v0, (SrColor){255, 220, 140, 255}, bulbs.layer, 255,
-                   0);
+      sr_mesh_quad(m, a, b, sr_v3(b.x, b.y + 0.25f, b.z), sr_v3(a.x, a.y + 0.25f, a.z), bulbs.u0, bulbs.v1, bulbs.u1,
+                   bulbs.v0, (SrColor){255, 220, 140, 255}, bulbs.layer, 255, 0);
       for (int v = first; v < m->nv; v++) m->v[v].pad = (uint8_t)(0xC0u | (h & 63u)); /* chasing lights (motion) */
       for (int k = 0; k < 4; k++)
         pbox(m, p, g, sr_v3(-1.2f + 0.8f * (float)k - 0.04f, 0, 1.6f),

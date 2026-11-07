@@ -234,7 +234,7 @@ static void test_deck_and_sky(void) {
     int32_t ox, oy;
     sr_city_block_origin(which[k], c->grid, &ox, &oy);
     SrVec3 eye = sr_v3((float)ox / 100.0f + 48.0f, 1.7f, (float)oy / 100.0f + 48.0f);
-    sr_build_deck(s, c, eye, &night, fog, 0, &base, &glow);
+    sr_build_deck(s, c, eye, &night, fog, 0, -2, &base, &glow);
     SR_CHECK(base.nv == 32 * 32 * 4 && glow.nv == base.nv);
     float best = 1e9f;
     for (int v = 0; v < base.nv; v++) { /* the deck vertex right above the block */
@@ -250,7 +250,7 @@ static void test_deck_and_sky(void) {
   SR_CHECK(s->deck_light[bright >= 0 ? bright : 0].r + s->deck_light[bright >= 0 ? bright : 0].b > 0);
   /* by day the deck is slate, never white */
   SrSky day = sr_sky_at(12 * 3600 + 1800, false);
-  sr_build_deck(s, c, sr_v3(100, 2, 100), &day, fog, 0, &base, &glow);
+  sr_build_deck(s, c, sr_v3(100, 2, 100), &day, fog, 0, -2, &base, &glow);
   for (int v = 0; v < base.nv; v++) SR_CHECK(base.v[v].r < 120 && base.v[v].g < 120 && base.v[v].b < 120);
   /* silhouettes just beyond the fog end, darker than the fog */
   sr_mesh_clear(&base);
@@ -980,6 +980,112 @@ static void test_district_kits_and_layers(void) {
   }
 }
 
+static void test_motion(void) {
+  SR_SPEC("retro-rendering", "Neon flickers");
+  SR_SPEC("retro-rendering", "Animation follows game time");
+  SrGame *g = g_game;
+  const SrCity *c = g->city;
+  /* the signs of the commercial district over ten seconds: 4-12 % flicker, the rest burn steady */
+  int signs = 0, flicker = 0;
+  for (int seed = 1; seed <= 5; seed++) {
+    SrCity *cc = sr_city_create((uint64_t)seed * 7919u, NULL);
+    SrMesh m;
+    sr_mesh_init(&m);
+    for (int bi = 0; bi < cc->building_count; bi++) {
+      const SrBuilding *b = &cc->buildings[bi];
+      if (cc->districts[cc->blocks[b->block].district].type != SR_D_COMMERCIAL) continue;
+      uint8_t pads[8];
+      int np = 0;
+      if (b->poi != SR_POI_NONE) pads[np++] = sr_sign_pad(cc->seed, b->id);
+      sr_mesh_clear(&m);
+      sr_build_blade_signs(cc, bi, &m);
+      for (int q = 0; q + 3 < m.nv && np < 8; q += 4) {
+        bool seen = false;
+        for (int k = 0; k < np; k++) seen = seen || pads[k] == m.v[q].pad;
+        if (m.v[q].pad >= 0x80 && !seen) pads[np++] = m.v[q].pad;
+      }
+      for (int k = 0; k < np; k++) {
+        float lo = 1, hi = 0;
+        for (int f = 0; f < 300; f++) {
+          float l = sr_neon_level(pads[k], (float)f / 30.0f);
+          lo = SR_MIN(lo, l);
+          hi = SR_MAX(hi, l);
+        }
+        signs++;
+        flicker += hi - lo > 0.1f;
+      }
+    }
+    sr_mesh_free(&m);
+    sr_city_destroy(cc);
+  }
+  float share = (float)flicker / (float)SR_MAX(1, signs);
+  printf("  commercial signs: %d, flickering %.1f %%\n", signs, share * 100.0f);
+  SR_CHECK(signs > 50 && share >= 0.04f && share <= 0.12f);
+  SR_CHECK_NEAR(sr_neon_level(0x00, 3.0f), 1.0, 1e-6); /* not neon */
+  int blink_on = 0;
+  for (int f = 0; f < 150; f++) blink_on += sr_neon_level(0x80 | 60, (float)f / 30.0f) > 0.5f;
+  SR_CHECK(blink_on > 10 && blink_on < 60); /* beacons: on for a fifth of the time */
+  /* police light bars flash only at Heat 3 */
+  SrCrowd *cr = (SrCrowd *)calloc(1, sizeof *cr);
+  cr->vehicle_count = 1;
+  cr->vehicles[0].key = 9;
+  cr->vehicles[0].pos = sr_v3(10, 0, 10);
+  cr->vehicles[0].dir = sr_v3(1, 0, 0);
+  SR_CHECK(sr_vehicle_is_patrol(&cr->vehicles[0]));
+  SrMesh m;
+  sr_mesh_init(&m);
+  sr_build_police_lights(cr, sr_v3(0, 1.7f, 0), 1.0f, 2, &m);
+  SR_CHECK_EQ(m.nv, 0);
+  sr_build_police_lights(cr, sr_v3(0, 1.7f, 0), 1.0f, 3, &m);
+  SR_CHECK(m.nv == 4);
+  free(cr);
+  /* drones over the Spire and birds over the docks move with time; litter drifts with the wind */
+  int spire = -1;
+  for (int b = 0; b < c->grid * c->grid && spire < 0; b++)
+    if (!c->blocks[b].water && c->districts[c->blocks[b].district].type == SR_D_SPIRE) spire = b;
+  if (spire >= 0) {
+    int32_t ox, oy;
+    sr_city_block_origin(spire, c->grid, &ox, &oy);
+    SrVec3 eye = sr_v3((float)ox / 100.0f + 48.0f, 1.7f, (float)oy / 100.0f + 48.0f);
+    sr_mesh_clear(&m);
+    SR_CHECK(sr_build_flyers(c, eye, 5.0f, &m) > 0);
+    uint64_t d0 = sr_mesh_digest(&m);
+    sr_mesh_clear(&m);
+    sr_build_flyers(c, eye, 5.0f, &m);
+    SR_CHECK(sr_mesh_digest(&m) == d0); /* same time, same frame */
+    sr_mesh_clear(&m);
+    sr_build_flyers(c, eye, 6.0f, &m);
+    SR_CHECK(sr_mesh_digest(&m) != d0);
+  }
+  sr_game_leave(g);
+  SrVec3 wind = sr_wind(g->seed, 3600, 1.0f);
+  SR_CHECK(wind.x * wind.x + wind.z * wind.z > 1.0f);
+  sr_mesh_clear(&m);
+  SR_CHECK(sr_build_litter(c, g->player.pos, 2.0f, wind, &m) > 0);
+  /* a blackout darkens the cloud deck over its district */
+  SrSceneCache *s = (SrSceneCache *)calloc(1, sizeof *s);
+  sr_scene_init(s, false);
+  sr_sky_prepare(s, c);
+  SrSky night = sr_sky_at(0, false);
+  float fog[3] = {0.1f, 0.05f, 0.1f};
+  int home_blk = c->buildings[c->home_building].block, dist = c->blocks[home_blk].district;
+  int32_t hx, hy;
+  sr_city_block_origin(home_blk, c->grid, &hx, &hy);
+  SrVec3 above = sr_v3((float)hx / 100.0f + 48.0f, 1.7f, (float)hy / 100.0f + 48.0f);
+  SrMesh glow;
+  sr_mesh_init(&glow);
+  sr_build_deck(s, c, above, &night, fog, 0, -2, &m, &glow);
+  long lit = 0, dark = 0;
+  for (int v = 0; v < m.nv; v++) lit += m.v[v].r + m.v[v].g + m.v[v].b;
+  sr_build_deck(s, c, above, &night, fog, 0, dist, &m, &glow);
+  for (int v = 0; v < m.nv; v++) dark += m.v[v].r + m.v[v].g + m.v[v].b;
+  SR_CHECK(dark < lit);
+  sr_mesh_free(&glow);
+  sr_mesh_free(&m);
+  sr_scene_free(s);
+  free(s);
+}
+
 void suite_atmos(void) {
   g_game = sr_game_create();
   sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Atmos");
@@ -998,5 +1104,6 @@ void suite_atmos(void) {
   SR_RUN(test_signs_and_adverts);
   SR_RUN(test_sky_details);
   SR_RUN(test_district_kits_and_layers);
+  SR_RUN(test_motion);
   sr_game_destroy(g_game);
 }

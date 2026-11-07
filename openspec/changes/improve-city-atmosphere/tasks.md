@@ -87,11 +87,11 @@ alone refers to a scenario in this change's deltas, and "D1"…"D18" refer to de
 
 ## 10. Motion (about 3–4 days)
 
-- [ ] 10.1 Neon flicker, chasing marquee lights, beacon blink in sync per tower (spec: "Neon flickers")
-- [ ] 10.2 Windows switching through the day; TV flicker windows
-- [ ] 10.3 Drones, bird flocks, drifting litter with the wind, rotating fans, sparks from broken signs
-- [ ] 10.4 Police light bars; a light bar on nearby patrols at Heat 3 or more (spec: "Animation follows game time")
-- [ ] 10.5 Optional: the cloud deck darkens over a blacked-out district
+- [x] 10.1 Neon flicker, chasing marquee lights, beacon blink in sync per tower (spec: "Neon flickers")
+- [x] 10.2 Windows switching through the day; TV flicker windows
+- [x] 10.3 Drones, bird flocks, drifting litter with the wind, rotating fans, sparks from broken signs
+- [x] 10.4 Police light bars; a light bar on nearby patrols at Heat 3 or more (spec: "Animation follows game time")
+- [x] 10.5 Optional: the cloud deck darkens over a blacked-out district
 
 ## 11. Lighting, settings and verification (about 1 week)
 

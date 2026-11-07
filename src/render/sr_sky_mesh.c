@@ -107,7 +107,7 @@ void sr_build_sky_dome(SrVec3 eye, SrMesh *out) {
 }
 
 void sr_build_deck(const SrSceneCache *s, const SrCity *c, SrVec3 eye, const SrSky *sky, const float fog[3],
-                   float time_s, SrMesh *base, SrMesh *glow) {
+                   float time_s, int dark_district, SrMesh *base, SrMesh *glow) {
   sr_mesh_clear(base);
   sr_mesh_clear(glow);
   const float step = DECK_SPAN / DECK_STEPS;
@@ -124,7 +124,7 @@ void sr_build_deck(const SrSceneCache *s, const SrCity *c, SrVec3 eye, const SrS
         float r = 0.07f, g = 0.06f, b = 0.11f; /* night underside */
         int blk = sr_city_block_at(c, (int32_t)(x * 100), (int32_t)(z * 100));
         float lit = 1.0f - sky->dayness;
-        if (blk >= 0 && blk < SR_MAX_BLOCKS) {
+        if (blk >= 0 && blk < SR_MAX_BLOCKS && c->blocks[blk].district != dark_district) { /* blackouts go dark */
           SrColor l = s->deck_light[blk];
           r += (float)l.r / 255.0f * 0.26f * lit;
           g += (float)l.g / 255.0f * 0.26f * lit;
