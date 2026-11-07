@@ -46,10 +46,10 @@ alone refers to a scenario in this change's deltas, and "D1"…"D18" refer to de
 
 ## 5. Silhouettes and roofs (about 1 week)
 
-- [ ] 5.1 Shape grammar: box, podium + tower, setbacks, chamfer, L, slab, row houses; ground footprint unchanged (spec: "Shapes stay inside the footprint")
-- [ ] 5.2 Trim: cornices, ledges at setbacks, parapets
-- [ ] 5.3 Roof kits: tanks, AC and ducts, antenna clusters with beacons, helipads, neon crowns, tiled pitched, sawtooth, corrugated, dishes (spec: "Roofs vary")
-- [ ] 5.4 Landmark crowns from `silhouette[2]` (spire, ring, blade, dome); City Hall columns and steps; tall towers fade into the cloud deck
+- [x] 5.1 Shape grammar: box, podium + tower, setbacks, chamfer, L, slab, row houses; ground footprint unchanged (spec: "Shapes stay inside the footprint")
+- [x] 5.2 Trim: cornices, ledges at setbacks, parapets
+- [x] 5.3 Roof kits: tanks, AC and ducts, antenna clusters with beacons, helipads, neon crowns, tiled pitched, sawtooth, corrugated, dishes (spec: "Roofs vary")
+- [x] 5.4 Landmark crowns from `silhouette[2]` (spire, ring, blade, dome); City Hall columns and steps; tall towers fade into the cloud deck
 
 ## 6. Street level (about 1–1.5 weeks)
 

@@ -309,32 +309,8 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
   for (int i = 0; i < b->building_count; i++) {
     int bi = b->first_building + i;
     const SrBuilding *bd = &c->buildings[bi];
-    float bx0 = (float)bd->x0 / 100.0f, bz0 = (float)bd->y0 / 100.0f;
-    float bx1 = (float)bd->x1 / 100.0f, bz1 = (float)bd->y1 / 100.0f;
-    float h = (float)bd->height_cm / 100.0f;
-    SrFacade fc;
-    sr_facade_for(c, bi, &fc);
-    SrColor tint = {fc.tint[0], fc.tint[1], fc.tint[2], 255};
-    if (bd->poi == SR_POI_CORP_HQ && bd->owner >= 0) {
-      /* landmark tower: stacked tiers by silhouette, each with the facade */
-      int tiers = 1 + bd->silhouette[0];
-      float taper = 0.06f + 0.05f * bd->silhouette[1];
-      float lx0 = bx0, lz0 = bz0, lx1 = bx1, lz1 = bz1, y = 0;
-      for (int t = 0; t < tiers; t++) {
-        float th = h / (float)tiers;
-        sr_build_box_facade(m, &fc, lx0, lz0, lx1, lz1, y, y + th, t == 0, t == 0 ? fc.blank : 0);
-        float dx = (lx1 - lx0) * taper, dz = (lz1 - lz0) * taper;
-        sr_build_crown(m, &fc, lx0, lz0, lx1, lz1, y + th); /* each step gets a ledge */
-        lx0 += dx;
-        lx1 -= dx;
-        lz0 += dz;
-        lz1 -= dz;
-        y += th;
-      }
-    } else {
-      sr_build_box_facade(m, &fc, bx0, bz0, bx1, bz1, 0.0f, h, true, fc.blank);
-      sr_build_crown(m, &fc, bx0, bz0, bx1, bz1, h);
-    }
+    float bx0 = (float)bd->x0 / 100.0f, bx1 = (float)bd->x1 / 100.0f, bz1 = (float)bd->y1 / 100.0f;
+    sr_build_building(c, bi, neon_for(c, bi), m);
     if (bd->poi != SR_POI_NONE) sr_build_door(m, (bx0 + bx1) / 2, bz1, neon_for(c, bi));
     if (bd->poi != SR_POI_NONE) {
       /* neon sign with the place's icon over the door (front = +z side) */
@@ -361,13 +337,6 @@ static void build_block(const SrCity *c, const SrDeltas *d, int blk, SrMesh *m) 
       sr_mesh_quad(m, sr_v3(gx, 0.6f, bz1 + 0.05f), sr_v3(gx + gw, 0.6f, bz1 + 0.05f),
                    sr_v3(gx + gw, 2.0f, bz1 + 0.05f), sr_v3(gx, 2.0f, bz1 + 0.05f), 0, 1, 1, 0, tag, SR_LAYER_SIGN, 70,
                    0);
-    }
-    /* rooftop props */
-    if (h > 20.0f && (bd->id % 3) == 0) {
-      float px = bx0 + (bx1 - bx0) * 0.3f, pz = bz0 + (bz1 - bz0) * 0.3f;
-      sr_mesh_box(m, sr_v3(px, h, pz), sr_v3(px + 2, h + 1.5f, pz + 2), shade(tint, 70), SR_LAYER_METAL, 0.5f, 0);
-      sr_mesh_box(m, sr_v3(px + 3, h, pz), sr_v3(px + 3.2f, h + 6.0f, pz + 0.2f), (SrColor){255, 40, 40, 255},
-                  SR_LAYER_WHITE, 0, 200); /* antenna beacon */
     }
   }
 }
@@ -1027,6 +996,7 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
         sr_build_ripples(pr, n, p->pos, w.rain, f->time_s, &s->wet);
       }
   }
+  sr_build_stack_smoke(c, p->pos, f->time_s, &s->wet);
   add_draw(f, &s->wet, SR_PASS_GLOW, p->pos);
 }
 

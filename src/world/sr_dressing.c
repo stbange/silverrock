@@ -453,8 +453,79 @@ static void facade_raw(const SrCity *c, const SrBuilding *b, SrFacade *f, int bu
                                                 {160, 175, 165}, {130, 145, 130}, {150, 140, 130}};
   for (int k = 0; k < 3; k++) f->tint[k] = (uint8_t)(k_tint[t][k] - 14 + (int)(h >> (48 + k * 5) & 31u));
   f->blank = blank_faces(c, b);
-  f->shape = SR_SHAPE_BOX; /* shapes and roofs: sr_facade_for */
-  f->roof = SR_ROOF_FLAT;
+  /* shape grammar: everything rises from a ground floor that fills the footprint */
+  uint64_t hs = bhash(c, b, 2);
+  int r = (int)(hs % 100u);
+  float wid = (float)SR_MIN(b->x1 - b->x0, b->y1 - b->y0) / 100.0f;
+  f->shape = SR_SHAPE_BOX;
+  f->steps = 0;
+  switch (t) {
+    case SR_D_SPIRE:
+    case SR_D_CAMPUS:
+      f->shape = (uint8_t)(r < 35   ? SR_SHAPE_PODIUM
+                           : r < 70 ? SR_SHAPE_SETBACK
+                           : r < 85 ? SR_SHAPE_CHAMFER
+                                    : SR_SHAPE_BOX);
+      break;
+    case SR_D_CIVIC:
+    case SR_D_COMMERCIAL:
+    case SR_D_ENTERTAINMENT:
+      if (hgt > 50.0f)
+        f->shape = (uint8_t)(r < 40   ? SR_SHAPE_PODIUM
+                             : r < 65 ? SR_SHAPE_SETBACK
+                             : r < 80 ? SR_SHAPE_CHAMFER
+                                      : SR_SHAPE_BOX);
+      else
+        f->shape = (uint8_t)(r < 30 ? SR_SHAPE_L : r < 50 ? SR_SHAPE_CHAMFER : SR_SHAPE_BOX);
+      break;
+    case SR_D_RESIDENTIAL:
+      f->shape = (uint8_t)(r < 35                  ? SR_SHAPE_SLAB
+                           : r < 60                ? SR_SHAPE_L
+                           : hgt > 80.0f && r < 80 ? SR_SHAPE_SETBACK
+                                                   : SR_SHAPE_BOX);
+      break;
+    case SR_D_OLDQUARTER: f->shape = SR_SHAPE_ROWS; break;
+    default: f->shape = (uint8_t)(r < 20 && wid > 20.0f ? SR_SHAPE_L : SR_SHAPE_BOX); break;
+  }
+  if (b->poi == SR_POI_CORP_HQ || b->poi == SR_POI_CITY_HALL) f->shape = SR_SHAPE_BOX; /* landmarks have their own */
+  if (f->shape == SR_SHAPE_PODIUM) f->steps = (uint8_t)(2 + (hs >> 8) % 4u);           /* podium floors */
+  if (f->shape == SR_SHAPE_SETBACK) f->steps = (uint8_t)(1 + (hs >> 8) % 3u);          /* setbacks */
+  if (f->shape == SR_SHAPE_ROWS) f->steps = (uint8_t)(2 + (hs >> 8) % 3u);             /* row houses */
+  /* roof kits */
+  int rr = (int)((hs >> 16) % 100u);
+  switch (t) {
+    case SR_D_SPIRE:
+      f->roof = (uint8_t)(f->crown == SR_CROWN_NEON ? SR_ROOF_NEON_CROWN
+                          : rr < 35 && wid > 18.0f  ? SR_ROOF_HELIPAD
+                          : rr < 70                 ? SR_ROOF_ANTENNAS
+                                                    : SR_ROOF_HVAC);
+      break;
+    case SR_D_CAMPUS:
+      f->roof = (uint8_t)(rr < 40 && wid > 18.0f ? SR_ROOF_HELIPAD : rr < 75 ? SR_ROOF_HVAC : SR_ROOF_ANTENNAS);
+      break;
+    case SR_D_CIVIC:
+    case SR_D_COMMERCIAL:
+    case SR_D_ENTERTAINMENT:
+      f->roof = (uint8_t)(f->crown == SR_CROWN_NEON ? SR_ROOF_NEON_CROWN
+                          : rr < 35                 ? SR_ROOF_HVAC
+                          : rr < 65                 ? SR_ROOF_TANKS
+                                                    : SR_ROOF_ANTENNAS);
+      break;
+    case SR_D_RESIDENTIAL:
+      f->roof = (uint8_t)(rr < 40 ? SR_ROOF_TANKS : rr < 75 ? SR_ROOF_DISHES : SR_ROOF_HVAC);
+      break;
+    case SR_D_OLDQUARTER: f->roof = SR_ROOF_PITCHED; break;
+    case SR_D_INDUSTRIAL:
+      f->roof = (uint8_t)(rr < 45 ? SR_ROOF_SAWTOOTH : rr < 75 ? SR_ROOF_STACK : SR_ROOF_HVAC);
+      break;
+    case SR_D_DOCKS: f->roof = (uint8_t)(rr < 55 ? SR_ROOF_CORRUGATED : rr < 75 ? SR_ROOF_STACK : SR_ROOF_FLAT); break;
+    case SR_D_UNDERCITY:
+      f->roof = (uint8_t)(rr < 40 ? SR_ROOF_CORRUGATED : rr < 70 ? SR_ROOF_DISHES : SR_ROOF_FLAT);
+      break;
+    default: f->roof = (uint8_t)(rr < 45 ? SR_ROOF_CORRUGATED : rr < 70 ? SR_ROOF_DISHES : SR_ROOF_FLAT); break;
+  }
+  if (f->roof == SR_ROOF_PITCHED || f->roof == SR_ROOF_SAWTOOTH || f->roof == SR_ROOF_CORRUGATED)
+    f->crown = SR_CROWN_NONE; /* sloped roofs need no parapet */
 }
 
 void sr_facade_for(const SrCity *c, int building, SrFacade *out) {
@@ -477,8 +548,6 @@ void sr_facade_for(const SrCity *c, int building, SrFacade *out) {
   }
   if (bump == SR_WIN_COUNT) facade_raw(c, b, out, 0); /* a district with one module: the ground floor differs */
   if (bump == SR_WIN_COUNT) out->base = (uint8_t)((out->base + 1 + (b->id % 3u)) % SR_BASE_COUNT);
-  out->shape = SR_SHAPE_BOX;
-  out->roof = SR_ROOF_FLAT;
 }
 
 uint64_t sr_facade_digest(const SrCity *c) {
@@ -505,4 +574,72 @@ uint64_t sr_facade_digest(const SrCity *c) {
     h = sr_hash_bytes(h, q, sizeof q);
   }
   return h;
+}
+
+/* ---- shapes ------------------------------------------------------------------------------------- */
+
+static int vol(SrVolume *out, int n, float x0, float z0, float x1, float z1, float y0, float y1, uint8_t flags) {
+  if (n >= SR_MAX_VOLUMES || y1 <= y0 + 0.01f || x1 <= x0 || z1 <= z0) return n;
+  out[n] = (SrVolume){x0, z0, x1, z1, y0, y1, flags};
+  return n + 1;
+}
+
+int sr_building_volumes(const SrCity *c, int building, const SrFacade *f, SrVolume *out) {
+  const SrBuilding *b = &c->buildings[building];
+  float x0 = (float)b->x0 / 100.0f, z0 = (float)b->y0 / 100.0f, x1 = (float)b->x1 / 100.0f, z1 = (float)b->y1 / 100.0f;
+  float h = (float)b->height_cm / 100.0f, w = x1 - x0, d = z1 - z0, base = 4.5f;
+  uint64_t hs = bhash(c, b, 3);
+  if (h <= base + 1.5f || f->shape == SR_SHAPE_BOX)
+    return vol(out, 0, x0, z0, x1, z1, 0.0f, h, SR_VOL_BASE | SR_VOL_ROOF | SR_VOL_CROWN);
+  int n = vol(out, 0, x0, z0, x1, z1, 0.0f, base, SR_VOL_BASE | SR_VOL_CROWN);
+  switch (f->shape) {
+    case SR_SHAPE_PODIUM: {
+      float top = SR_MIN(h - 6.0f, base + (float)f->steps * f->floor_h);
+      n = vol(out, n, x0, z0, x1, z1, base, top, SR_VOL_CROWN);
+      float i = 0.1f + 0.15f * (float)(hs % 100u) / 100.0f;
+      n = vol(out, n, x0 + w * i, z0 + d * i, x1 - w * i, z1 - d * i, top, h, SR_VOL_ROOF | SR_VOL_CROWN);
+      break;
+    }
+    case SR_SHAPE_SETBACK: {
+      int tiers = f->steps + 1;
+      float y = base, lx0 = x0, lz0 = z0, lx1 = x1, lz1 = z1;
+      for (int t = 0; t < tiers; t++) {
+        float frac = t == 0 ? 0.5f : 0.5f / (float)(tiers - 1);
+        float top = t == tiers - 1 ? h : y + (h - base) * frac;
+        n = vol(out, n, lx0, lz0, lx1, lz1, y, top, (uint8_t)(SR_VOL_CROWN | (t == tiers - 1 ? SR_VOL_ROOF : 0)));
+        lx0 += w * 0.08f;
+        lx1 -= w * 0.08f;
+        lz0 += d * 0.08f;
+        lz1 -= d * 0.08f;
+        y = top;
+      }
+      break;
+    }
+    case SR_SHAPE_CHAMFER: {
+      float k = SR_MIN(w, d) * 0.15f;
+      n = vol(out, n, x0 + k, z0, x1 - k, z1, base, h, SR_VOL_ROOF | SR_VOL_CROWN);
+      n = vol(out, n, x0, z0 + k, x1, z1 - k, base, h, 0);
+      break;
+    }
+    case SR_SHAPE_L: {
+      n = vol(out, n, x0, z1 - d * 0.55f, x1, z1, base, h, SR_VOL_ROOF | SR_VOL_CROWN);
+      n = vol(out, n, x0, z0, x0 + w * 0.5f, z1 - d * 0.55f, base, SR_MIN(h, SR_MAX(base + 3.0f, h * 0.7f)),
+              SR_VOL_CROWN);
+      break;
+    }
+    case SR_SHAPE_SLAB:
+      n = vol(out, n, x0, z0 + d * 0.2f, x1, z1 - d * 0.25f, base, h, SR_VOL_ROOF | SR_VOL_CROWN);
+      break;
+    case SR_SHAPE_ROWS: {
+      int houses = SR_MAX(2, f->steps);
+      for (int i = 0; i < houses; i++) {
+        float hx0 = x0 + w * (float)i / (float)houses, hx1 = x0 + w * (float)(i + 1) / (float)houses;
+        float hh = SR_MIN(h, SR_MAX(base + 2.5f, h * (0.6f + 0.4f * (float)((hs >> (i * 7)) % 100u) / 100.0f)));
+        n = vol(out, n, hx0, z0, hx1, z1, base, hh, SR_VOL_PITCHED);
+      }
+      break;
+    }
+    default: n = vol(out, n, x0, z0, x1, z1, base, h, SR_VOL_ROOF | SR_VOL_CROWN); break;
+  }
+  return n;
 }

@@ -209,6 +209,7 @@ static const char *k_world_fs =
     "  float f = clamp((v_fogz - u_fogr.x) / (u_fogr.y - u_fogr.x), 0.0, 1.0);\n"
     "  vec3 fogc = fog_color();\n"
     "  f = clamp(f + u_mist * clamp((3.0 - v_wpos.y) / 3.0, 0.0, 1.0) * clamp(v_fogz / 25.0, 0.0, 1.0), 0.0, 1.0);\n"
+    "  if (u_fogr.y < 1e5) f = max(f, smoothstep(190.0, 255.0, v_wpos.y) * 0.85);\n" /* towers fade into the clouds */
     "  if (v_wire > 1.5) {\n" /* Matrix wireframe: quad edges glow, faces stay dim */
     "    vec2 q = v_uvw.xy / v_uvw.z;\n"
     "    float e = min(min(q.x, 1.0 - q.x), min(q.y, 1.0 - q.y));\n"

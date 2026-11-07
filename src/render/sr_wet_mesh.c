@@ -145,6 +145,41 @@ void sr_build_ripples(const SrStreetProp *p, int n, SrVec3 eye, float rain, floa
   }
 }
 
+void sr_build_stack_smoke(const SrCity *c, SrVec3 eye, float time_s, SrMesh *out) {
+  int blk = sr_city_block_at(c, (int32_t)(eye.x * 100.0f), (int32_t)(eye.z * 100.0f));
+  if (blk < 0) return;
+  SrBillboard bb = sr_billboard(eye, 0, 0);
+  for (int dy = -2; dy <= 2; dy++)
+    for (int dx = -2; dx <= 2; dx++) {
+      int bx = blk % c->grid + dx, by = blk / c->grid + dy;
+      if (bx < 0 || by < 0 || bx >= c->grid || by >= c->grid) continue;
+      const SrBlock *b = &c->blocks[by * c->grid + bx];
+      for (int i = 0; i < b->building_count; i++) {
+        int bi = b->first_building + i;
+        SrFacade f;
+        sr_facade_for(c, bi, &f);
+        if (f.roof != SR_ROOF_STACK) continue;
+        SrVolume v[SR_MAX_VOLUMES];
+        int n = sr_building_volumes(c, bi, &f, v), top = 0;
+        for (int k = 0; k < n; k++)
+          if (v[k].flags & SR_VOL_ROOF) top = k;
+        uint32_t seed = (uint32_t)(sr_mix64(c->seed ^ ((uint64_t)c->buildings[bi].id << 17)) >> 24);
+        float sx = v[top].x0 + (v[top].x1 - v[top].x0) * 0.7f, sz = v[top].z0 + (v[top].z1 - v[top].z0) * 0.3f;
+        float sy = v[top].y1 + 10.0f + (float)(seed % 7u);
+        for (int k = 0; k < 6; k++) { /* a column of smoke leaning with the wind */
+          float ph = fmodf(time_s * 0.12f + (float)k / 6.0f, 1.0f);
+          float s = 3.0f + ph * 9.0f;
+          uint8_t g = (uint8_t)(55.0f * (1.0f - ph));
+          sr_mesh_sprite(out, &bb, sr_v3(sx + ph * 10.0f, sy + ph * 22.0f, sz), s, s, SR_SPR_SMOKE + (k % 4),
+                         SR_SPRITE_FACING, 0, (SrColor){g, (uint8_t)(g * 9 / 10), (uint8_t)(g * 8 / 10), 255}, 255);
+        }
+        if ((seed >> 4) % 3u == 0) /* some stacks burn off gas */
+          sr_mesh_sprite(out, &bb, sr_v3(sx, sy + 0.8f, sz), 3.0f, 3.0f, SR_SPR_FLARE, SR_SPRITE_FACING, 0,
+                         (SrColor){255, 140, 40, 255}, 255);
+      }
+    }
+}
+
 SrColor sr_rain_tint(const SrLight *l, int n, SrVec3 p, SrColor base) {
   float r = (float)base.r, g = (float)base.g, b = (float)base.b;
   for (int i = 0; i < n; i++) {

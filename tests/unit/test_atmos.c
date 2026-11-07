@@ -408,8 +408,10 @@ static void test_facades(void) {
     uint64_t fd = sr_facade_digest(c), dd = sr_dressing_digest(c);
     SR_CHECK(sr_city_digest(c) == before); /* derived detail never touches the city */
     SR_CHECK(fd == sr_facade_digest(c) && dd == sr_dressing_digest(c));
-    if (seed == 1) {
+    if (seed == 1) { /* pinned: the derived detail changes only on purpose (and alike on every target) */
       printf("  facade digest %016llx, dressing digest %016llx\n", (unsigned long long)fd, (unsigned long long)dd);
+      SR_CHECK(fd == 0x7706771d161b6111ull);
+      SR_CHECK(dd == 0x1f0373e9f75829edull);
     }
     int pairs = 0, across = 0;
     for (int blk = 0; blk < c->grid * c->grid; blk++) {
@@ -454,6 +456,61 @@ static void test_facades(void) {
   }
 }
 
+static void test_shapes_and_roofs(void) {
+  SR_SPEC("city-generation", "Shapes stay inside the footprint");
+  SR_SPEC("retro-rendering", "Roofs vary");
+  int shapes[SR_SHAPE_COUNT] = {0};
+  for (int seed = 1; seed <= 5; seed++) {
+    SrCity *c = sr_city_create((uint64_t)seed * 7919u, NULL);
+    int roofs[SR_D_COUNT][SR_ROOF_COUNT], count[SR_D_COUNT];
+    memset(roofs, 0, sizeof roofs);
+    memset(count, 0, sizeof count);
+    for (int bi = 0; bi < c->building_count; bi++) {
+      const SrBuilding *b = &c->buildings[bi];
+      SrFacade f;
+      sr_facade_for(c, bi, &f);
+      SrVolume v[SR_MAX_VOLUMES];
+      int n = sr_building_volumes(c, bi, &f, v);
+      SR_CHECK(n >= 1 && n <= SR_MAX_VOLUMES);
+      float x0 = (float)b->x0 / 100.0f, z0 = (float)b->y0 / 100.0f, x1 = (float)b->x1 / 100.0f,
+            z1 = (float)b->y1 / 100.0f;
+      bool full_base = false;
+      for (int i = 0; i < n; i++) {
+        SR_CHECK(v[i].x0 >= x0 - 1e-3f && v[i].x1 <= x1 + 1e-3f && v[i].z0 >= z0 - 1e-3f && v[i].z1 <= z1 + 1e-3f);
+        SR_CHECK(v[i].y1 <= (float)b->height_cm / 100.0f + 1e-3f && v[i].y0 >= 0.0f);
+        if (v[i].y0 < 3.0f) /* below 3 m only the full footprint */
+          SR_CHECK(fabsf(v[i].x0 - x0) < 1e-3f && fabsf(v[i].x1 - x1) < 1e-3f && fabsf(v[i].z0 - z0) < 1e-3f &&
+                   fabsf(v[i].z1 - z1) < 1e-3f);
+        full_base = full_base || (v[i].flags & SR_VOL_BASE);
+      }
+      SR_CHECK(full_base);
+      shapes[f.shape]++;
+      SrDistrictType t = c->districts[c->blocks[b->block].district].type;
+      roofs[t][f.roof]++;
+      count[t]++;
+    }
+    for (int t = 0; t < SR_D_COUNT; t++) {
+      if (count[t] < 20 || t == SR_D_OLDQUARTER) continue; /* the old quarter is all tiled roofs */
+      int kinds = 0;
+      for (int r = 0; r < SR_ROOF_COUNT; r++) kinds += roofs[t][r] > 0;
+      SR_CHECK(kinds >= 3);
+    }
+    sr_city_destroy(c);
+  }
+  for (int s = 0; s < SR_SHAPE_COUNT; s++) SR_CHECK(shapes[s] > 0); /* every shape occurs */
+  /* a headquarters gets a crown above its roof; a building mesh has its roof kit on top */
+  SrGame *g = g_game;
+  const SrCity *c = g->city;
+  SrMesh m;
+  sr_mesh_init(&m);
+  int hq = c->factions.f[0].hq_building;
+  sr_build_building(c, hq, (SrColor){255, 0, 255, 255}, &m);
+  float top = 0;
+  for (int i = 0; i < m.nv; i++) top = SR_MAX(top, m.v[i].y);
+  SR_CHECK(top > (float)c->buildings[hq].height_cm / 100.0f + 5.0f);
+  sr_mesh_free(&m);
+}
+
 void suite_atmos(void) {
   g_game = sr_game_create();
   sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Atmos");
@@ -466,5 +523,6 @@ void suite_atmos(void) {
   SR_RUN(test_deck_and_sky);
   SR_RUN(test_wet_streets);
   SR_RUN(test_facades);
+  SR_RUN(test_shapes_and_roofs);
   sr_game_destroy(g_game);
 }

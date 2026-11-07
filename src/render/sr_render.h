@@ -364,6 +364,8 @@ void sr_build_box_facade(SrMesh *m, const SrFacade *f, float x0, float z0, float
 void sr_build_crown(SrMesh *m, const SrFacade *f, float x0, float z0, float x1, float z1, float h);
 void sr_build_poi_fronts(const SrCity *c, const SrDeltas *d, SrVec3 eye, int64_t t, SrMesh *out);
 void sr_build_door(SrMesh *m, float cx, float z, SrColor frame);
+/* A whole building: volumes with facades, crowns, roof kits, landmark crowns. */
+void sr_build_building(const SrCity *c, int building, SrColor neon, SrMesh *m);
 
 /* Props of a block, cached (for sprites and lights around the camera). */
 const SrStreetProp *sr_scene_props(SrSceneCache *s, const SrCity *c, int block, int *n);
@@ -374,6 +376,7 @@ void sr_build_splashes(const SrCity *c, SrVec3 eye, float rain, uint64_t steps, 
 void sr_build_drips(const SrCity *c, SrVec3 eye, float rain, float time_s, SrMesh *out);
 void sr_build_lamp_cones(const SrLight *l, int n, SrVec3 eye, float wet_air, SrMesh *out);
 void sr_build_steam(const SrStreetProp *p, int n, SrVec3 eye, float rain, float time_s, float dist, SrMesh *out);
+void sr_build_stack_smoke(const SrCity *c, SrVec3 eye, float time_s, SrMesh *out);
 void sr_build_ripples(const SrStreetProp *p, int n, SrVec3 eye, float rain, float time_s, SrMesh *out);
 /* Rain drop colour lit by the lights around it. */
 SrColor sr_rain_tint(const SrLight *l, int n, SrVec3 p, SrColor base);

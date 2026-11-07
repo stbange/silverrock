@@ -1031,7 +1031,7 @@ static void test_headless_app(void) {
 
 /* ---- Reference views of the city's atmosphere (improve-city-atmosphere D15) ------------------ */
 
-typedef enum { AV_STREET, AV_ALLEY, AV_HIGHWAY, AV_ROOF } AtmosKind;
+typedef enum { AV_STREET, AV_ALLEY, AV_HIGHWAY, AV_ROOF, AV_AERIAL } AtmosKind;
 typedef struct {
   const char *name;
   int district; /* SrDistrictType, or -1 for the home district */
@@ -1056,6 +1056,7 @@ static const AtmosView k_atmos_views[] = {
     {"dawn", SR_D_RESIDENTIAL, AV_STREET, 10, 30, SR_WX_CLEAR, 0},
     {"noon", SR_D_RESIDENTIAL, AV_STREET, 12, 30, SR_WX_CLEAR, 0},
     {"dusk", SR_D_RESIDENTIAL, AV_STREET, 14, 30, SR_WX_CLEAR, 1},
+    {"aerial", SR_D_COMMERCIAL, AV_AERIAL, 23, 0, SR_WX_CLEAR, 0},
 };
 #define ATMOS_VIEWS ((int)(sizeof k_atmos_views / sizeof k_atmos_views[0]))
 
@@ -1104,15 +1105,22 @@ static bool atmos_place(SrGame *g, const AtmosView *v) {
         }
     }
     if (best <= 0) return false;
+  } else if (v->kind == AV_AERIAL) { /* high above a street corner, looking down over the roofs */
+    g->player.pos = sr_v3(x0 + 8.0f, 75.0f, z0 + 8.0f);
+    g->player.yaw = -SR_PI / 4;
+    g->player.pitch = -0.5f;
   } else { /* rooftop of the tallest building nearby, looking over the city */
     const SrBlock *k = &c->blocks[blk];
-    const SrBuilding *top = &c->buildings[k->first_building];
-    for (int i = 1; i < k->building_count; i++)
-      if (c->buildings[k->first_building + i].height_cm > top->height_cm) top = &c->buildings[k->first_building + i];
-    g->player.pos = sr_v3((float)(top->x0 + top->x1) / 200.0f, (float)top->height_cm / 100.0f + 1.7f,
-                          (float)(top->y0 + top->y1) / 200.0f);
-    g->player.yaw = -SR_PI / 2 + 0.4f;
-    g->player.pitch = -0.08f;
+    const SrBuilding *top = &c->buildings[k->first_building]; /* the lowest roof above 12 m: the street shows */
+    for (int i = 1; i < k->building_count; i++) {
+      const SrBuilding *o = &c->buildings[k->first_building + i];
+      if (o->height_cm >= 1200 && (top->height_cm < 1200 || o->height_cm < top->height_cm)) top = o;
+    }
+    /* at the front edge, above the parapet, looking out over the street */
+    g->player.pos = sr_v3((float)(top->x0 + top->x1) / 200.0f, (float)top->height_cm / 100.0f + 2.6f,
+                          (float)top->y1 / 100.0f - 0.2f);
+    g->player.yaw = SR_PI + 0.3f;
+    g->player.pitch = -0.55f; /* down into the lit street */
   }
   return true;
 }
@@ -1197,6 +1205,7 @@ static double saturated_on_emissive(const uint8_t *rgb, const uint8_t *mask, int
   }
   int need = n / 100, cut = 255;
   for (int acc = 0; cut > 0 && acc + hist[cut] < need; cut--) acc += hist[cut];
+  if (cut < 12) return 1.0; /* nothing in the image is saturated (a wall of fog) */
   int top = 0, on = 0;
   for (int i = 0; i < n; i++) {
     int mx = SR_MAX(rgb[i * 3], SR_MAX(rgb[i * 3 + 1], rgb[i * 3 + 2]));

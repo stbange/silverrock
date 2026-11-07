@@ -40,13 +40,16 @@ void sr_sky_prepare(SrSceneCache *s, const SrCity *c) {
   for (int i = 0; i < c->building_count && s->nbeacons < cap - 1; i++) {
     const SrBuilding *b = &c->buildings[i];
     float h = (float)b->height_cm / 100.0f;
-    if (h > 20.0f && (b->id % 3) == 0) { /* red tower beacons */
-      float px = (float)b->x0 / 100.0f + (float)(b->x1 - b->x0) / 100.0f * 0.3f + 3.1f;
-      float pz = (float)b->y0 / 100.0f + (float)(b->y1 - b->y0) / 100.0f * 0.3f;
+    SrFacade fc;
+    sr_facade_for(c, i, &fc);
+    if (h > 20.0f && (fc.roof == SR_ROOF_ANTENNAS || fc.roof == SR_ROOF_NEON_CROWN)) { /* tower beacons, crowns */
+      float px = (float)(b->x0 + b->x1) / 200.0f, pz = (float)(b->y0 + b->y1) / 200.0f;
       SrBeacon *k = &s->beacons[s->nbeacons++];
-      k->pos = sr_v3(px, h + 6.0f, pz);
-      k->size = 9.0f;
-      k->col = (SrColor){255, 40, 40, 255};
+      bool crown = fc.roof == SR_ROOF_NEON_CROWN;
+      k->pos = sr_v3(px, h + (crown ? 2.0f : 12.0f), pz);
+      k->size = crown ? 30.0f : 9.0f;
+      k->col = crown ? sr_palette(c->districts[c->blocks[b->block].district].type)->neon[b->id % 3]
+                     : (SrColor){255, 40, 40, 255};
     }
     if (b->poi != SR_POI_NONE && b->poi != SR_POI_HOME) { /* shop signs */
       const SrPalette *pal = sr_palette(c->districts[c->blocks[b->block].district].type);

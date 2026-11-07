@@ -70,6 +70,16 @@ typedef struct SrFacade {
 void sr_facade_for(const SrCity *c, int building, SrFacade *out);
 uint64_t sr_facade_digest(const SrCity *c);
 
+/* The boxes a building is made of: the ground floor fills the footprint, the shape rises above it.
+ * Every volume lies inside the footprint. */
+enum { SR_VOL_BASE = 1, SR_VOL_ROOF = 2, SR_VOL_CROWN = 4, SR_VOL_PITCHED = 8 };
+typedef struct SrVolume {
+  float x0, z0, x1, z1, y0, y1;
+  uint8_t flags;
+} SrVolume;
+#define SR_MAX_VOLUMES 8
+int sr_building_volumes(const SrCity *c, int building, const SrFacade *f, SrVolume *out);
+
 /* ---- street props ---------------------------------------------------------------------------- */
 
 typedef enum SrStreetPropKind {
