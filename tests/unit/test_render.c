@@ -149,7 +149,7 @@ static void test_scene_frame(void) {
   SR_SPEC("retro-rendering", "Logo beyond fog");
   SR_SPEC("retro-rendering", "No void at the horizon");
   SR_SPEC("retro-rendering", "No rain under cover");
-  SR_SPEC("world-environment", "Night at noon");
+  SR_SPEC("world-environment", "Night at midnight");
   SrGame *g = g_game;
   SrSceneCache *s = (SrSceneCache *)calloc(1, sizeof *s);
   sr_scene_init(s, false);
@@ -172,7 +172,7 @@ static void test_scene_frame(void) {
     if (f->draws[i].pass == SR_PASS_NOFOG) nofog++;
     SR_CHECK(f->draws[i].nlights <= SR_MAX_LIGHTS_PER_DRAW);
   }
-  SR_CHECK_EQ(nofog, 2); /* skyline and landmark logos skip the fog */
+  SR_CHECK(nofog >= 2); /* landmark logos, the cloud deck (and the skyline on clearer nights) skip the fog */
   SR_CHECK(s->landmarks.nv == g->city->factions.corp_count * 8);
   /* skyline: a closed ring of geometry around the city */
   SR_CHECK(s->skyline.nv == 180 * 4);

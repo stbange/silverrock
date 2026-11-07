@@ -186,7 +186,7 @@ static void hud(SrUi *ui, const SrGame *g, const SrInput *in) {
   int d = sr_city_district_at(g->city, (int32_t)(p->pos.x * 100), (int32_t)(p->pos.z * 100));
   char weather[48];
   snprintf(buf, sizeof buf, "%s", d >= 0 ? g->city->districts[d].name : "Outside the city");
-  snprintf(weather, sizeof weather, "%s", sr_weather_name(sr_game_weather(g).to));
+  snprintf(weather, sizeof weather, "%s", g->pall_removed ? "clear skies" : sr_weather_name(sr_game_weather(g).to));
   float left_w = (float)ui->w * 0.3f - m;
   if (touch) {
     float ty = by + 3 * (bh + 2) + 6.0f * (float)s;

@@ -137,6 +137,7 @@ static const char *k_world_vs =
     "out float v_em;\n"
     "flat out float v_usage;\n"
     "flat out float v_seed;\n"
+    "out vec3 v_wpos;\n"
     "void main() {\n"
     "  vec3 p = a_pos;\n"
     "  vec3 base = a_color.rgb;\n"
@@ -170,6 +171,7 @@ static const char *k_world_vs =
     "  v_layer = a_extra.x;\n"
     "  v_wire = a_extra.z;\n"
     "  v_fogz = -(u_view * vec4(p, 1.0)).z;\n"
+    "  v_wpos = p;\n"
     "  v_usage = floor(a_extra.w / 64.0);\n"
     "  v_seed = mod(a_extra.w, 64.0);\n"
     "}\n";
@@ -182,6 +184,9 @@ static const char *k_world_fs =
     "uniform float u_time;\n"
     "uniform int u_glow;\n"  /* 1: additive glow, faded by fog */
     "uniform int u_debug;\n" /* 1: emissive mask (tests) */
+    "uniform vec3 u_band;\n" /* dawn or dusk glow on the fog toward u_band_dir (+1 east, -1 west) */
+    "uniform float u_band_dir;\n"
+    "uniform vec3 u_eye;\n"
     "in vec4 v_color;\n"
     "in vec3 v_uvw;\n"
     "flat in float v_layer;\n"
@@ -190,17 +195,25 @@ static const char *k_world_fs =
     "in float v_em;\n"
     "flat in float v_usage;\n"
     "flat in float v_seed;\n"
+    "in vec3 v_wpos;\n"
     "out vec4 o_color;\n"
     "float hash3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }\n"
+    "vec3 fog_color() {\n" /* the fog, warmed toward the dawn or dusk side low on the horizon */
+    "  vec3 d = normalize(v_wpos - u_eye);\n"
+    "  float side = max(0.0, d.x * u_band_dir);\n"
+    "  float low = clamp(1.0 - max(d.y, 0.0) * 2.2, 0.0, 1.0);\n"
+    "  return u_fog + u_band * side * side * low;\n"
+    "}\n"
     "void main() {\n"
     "  float f = clamp((v_fogz - u_fogr.x) / (u_fogr.y - u_fogr.x), 0.0, 1.0);\n"
+    "  vec3 fogc = fog_color();\n"
     "  if (v_wire > 1.5) {\n" /* Matrix wireframe: quad edges glow, faces stay dim */
     "    vec2 q = v_uvw.xy / v_uvw.z;\n"
     "    float e = min(min(q.x, 1.0 - q.x), min(q.y, 1.0 - q.y));\n"
     "    float line = 1.0 - smoothstep(0.015, 0.06, e);\n"
     "    if (v_wire > 2.5 && line < 0.05) discard;\n" /* hollow: edges only */
     "    vec3 wc = v_color.rgb * (0.1 + 1.5 * line);\n"
-    "    o_color = vec4(u_debug == 1 ? vec3(0.0) : mix(wc, u_fog, f), 1.0);\n"
+    "    o_color = vec4(u_debug == 1 ? vec3(0.0) : mix(wc, fogc, f), 1.0);\n"
     "    return;\n"
     "  }\n"
     "  vec2 uv = v_uvw.xy / v_uvw.z;\n"
@@ -212,7 +225,7 @@ static const char *k_world_fs =
     "  }\n"
     "  if (t.a < 0.5) discard;\n"
     "  vec4 c = t * v_color;\n"
-    "  float em = v_em;\n"
+    "  float em = v_em, fog_em = v_em;\n"
     "  if (t.a > 0.7 && t.a < 0.86) {\n" /* glass: lit or dark by building use, hour and window */
     "    float share = v_usage < 0.5 ? u_share.x : v_usage < 1.5 ? u_share.y : v_usage < 2.5 ? u_share.z : u_share.w;\n"
     "    vec3 k = vec3(floor(uv), t.r * 255.0 + v_seed * 37.0);\n"
@@ -223,17 +236,19 @@ static const char *k_world_fs =
     "              : vec3(1.0, 0.45, 0.8);\n"
     "      c = vec4(lc * (0.5 + 0.3 * t.g), 1.0);\n" /* peaks at 0.8: windows never clip to white */
     "      em = 0.6;\n"
+    "      fog_em = 0.35;\n" /* windows sink into the fog sooner than neon */
     "    } else {\n"
     "      c = vec4(vec3(0.03, 0.035, 0.05) + u_fog * 0.12 + v_color.rgb * 0.04, 1.0);\n"
     "      em = 0.0;\n"
+    "      fog_em = 0.0;\n"
     "    }\n"
     "  }\n"
     "  if (u_debug == 1) {\n"
     "    o_color = vec4(vec3(step(0.3, em)), 1.0);\n"
     "    return;\n"
     "  }\n"
-    "  f *= 1.0 - 0.7 * em;\n" /* neon glows through fog: same formula as sr_fog_factor */
-    "  o_color = vec4(mix(c.rgb, u_fog, f), c.a);\n"
+    "  f *= 1.0 - 0.85 * fog_em;\n" /* neon glows through fog: same formula as sr_fog_factor */
+    "  o_color = vec4(mix(c.rgb, fogc, f), c.a);\n"
     "}\n";
 
 static const char *k_post_vs = "layout(location=0) in vec2 a_pos;\n"
@@ -495,6 +510,9 @@ bool sr_glb_init(SrGlBackend *b, bool gles) {
   b->u_time = pGetUniformLocation(p, "u_time");
   b->u_glow = pGetUniformLocation(p, "u_glow");
   b->u_debug = pGetUniformLocation(p, "u_debug");
+  b->u_band = pGetUniformLocation(p, "u_band");
+  b->u_band_dir = pGetUniformLocation(p, "u_band_dir");
+  b->u_eye = pGetUniformLocation(p, "u_eye");
   p = b->prog_post;
   b->p_tex = pGetUniformLocation(p, "u_tex");
   b->p_dither = pGetUniformLocation(p, "u_dither");
@@ -677,9 +695,20 @@ static void scene_pass(SrGlBackend *b, const SrFrame *f, unsigned fbo, int iw, i
   pUniform1f(b->u_time, f->time_s);
   pUniform1i(b->u_glow, 0);
   pUniform1i(b->u_debug, f->debug_emissive ? 1 : 0);
+  pUniform3f(b->u_band, f->band[0], f->band[1], f->band[2]);
+  pUniform1f(b->u_band_dir, f->band_dir_x);
+  pUniform3f(b->u_eye, f->eye.x, f->eye.y, f->eye.z);
+  /* the sky dome first, fully fogged and behind everything */
+  pDepthMask(GL_FALSE);
+  pUniform2f(b->u_fogr, -2.0f, -1.0f);
+  pUniform1i(b->u_nl, 0);
+  for (int i = 0; i < f->ndraws; i++)
+    if (f->draws[i].pass == SR_PASS_SKY) draw_mesh(b, f->draws[i].mesh);
+  pDepthMask(GL_TRUE);
   for (int i = 0; i < f->ndraws; i++) {
     const SrDraw *d = &f->draws[i];
-    if (d->pass == SR_PASS_GLOW || d->pass == SR_PASS_HALO) continue; /* after the solid geometry */
+    if (d->pass == SR_PASS_GLOW || d->pass == SR_PASS_HALO || d->pass == SR_PASS_SKY)
+      continue; /* glows after the solid geometry */
     if (d->pass == SR_PASS_WORLD)
       pUniform2f(b->u_fogr, f->fog_start, f->fog_end);
     else
@@ -826,6 +855,7 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
     pUniform4f(b->u_share, 0, 0, 0, 0);
     pUniform1i(b->u_glow, 0);
     pUniform1i(b->u_debug, 0);
+    pUniform3f(b->u_band, 0, 0, 0);
     draw_mesh(b, &ui->mesh);
   }
   pBindVertexArray(0);

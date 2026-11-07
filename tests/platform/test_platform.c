@@ -1037,23 +1037,24 @@ typedef struct {
   AtmosKind kind;
   int hour, minute;
   int weather; /* SrWeather */
+  int look;    /* 0 along the street (east), 1 west */
 } AtmosView;
 
 static const AtmosView k_atmos_views[] = {
-    {"spire", SR_D_SPIRE, AV_STREET, 23, 0, SR_WX_DRIZZLE},
-    {"commercial", SR_D_COMMERCIAL, AV_STREET, 23, 0, SR_WX_DRIZZLE},
-    {"entertainment", SR_D_ENTERTAINMENT, AV_STREET, 23, 0, SR_WX_DRIZZLE},
-    {"residential", SR_D_RESIDENTIAL, AV_STREET, 23, 0, SR_WX_DRIZZLE},
-    {"oldquarter", SR_D_OLDQUARTER, AV_STREET, 23, 0, SR_WX_DRIZZLE},
-    {"industrial", SR_D_INDUSTRIAL, AV_STREET, 23, 0, SR_WX_DRIZZLE},
-    {"alley", -1, AV_ALLEY, 23, 0, SR_WX_DRIZZLE},
-    {"highway", -2, AV_HIGHWAY, 23, 0, SR_WX_DOWNPOUR},
-    {"rooftop", -1, AV_ROOF, 23, 0, SR_WX_CLEAR},
-    {"fog", SR_D_RESIDENTIAL, AV_STREET, 1, 0, SR_WX_FOG},
-    {"smog", SR_D_INDUSTRIAL, AV_STREET, 1, 0, SR_WX_SMOG},
-    {"dawn", SR_D_RESIDENTIAL, AV_STREET, 10, 30, SR_WX_CLEAR},
-    {"noon", SR_D_RESIDENTIAL, AV_STREET, 12, 30, SR_WX_CLEAR},
-    {"dusk", SR_D_RESIDENTIAL, AV_STREET, 14, 30, SR_WX_CLEAR},
+    {"spire", SR_D_SPIRE, AV_STREET, 23, 0, SR_WX_DRIZZLE, 0},
+    {"commercial", SR_D_COMMERCIAL, AV_STREET, 23, 0, SR_WX_DRIZZLE, 0},
+    {"entertainment", SR_D_ENTERTAINMENT, AV_STREET, 23, 0, SR_WX_DRIZZLE, 0},
+    {"residential", SR_D_RESIDENTIAL, AV_STREET, 23, 0, SR_WX_DRIZZLE, 0},
+    {"oldquarter", SR_D_OLDQUARTER, AV_STREET, 23, 0, SR_WX_DRIZZLE, 0},
+    {"industrial", SR_D_INDUSTRIAL, AV_STREET, 23, 0, SR_WX_DRIZZLE, 0},
+    {"alley", -1, AV_ALLEY, 23, 0, SR_WX_DRIZZLE, 0},
+    {"highway", -2, AV_HIGHWAY, 23, 0, SR_WX_DOWNPOUR, 0},
+    {"rooftop", -1, AV_ROOF, 23, 0, SR_WX_CLEAR, 0},
+    {"fog", SR_D_RESIDENTIAL, AV_STREET, 1, 0, SR_WX_FOG, 0},
+    {"smog", SR_D_INDUSTRIAL, AV_STREET, 1, 0, SR_WX_SMOG, 0},
+    {"dawn", SR_D_RESIDENTIAL, AV_STREET, 10, 30, SR_WX_CLEAR, 0},
+    {"noon", SR_D_RESIDENTIAL, AV_STREET, 12, 30, SR_WX_CLEAR, 0},
+    {"dusk", SR_D_RESIDENTIAL, AV_STREET, 14, 30, SR_WX_CLEAR, 1},
 };
 #define ATMOS_VIEWS ((int)(sizeof k_atmos_views / sizeof k_atmos_views[0]))
 
@@ -1085,7 +1086,7 @@ static bool atmos_place(SrGame *g, const AtmosView *v) {
   g->player.pitch = 0.1f;
   if (v->kind == AV_STREET || v->kind == AV_HIGHWAY) { /* mid-street, looking along it (+x) */
     g->player.pos = sr_v3(x0 + 24.0f, 1.7f, z0 + 9.0f);
-    g->player.yaw = -SR_PI / 2 + 0.12f;
+    g->player.yaw = v->look ? SR_PI / 2 - 0.12f : -SR_PI / 2 + 0.12f;
   } else if (v->kind == AV_ALLEY) { /* the widest gap between two buildings, home block first */
     float best = 0;
     for (int n = 0; n < c->grid * c->grid && best < 4.0f; n++) {
@@ -1248,6 +1249,79 @@ static void test_atmosphere_metrics(void) {
   g_app.game->force_weather = -1;
 }
 
+static double mean_luma(const uint8_t *rgb, int n) {
+  double s = 0;
+  for (int i = 0; i < n; i++) s += 0.299 * rgb[i * 3] + 0.587 * rgb[i * 3 + 1] + 0.114 * rgb[i * 3 + 2];
+  return s / n;
+}
+
+static const AtmosView *atmos_view(const char *name) {
+  for (int i = 0; i < ATMOS_VIEWS; i++)
+    if (strcmp(k_atmos_views[i].name, name) == 0) return &k_atmos_views[i];
+  return NULL;
+}
+
+/* The gloom (phase 2): noon stays dark, dusk glows red in the west, the end of the street is
+ * never a flat wall of fog. */
+static void test_atmosphere_gloom(void) {
+  SR_SPEC("world-environment", "Noon stays dark");
+  SR_SPEC("world-environment", "Dusk glows red in the west");
+  SR_SPEC("retro-rendering", "No dark slot at the end of the street");
+  atmos_setup(&g_app, 7919ull * 11);
+  int w, h;
+  AtmosView night = *atmos_view("noon");
+  night.hour = 23;
+  night.minute = 0;
+  uint8_t *n = atmos_render(&g_app, &night, &w, &h);
+  uint8_t *noon = atmos_render(&g_app, atmos_view("noon"), &w, &h);
+  uint8_t *mask = noon ? atmos_emissive_mask(&g_app, w, h) : NULL;
+  SR_CHECK(n && noon && mask);
+  if (n && noon && mask) {
+    double ln = mean_luma(n, w * h), ld = mean_luma(noon, w * h), sat = saturated_on_emissive(noon, mask, w * h);
+    printf("  luma night %.1f, noon %.1f; noon saturated on emissive %.0f %%\n", ln, ld, sat * 100);
+    SR_CHECK(ld <= ln * 1.6);
+    SR_CHECK(sat >= 0.8);
+  }
+  free(mask);
+  free(noon);
+  free(n);
+  /* dusk: compare the west view at 14:30 with the same view at night */
+  AtmosView west = *atmos_view("dusk");
+  uint8_t *dusk = atmos_render(&g_app, &west, &w, &h);
+  west.hour = 23;
+  west.minute = 0;
+  uint8_t *dark = atmos_render(&g_app, &west, &w, &h);
+  SR_CHECK(dusk && dark);
+  if (dusk && dark) {
+    int red = 0;
+    for (int i = 0; i < w * h / 2 + w * h / 8; i++) /* above and just below the horizon */
+      red += dusk[i * 3] > dark[i * 3] + 10 && dusk[i * 3] > dusk[i * 3 + 1] + 10 && dusk[i * 3] >= dusk[i * 3 + 2];
+    printf("  dusk: %.2f %% of the upper image warmed red\n", 100.0 * red / (w * h));
+    SR_CHECK(red >= w * h / 200);
+  }
+  free(dusk);
+  free(dark);
+  /* fog: the area around the vanishing point is not one flat colour */
+  uint8_t *fog = atmos_render(&g_app, atmos_view("fog"), &w, &h);
+  SR_CHECK(fog != NULL);
+  if (fog) {
+    int x0 = w / 2 - 40, y0 = h / 2 - 50, varied = 0, total = 0;
+    int fr = fog[(y0 * w + x0) * 3], fg = fog[(y0 * w + x0) * 3 + 1], fb = fog[(y0 * w + x0) * 3 + 2];
+    for (int y = y0; y < y0 + 60; y++)
+      for (int x = x0; x < x0 + 80; x++) {
+        const uint8_t *q = &fog[(y * w + x) * 3];
+        varied += abs(q[0] - fr) + abs(q[1] - fg) + abs(q[2] - fb) > 12;
+        total++;
+      }
+    printf("  fog: %.1f %% of the vanishing point area differs from the fog, %d halos\n", 100.0 * varied / total,
+           g_app.frame.halo_count);
+    SR_CHECK(varied >= total / 20);
+    SR_CHECK(g_app.frame.halo_count > 0);
+  }
+  free(fog);
+  g_app.game->force_weather = -1;
+}
+
 void suite_platform(void) {
   snprintf(g_root, sizeof g_root, "%s/sr_platform_test_%d/", SDL_GetHint("TMPDIR") ? SDL_GetHint("TMPDIR") : "/tmp", 1);
   SDL_SetHint("SR_STORAGE_ROOT", g_root);
@@ -1270,6 +1344,7 @@ void suite_platform(void) {
   SR_RUN(test_gameplay_screenshots);
   SR_RUN(test_atmosphere_shots);
   SR_RUN(test_atmosphere_metrics);
+  SR_RUN(test_atmosphere_gloom);
   SR_RUN(test_letterbox_window);
   SR_RUN(test_focus_and_autosave);
   SR_RUN(test_settings_persist);

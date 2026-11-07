@@ -1,4 +1,4 @@
-/* World clock, calendar, permanent night and deterministic weather. */
+/* World clock, calendar, the light cycle (long nights, short grey days) and deterministic weather. */
 #ifndef SR_ENVIRON_H
 #define SR_ENVIRON_H
 
@@ -18,7 +18,7 @@ typedef struct SrClock {
 } SrClock;
 
 typedef enum SrWeather {
-  SR_WX_CLEAR,
+  SR_WX_CLEAR, /* shown as "overcast": no rain, still fog */
   SR_WX_DRIZZLE,
   SR_WX_DOWNPOUR,
   SR_WX_FOG,
@@ -35,10 +35,22 @@ typedef struct SrWeatherState {
   float wetness;    /* 0..1 */
 } SrWeatherState;
 
+typedef enum SrLightPhase { SR_LIGHT_NIGHT, SR_LIGHT_DAWN, SR_LIGHT_DAY, SR_LIGHT_DUSK } SrLightPhase;
+
+/* Hours of the light cycle: dawn, the grey day and dusk; night the rest (19 hours). */
+#define SR_DAWN_H  10.0f
+#define SR_DAY_H   11.0f
+#define SR_DUSK_H  14.0f
+#define SR_NIGHT_H 15.0f
+
 typedef struct SrSky {
   float r, g, b; /* sky colour */
   float ambient; /* ambient light level 0..1 */
-  bool daylight;
+  bool daylight; /* the clear sky of the Sunrise ending */
+  SrLightPhase phase;
+  float dayness;    /* 0 night .. 1 grey day */
+  float band[3];    /* dawn or dusk glow low on the horizon (colour times strength) */
+  float band_dir_x; /* +1 east (dawn), -1 west (dusk) */
 } SrSky;
 
 void sr_clock_init(SrClock *c);
@@ -62,7 +74,14 @@ SrWeatherState sr_weather_fixed(SrWeather w);
 const char *sr_weather_name(SrWeather w);
 float sr_weather_visibility(SrWeather w);
 
-/* Sky is night at every time unless the Pall has been removed (Sunrise ending). */
+/* Light phase of a time of day. */
+SrLightPhase sr_light_phase(int64_t t);
+/* The sky over the city: night for 19 hours, a dark overcast day around noon framed by dawn and
+ * dusk; the clear sky of the Sunrise ending once the Pall is removed. */
 SrSky sr_sky_at(int64_t t, bool pall_removed);
+/* Rain and fog dim the day and the dawn and dusk glow. */
+SrSky sr_sky_weather(SrSky s, const SrWeatherState *w);
+/* Mean luminance of the sky colour (Rec. 601). */
+float sr_sky_luminance(const SrSky *s);
 
 #endif

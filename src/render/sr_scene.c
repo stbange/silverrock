@@ -706,6 +706,10 @@ void sr_scene_free(SrSceneCache *s) {
   sr_mesh_free(&s->air);
   sr_mesh_free(&s->grid);
   sr_mesh_free(&s->host);
+  SrMesh *gloom[] = {&s->sky, &s->deck, &s->deck_glow, &s->halos, &s->near_glow, &s->silhouettes, &s->sun};
+  for (size_t i = 0; i < sizeof gloom / sizeof gloom[0]; i++) sr_mesh_free(gloom[i]);
+  free(s->beacons);
+  s->beacons = NULL;
 }
 
 static void add_draw(SrFrame *f, SrMesh *m, SrPass pass, SrVec3 at) {
@@ -790,20 +794,23 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   f->view = sr_m4_fps_view(p->pos, p->yaw, p->pitch);
   f->proj = sr_m4_perspective(70.0f * SR_PI / 180.0f, aspect > 0 ? aspect : 16.0f / 9.0f, 0.1f, 4000.0f);
   SrWeatherState w = sr_game_weather(g);
-  SrSky sky = sr_sky_at(t, g->pall_removed);
+  SrSky sky = sr_sky_weather(sr_sky_at(t, g->pall_removed), &w);
   int district = sr_city_district_at(c, (int32_t)(p->pos.x * 100), (int32_t)(p->pos.z * 100));
   const SrPalette *pal = sr_palette(district >= 0 ? c->districts[district].type : SR_D_RESIDENTIAL);
-  f->fog[0] = pal->fog.r / 255.0f;
-  f->fog[1] = pal->fog.g / 255.0f;
-  f->fog[2] = pal->fog.b / 255.0f;
+  /* the district's fog, turning slate grey-blue in the short grey day */
+  static const float slate[3] = {0.20f, 0.22f, 0.26f};
+  float fogc[3] = {pal->fog.r / 255.0f, pal->fog.g / 255.0f, pal->fog.b / 255.0f};
+  for (int k = 0; k < 3; k++) f->fog[k] = fogc[k] + (slate[k] - fogc[k]) * sky.dayness * 0.6f;
   if (sky.daylight) {
     f->fog[0] = sky.r;
     f->fog[1] = sky.g;
     f->fog[2] = sky.b;
   }
-  f->sky[0] = sky.r * 0.5f + f->fog[0] * 0.5f;
-  f->sky[1] = sky.g * 0.5f + f->fog[1] * 0.5f;
-  f->sky[2] = sky.b * 0.5f + f->fog[2] * 0.5f;
+  for (int k = 0; k < 3; k++) {
+    f->sky[k] = f->fog[k]; /* the sky is the fog: the dome and the clear colour match it */
+    f->band[k] = sky.band[k];
+  }
+  f->band_dir_x = sky.band_dir_x;
   /* 35 % less ambient than M1: walls stay darker than the neon on them */
   f->ambient[0] = pal->ambient.r / 255.0f * sky.ambient * 0.65f;
   f->ambient[1] = pal->ambient.g / 255.0f * sky.ambient * 0.65f;
@@ -813,7 +820,7 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   f->hour = (float)sr_time_of_day(t) / 3600.0f;
   for (int u = 0; u < 4; u++) f->win_share[u] = sr_window_share(u, f->hour);
   f->fog_end = SR_MIN(w.visibility, (float)(s->view_chunks + 1) * SR_CHUNK_BLOCKS * SR_BLOCK_CM / 100.0f);
-  f->fog_start = f->fog_end * 0.25f;
+  f->fog_start = f->fog_end * 0.15f;
   f->wetness = w.wetness;
   f->dither = g->settings.dither;
   f->quantize = g->settings.quantize;
@@ -862,7 +869,9 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   /* city chunks around the camera, nearest first, limited build budget */
   int ccx = (int)(p->pos.x * 100.0f) / (SR_BLOCK_CM * SR_CHUNK_BLOCKS);
   int ccy = (int)(p->pos.z * 100.0f) / (SR_BLOCK_CM * SR_CHUNK_BLOCKS);
-  int R = s->view_chunks;
+  /* the fog hides everything past one or two blocks: stream only what can show through it */
+  const float chunk_m = (float)SR_CHUNK_BLOCKS * SR_BLOCK_CM / 100.0f;
+  int R = SR_MIN(s->view_chunks, 1 + (int)(f->fog_end * 1.3f / chunk_m));
   for (int ring = 0; ring <= R; ring++) {
     for (int dy = -ring; dy <= ring; dy++) {
       for (int dx = -ring; dx <= ring; dx++) {
@@ -897,9 +906,44 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
     sr_build_skyline(c, &s->skyline);
     s->skyline_built = true;
   }
-  add_draw(f, &s->skyline, SR_PASS_NOFOG, p->pos);
+  if (w.visibility > 150.0f || p->pos.y > 40.0f) /* the skyline only shows on clearer nights or from up high */
+    add_draw(f, &s->skyline, SR_PASS_NOFOG, p->pos);
   sr_build_landmarks(c, (float)(g->steps) / 60.0f, &s->landmarks);
+  for (int v = 0; v + 7 < s->landmarks.nv; v += 8) { /* logos dim with distance; their halos carry them */
+    float dx = s->landmarks.v[v].x - p->pos.x, dz = s->landmarks.v[v].z - p->pos.z, d = sqrtf(dx * dx + dz * dz);
+    float k = d <= f->fog_end ? 1.0f : SR_MAX(0.3f, 1.0f - (d - f->fog_end) / (2.5f * w.visibility));
+    for (int j = v; j < v + 8; j++) {
+      s->landmarks.v[j].r = (uint8_t)((float)s->landmarks.v[j].r * k);
+      s->landmarks.v[j].g = (uint8_t)((float)s->landmarks.v[j].g * k);
+      s->landmarks.v[j].b = (uint8_t)((float)s->landmarks.v[j].b * k);
+    }
+  }
   add_draw(f, &s->landmarks, SR_PASS_NOFOG, p->pos);
+  /* the gloom: sky dome, the Pall overhead, halos through the fog, silhouettes beyond it */
+  sr_sky_prepare(s, c);
+  SrBillboard bb = sr_billboard(p->pos, p->yaw, p->pitch);
+  sr_build_sky_dome(p->pos, &s->sky);
+  add_draw(f, &s->sky, SR_PASS_SKY, p->pos);
+  if (!g->pall_removed) {
+    sr_build_deck(s, c, p->pos, &sky, f->fog, f->time_s, &s->deck, &s->deck_glow);
+    add_draw(f, &s->deck, SR_PASS_NOFOG, p->pos);
+    add_draw(f, &s->deck_glow, SR_PASS_HALO, p->pos);
+  } else if (sky.phase == SR_LIGHT_DAY) {
+    sr_build_sun(p->pos, &bb, &s->sun);
+    add_draw(f, &s->sun, SR_PASS_HALO, p->pos);
+  }
+  f->halo_count = sr_build_halos(s->beacons, s->nbeacons, &bb, f->fog_end, w.visibility, &s->halos);
+  add_draw(f, &s->halos, SR_PASS_HALO, p->pos);
+  float wet_air = (1.0f - SR_MIN(1.0f, w.visibility / 220.0f)) + 0.5f * w.rain;
+  sr_build_near_halos(f->lights, f->nlights, &bb, wet_air, &s->near_glow);
+  add_draw(f, &s->near_glow, SR_PASS_GLOW, p->pos);
+  float moved = fabsf(p->pos.x - s->sil_at.x) + fabsf(p->pos.z - s->sil_at.z);
+  if (moved > 8.0f || fabsf(s->sil_fog_end - f->fog_end) > 2.0f || s->silhouettes.nv == 0) {
+    sr_build_silhouettes(c, p->pos, f->fog_end, f->fog, &s->silhouettes);
+    s->sil_at = p->pos;
+    s->sil_fog_end = f->fog_end;
+  }
+  add_draw(f, &s->silhouettes, SR_PASS_NOFOG, p->pos);
 }
 
 void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) { scene_build(s, g, aspect, f, true); }
@@ -914,7 +958,7 @@ void sr_scene_build_body(SrSceneCache *s, const SrGame *g, float aspect, SrFrame
 float sr_fog_factor(float z, float start, float end, float emissive) {
   float f = (z - start) / (end - start);
   f = f < 0 ? 0 : f > 1 ? 1 : f;
-  return f * (1.0f - 0.7f * emissive);
+  return f * (1.0f - 0.85f * emissive);
 }
 
 /* ---- view math ------------------------------------------------------------------------------ */

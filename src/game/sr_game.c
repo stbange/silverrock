@@ -130,6 +130,13 @@ SrResult sr_game_new(SrGame *g, uint64_t seed, const SrCityOptions *opt, SrBackg
 int64_t sr_game_time(const SrGame *g) { return sr_clock_seconds(&g->clock); }
 
 SrWeatherState sr_game_weather(const SrGame *g) {
+  if (g->pall_removed) { /* Sunrise: the clouds break, the rain stops, the fog lifts */
+    SrWeatherState w = sr_weather_fixed(SR_WX_CLEAR);
+    w.rain = 0.0f;
+    w.visibility = 400.0f;
+    w.wetness = 0.3f;
+    return w;
+  }
   if (g->force_weather >= 0) return sr_weather_fixed((SrWeather)g->force_weather);
   return sr_weather_at(g->seed, sr_game_time(g));
 }

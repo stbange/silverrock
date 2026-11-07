@@ -162,6 +162,144 @@ static void test_same_time_same_frame(void) {
   free(s);
 }
 
+static void test_halos(void) {
+  SR_SPEC("retro-rendering", "Neon halos through fog");
+  SrBeacon b[4];
+  memset(b, 0, sizeof b);
+  SrColor pink = {255, 60, 200, 255};
+  float vis = 100.0f, dists[4] = {60.0f, 150.0f, 280.0f, 320.0f};
+  for (int i = 0; i < 4; i++) {
+    b[i].pos = sr_v3(0, 30, -dists[i]);
+    b[i].size = 40;
+    b[i].col = pink;
+  }
+  SrBillboard bb = sr_billboard(sr_v3(0, 1.7f, 0), 0, 0);
+  SrMesh m;
+  sr_mesh_init(&m);
+  int n = sr_build_halos(b, 4, &bb, 90.0f, vis, &m);
+  SR_CHECK_EQ(n, 2); /* 150 m and 280 m: between one and three visibility distances */
+  SR_CHECK_EQ(m.nv, 8);
+  SR_CHECK(m.v[0].r > m.v[4].r); /* the nearer halo is brighter */
+  float z0 = m.v[0].z, z1 = m.v[4].z;
+  SR_CHECK(fabsf(z0 + 150.0f) < 1.0f && fabsf(z1 + 280.0f) < 1.0f);
+  /* at most 48, the strongest first */
+  SrBeacon *many = (SrBeacon *)calloc(200, sizeof *many);
+  for (int i = 0; i < 200; i++) {
+    many[i].pos = sr_v3((float)(i % 20) * 5.0f, 20, -150.0f - (float)(i / 20) * 10.0f);
+    many[i].size = i == 199 ? 400.0f : 10.0f;
+    many[i].col = pink;
+  }
+  SR_CHECK_EQ(sr_build_halos(many, 200, &bb, 90.0f, vis, &m), 48);
+  bool big = false;
+  for (int v = 0; v < m.nv; v += 4) big = big || fabsf(m.v[v + 1].x - m.v[v].x) > 100.0f;
+  SR_CHECK(big); /* the huge logo made the cut */
+  free(many);
+  /* near halos follow wet air */
+  SrLight l = {sr_v3(0, 5, -10), 20, 1, 0.5f, 0.2f};
+  sr_build_near_halos(&l, 1, &bb, 0.0f, &m);
+  SR_CHECK_EQ(m.nv, 0);
+  sr_build_near_halos(&l, 1, &bb, 1.0f, &m);
+  SR_CHECK_EQ(m.nv, 4);
+  sr_mesh_free(&m);
+}
+
+static void test_deck_and_sky(void) {
+  SR_SPEC("world-environment", "The Pall glows over bright districts");
+  SR_SPEC("world-environment", "No Pall at sunrise");
+  SR_SPEC("story-campaign", "Sunrise shows daylight");
+  SR_SPEC("retro-rendering", "No dark slot at the end of the street");
+  SrGame *g = g_game;
+  const SrCity *c = g->city;
+  SrSceneCache *s = (SrSceneCache *)calloc(1, sizeof *s);
+  sr_scene_init(s, false);
+  sr_sky_prepare(s, c);
+  SR_CHECK(s->nbeacons > c->factions.corp_count);
+  /* a bright and a dark district: the deck above the bright one glows more, in its hue */
+  int bright = -1, dark = -1;
+  for (int b = 0; b < c->grid * c->grid; b++) {
+    if (c->blocks[b].water) continue;
+    SrDistrictType t = c->districts[c->blocks[b].district].type;
+    if (t == SR_D_ENTERTAINMENT && bright < 0) bright = b;
+    if (t == SR_D_BARRENS && dark < 0) dark = b;
+  }
+  SrSky night = sr_sky_at(0, false);
+  float fog[3] = {0.1f, 0.05f, 0.1f};
+  SrMesh base, glow;
+  sr_mesh_init(&base);
+  sr_mesh_init(&glow);
+  float lum[2] = {0, 0};
+  int which[2] = {bright, dark};
+  for (int k = 0; k < 2; k++) {
+    if (which[k] < 0) continue;
+    int32_t ox, oy;
+    sr_city_block_origin(which[k], c->grid, &ox, &oy);
+    SrVec3 eye = sr_v3((float)ox / 100.0f + 48.0f, 1.7f, (float)oy / 100.0f + 48.0f);
+    sr_build_deck(s, c, eye, &night, fog, 0, &base, &glow);
+    SR_CHECK(base.nv == 32 * 32 * 4 && glow.nv == base.nv);
+    float best = 1e9f;
+    for (int v = 0; v < base.nv; v++) { /* the deck vertex right above the block */
+      float dx = base.v[v].x - eye.x, dz = base.v[v].z - eye.z;
+      if (dx * dx + dz * dz < best) {
+        best = dx * dx + dz * dz;
+        lum[k] = (float)(base.v[v].r + base.v[v].g + base.v[v].b);
+      }
+      SR_CHECK(base.v[v].y > 200.0f);
+    }
+  }
+  if (bright >= 0 && dark >= 0) SR_CHECK(lum[0] > lum[1] + 20.0f);
+  SR_CHECK(s->deck_light[bright >= 0 ? bright : 0].r + s->deck_light[bright >= 0 ? bright : 0].b > 0);
+  /* by day the deck is slate, never white */
+  SrSky day = sr_sky_at(12 * 3600 + 1800, false);
+  sr_build_deck(s, c, sr_v3(100, 2, 100), &day, fog, 0, &base, &glow);
+  for (int v = 0; v < base.nv; v++) SR_CHECK(base.v[v].r < 120 && base.v[v].g < 120 && base.v[v].b < 120);
+  /* silhouettes just beyond the fog end, darker than the fog */
+  sr_mesh_clear(&base);
+  int found = 0;
+  for (int b = 0; b < c->grid * c->grid && !found; b++) {
+    int32_t ox, oy;
+    sr_city_block_origin(b, c->grid, &ox, &oy);
+    sr_build_silhouettes(c, sr_v3((float)ox / 100.0f + 8, 1.7f, (float)oy / 100.0f + 8), 120.0f, fog, &base);
+    found = base.nv;
+  }
+  SR_CHECK(found > 0);
+  SR_CHECK(base.v[0].r < (uint8_t)(fog[0] * 255.0f));
+  sr_mesh_free(&base);
+  sr_mesh_free(&glow);
+  /* a frame of the gloom: dome, deck, halos; at Sunrise the deck is gone and the sun is out */
+  sr_game_leave(g);
+  g->force_weather = SR_WX_FOG;
+  sr_clock_set_seconds(&g->clock, 2 * 86400 + 3600);
+  SrFrame *f = (SrFrame *)malloc(sizeof *f);
+  for (int i = 0; i < 10; i++) sr_scene_build(s, g, 16.0f / 9.0f, f);
+  int sky = 0, deck = 0, halo = 0;
+  for (int i = 0; i < f->ndraws; i++) {
+    sky += f->draws[i].pass == SR_PASS_SKY;
+    deck += f->draws[i].mesh == &s->deck;
+    halo += f->draws[i].pass == SR_PASS_HALO;
+  }
+  SR_CHECK(sky == 1 && deck == 1 && halo >= 1);
+  SR_CHECK(f->fog_end <= 60.0f + 1e-3f);
+  SR_CHECK(f->halo_count > 0); /* neon shows through the fog at the end of the street */
+  SR_CHECK(!f->daylight);
+  g->pall_removed = true;
+  sr_clock_set_seconds(&g->clock, 2 * 86400 + 12 * 3600);
+  sr_scene_build(s, g, 16.0f / 9.0f, f);
+  deck = 0;
+  int sun = 0;
+  for (int i = 0; i < f->ndraws; i++) {
+    deck += f->draws[i].mesh == &s->deck;
+    sun += f->draws[i].mesh == &s->sun;
+  }
+  SR_CHECK(deck == 0 && sun == 1 && f->daylight);
+  SrWeatherState w = sr_game_weather(g);
+  SR_CHECK(w.rain == 0.0f && w.visibility > 200.0f); /* the rain stops and the fog lifts */
+  g->pall_removed = false;
+  g->force_weather = -1;
+  free(f);
+  sr_scene_free(s);
+  free(s);
+}
+
 void suite_atmos(void) {
   g_game = sr_game_create();
   sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Atmos");
@@ -170,5 +308,7 @@ void suite_atmos(void) {
   SR_RUN(test_animation_and_glow);
   SR_RUN(test_window_share);
   SR_RUN(test_same_time_same_frame);
+  SR_RUN(test_halos);
+  SR_RUN(test_deck_and_sky);
   sr_game_destroy(g_game);
 }

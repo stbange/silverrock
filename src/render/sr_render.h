@@ -248,7 +248,14 @@ float sr_glow_fade(float view_z, float fog_start, float fog_end);
 /* XRAY: no depth test and no fog (thermal signatures through walls and smoke).
  * GLOW: additive, no depth write, faded by fog. HALO: additive, no depth write, no fog (lights
  * seen through fog, their strength is set on the CPU). */
-typedef enum SrPass { SR_PASS_WORLD, SR_PASS_NOFOG, SR_PASS_XRAY, SR_PASS_GLOW, SR_PASS_HALO } SrPass;
+typedef enum SrPass {
+  SR_PASS_WORLD,
+  SR_PASS_NOFOG,
+  SR_PASS_XRAY,
+  SR_PASS_GLOW,
+  SR_PASS_HALO,
+  SR_PASS_SKY /* drawn first without depth writes, fully fogged: the sky dome takes the fog colour */
+} SrPass;
 
 typedef struct SrDraw {
   SrMesh *mesh;
@@ -266,9 +273,12 @@ typedef struct SrFrame {
   float sky[3];
   float wetness;
   bool daylight;
-  float time_s;        /* game time of day in seconds (animation) */
-  float hour;          /* 0..24 */
-  float win_share[4];  /* lit window share per building use (sr_window_share) */
+  float time_s;       /* game time of day in seconds (animation) */
+  float hour;         /* 0..24 */
+  float win_share[4]; /* lit window share per building use (sr_window_share) */
+  float band[3];      /* dawn or dusk glow on the fog toward band_dir_x (+1 east, -1 west) */
+  float band_dir_x;
+  int halo_count;      /* neon halos drawn beyond the fog end this frame */
   bool debug_emissive; /* tests: draw emissive surfaces white, everything else black */
   int nlights;
   SrLight lights[SR_MAX_FRAME_LIGHTS];
@@ -299,6 +309,13 @@ void sr_light_grid_build(SrLightGrid *lg, const SrCity *c);
 void sr_light_grid_free(SrLightGrid *lg);
 int sr_light_grid_query(const SrLightGrid *lg, const SrCity *c, SrVec3 cam, float radius, SrLight *out, int max);
 
+/* A large light seen from afar through the fog (logos, beacons, signs, billboards). */
+typedef struct SrBeacon {
+  SrVec3 pos;
+  float size;
+  SrColor col;
+} SrBeacon;
+
 typedef struct SrSceneCache {
   SrLightGrid light_grid;
   SrChunkCache chunks;
@@ -313,7 +330,30 @@ typedef struct SrSceneCache {
   bool skyline_built;
   uint64_t frame_no;
   int view_chunks; /* radius in chunks */
+  /* the gloom (sr_sky_mesh.c) */
+  SrMesh sky, deck, deck_glow, halos, near_glow, silhouettes, sun;
+  SrBeacon *beacons;
+  int nbeacons;
+  uint64_t sky_seed;
+  SrColor deck_light[SR_MAX_BLOCKS]; /* neon glow each block throws up at the clouds */
+  SrVec3 sil_at;                     /* where the silhouettes were built */
+  float sil_fog_end;
 } SrSceneCache;
+
+/* The gloom (sr_sky_mesh.c): sky dome, the Pall's cloud deck, halos through fog, silhouettes. */
+void sr_sky_prepare(SrSceneCache *s, const SrCity *c);
+void sr_build_sky_dome(SrVec3 eye, SrMesh *out);
+/* Cloud deck lit by the districts below at night, slate by day, warmed by dawn and dusk. */
+void sr_build_deck(const SrSceneCache *s, const SrCity *c, SrVec3 eye, const SrSky *sky, const float fog[3],
+                   float time_s, SrMesh *base, SrMesh *glow);
+/* Halos of beacons between the fog end and three visibility distances; returns how many. */
+int sr_build_halos(const SrBeacon *b, int n, const SrBillboard *bb, float fog_end, float visibility, SrMesh *out);
+/* Faint halos around lights inside the fog (lamps and signs in wet air). */
+void sr_build_near_halos(const SrLight *l, int n, const SrBillboard *bb, float wet_air, SrMesh *out);
+/* Tall buildings just beyond the fog end as flat shapes one shade darker than the fog. */
+void sr_build_silhouettes(const SrCity *c, SrVec3 eye, float fog_end, const float fog[3], SrMesh *out);
+/* The sun of the Sunrise ending. */
+void sr_build_sun(SrVec3 eye, const SrBillboard *bb, SrMesh *out);
 
 void sr_scene_init(SrSceneCache *s, bool mobile);
 void sr_scene_free(SrSceneCache *s);

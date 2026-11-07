@@ -17,16 +17,16 @@ alone refers to a scenario in this change's deltas, and "D1"…"D18" refer to de
 
 ## 2. The gloom: light cycle, climate and neon through fog (about 1 week)
 
-- [ ] 2.1 Light cycle in `sr_sky_at`: 19 h night, dawn 10:00–11:00, grey day 11:00–14:00, dusk 14:00–15:00; sky luminance at most 0.25; lamps and signs on at all hours (spec: "Night at midnight", "Noon stays dark", "Short days")
-- [ ] 2.2 Dawn and dusk bands on the sky dome and in the fog colour toward east and west; a soft smear, never a sun disc; weaker in heavy rain (spec: "Dusk glows red in the west")
-- [ ] 2.3 Climate: new weather weights and visibilities from D17; "clear" shown as "overcast"; wetness at least 0.6 (spec: "Rain most of the time", "Short sight lines")
-- [ ] 2.4 Emissive fog factor 0.85; fog halos for large emissives up to 3× visibility, brightest 48 first; halos around lamps and signs in wet air (spec: "Neon halos through fog", "Neon through fog")
-- [ ] 2.5 Fog silhouettes of tall buildings just beyond the fog end (spec: "No dark slot at the end of the street")
-- [ ] 2.6 Low cloud deck (the Pall at 220–300 m): two drifting noise layers, lit by neon at night, slate grey by day, warmed at dawn and dusk; hidden at Sunrise (spec: "The Pall glows over bright districts", "No Pall at sunrise")
-- [ ] 2.7 Sunrise ending: clouds break, rain stops, fog lifts, clear blue sky with the sun (spec: "Sunrise shows daylight")
-- [ ] 2.8 Re-run the balance bands and the 16 playtests with the new climate; check stealth, crowds and umbrellas (spec: D17)
+- [x] 2.1 Light cycle in `sr_sky_at`: 19 h night, dawn 10:00–11:00, grey day 11:00–14:00, dusk 14:00–15:00; sky luminance at most 0.25; lamps and signs on at all hours (spec: "Night at midnight", "Noon stays dark", "Short days")
+- [x] 2.2 Dawn and dusk bands on the sky dome and in the fog colour toward east and west; a soft smear, never a sun disc; weaker in heavy rain (spec: "Dusk glows red in the west")
+- [x] 2.3 Climate: new weather weights and visibilities from D17; "clear" shown as "overcast"; wetness at least 0.6 (spec: "Rain most of the time", "Short sight lines")
+- [x] 2.4 Emissive fog factor 0.85; fog halos for large emissives up to 3× visibility, brightest 48 first; halos around lamps and signs in wet air (spec: "Neon halos through fog", "Neon through fog")
+- [x] 2.5 Fog silhouettes of tall buildings just beyond the fog end (spec: "No dark slot at the end of the street")
+- [x] 2.6 Low cloud deck (the Pall at 220–300 m): two drifting noise layers, lit by neon at night, slate grey by day, warmed at dawn and dusk; hidden at Sunrise (spec: "The Pall glows over bright districts", "No Pall at sunrise")
+- [x] 2.7 Sunrise ending: clouds break, rain stops, fog lifts, clear blue sky with the sun (spec: "Sunrise shows daylight")
+- [x] 2.8 Re-run the balance bands and the 16 playtests with the new climate; check stealth, crowds and umbrellas (spec: D17)
 - [x] 2.9 Update the concept document (§3 setting, §6.6 environment, §16.1, §9.4, tagline, the Look row) for the vision
-- [ ] 2.10 Image metrics for noon, dusk and fog views (spec: "Noon stays dark", "Dusk glows red in the west", "Neon halos through fog")
+- [x] 2.10 Image metrics for noon, dusk and fog views (spec: "Noon stays dark", "Dusk glows red in the west", "Neon halos through fog")
 
 ## 3. Wet streets (about 1 week)
 

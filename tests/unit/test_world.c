@@ -382,7 +382,12 @@ static void test_weather_and_sky(void) {
   SR_SPEC("world-environment", "Deterministic weather");
   SR_SPEC("world-environment", "Gradual transition");
   SR_SPEC("world-environment", "Downpour reduces visibility");
-  SR_SPEC("world-environment", "Night at noon");
+  SR_SPEC("world-environment", "Night at midnight");
+  SR_SPEC("world-environment", "Noon stays dark");
+  SR_SPEC("world-environment", "Short days");
+  SR_SPEC("world-environment", "Dusk glows red in the west");
+  SR_SPEC("world-environment", "Rain most of the time");
+  SR_SPEC("world-environment", "Short sight lines");
   int changes = 0;
   for (int64_t slot = 1; slot < 200; slot++) {
     SrWeather a = sr_weather_slot(9, slot - 1), b = sr_weather_slot(9, slot);
@@ -403,12 +408,63 @@ static void test_weather_and_sky(void) {
   for (int w = 0; w <= SR_WX_COUNT; w++) SR_CHECK(sr_weather_name((SrWeather)w)[0] != '\0');
   SrWeatherState s = sr_weather_at(3, 0);
   SR_CHECK(s.from == s.to);
-  SrSky noon = sr_sky_at(12 * 3600, false), midnight = sr_sky_at(0, false);
-  SR_CHECK_NEAR(noon.ambient, midnight.ambient, 0.01);
-  SR_CHECK(!noon.daylight);
+  /* long nights: every minute from 15:00 to 10:00 looks like midnight */
+  SrSky midnight = sr_sky_at(0, false);
+  int night_minutes = 0, dawn_minutes = 0, dusk_minutes = 0;
+  for (int m = 0; m < 24 * 60; m++) {
+    int64_t t = 3 * 86400 + (int64_t)m * 60;
+    SrSky k = sr_sky_at(t, false);
+    SrLightPhase ph = sr_light_phase(t);
+    SR_CHECK(ph == k.phase);
+    SR_CHECK(sr_sky_luminance(&k) <= 0.25f); /* the sky never outshines the neon */
+    SR_CHECK(k.ambient <= midnight.ambient * 1.6f);
+    SR_CHECK(!k.daylight);
+    if (ph == SR_LIGHT_NIGHT) {
+      night_minutes++;
+      SR_CHECK_NEAR(k.ambient, midnight.ambient, 0.01);
+      SR_CHECK_NEAR(k.r, midnight.r, 0.01);
+      SR_CHECK(k.band[0] == 0.0f);
+    }
+    if (ph == SR_LIGHT_DAWN) {
+      dawn_minutes++;
+      SR_CHECK(m >= 600 && m < 660);
+      SR_CHECK(k.band_dir_x > 0); /* east */
+    }
+    if (ph == SR_LIGHT_DUSK) {
+      dusk_minutes++;
+      SR_CHECK(m >= 840 && m < 900);
+      SR_CHECK(k.band_dir_x < 0); /* west */
+    }
+  }
+  SR_CHECK(night_minutes >= 19 * 60);
+  SR_CHECK_EQ(dawn_minutes, 60);
+  SR_CHECK_EQ(dusk_minutes, 60);
+  SrSky noon = sr_sky_at(12 * 3600 + 1800, false);
+  SR_CHECK(noon.phase == SR_LIGHT_DAY && noon.dayness == 1.0f);
+  SR_CHECK(noon.ambient > midnight.ambient);
+  SR_CHECK(sr_sky_luminance(&noon) <= 0.25f && sr_sky_luminance(&noon) > sr_sky_luminance(&midnight));
+  /* dusk: a red to orange band low in the west */
+  SrSky dusk = sr_sky_at(14 * 3600 + 1800, false);
+  SR_CHECK(dusk.band[0] > 0.5f && dusk.band[0] > dusk.band[1] * 2.0f && dusk.band[1] >= dusk.band[2]);
+  SrWeatherState clear = sr_weather_fixed(SR_WX_CLEAR), pour = sr_weather_fixed(SR_WX_DOWNPOUR);
+  SR_CHECK(sr_sky_weather(dusk, &clear).band[0] > sr_sky_weather(dusk, &pour).band[0] * 3.0f); /* rain hides it */
+  SR_CHECK(sr_sky_weather(noon, &pour).ambient < noon.ambient);
+  /* the Sunrise ending: the only clear sky */
   SrSky sun = sr_sky_at(12 * 3600, true), sunnight = sr_sky_at(2 * 3600, true);
   SR_CHECK(sun.daylight && sun.ambient > noon.ambient);
   SR_CHECK(sunnight.ambient < sun.ambient);
+  SR_CHECK(sr_sky_weather(sun, &pour).ambient == sun.ambient);
+  /* the climate: rain nearly always, never far sight lines, never a dry street */
+  int rainy = 0, slots = 365 * 12;
+  for (int64_t slot = 0; slot < slots; slot++) {
+    SrWeatherState w = sr_weather_at(77, slot * 7200 + 3600);
+    rainy += w.rain > 0.0f;
+    SR_CHECK(w.wetness >= 0.6f);
+    SR_CHECK(w.visibility <= 200.0f);
+    if (w.rain > 0.0f) SR_CHECK(w.visibility <= 150.0f);
+  }
+  SR_CHECK(rainy >= slots * 85 / 100);
+  SR_CHECK_STR(sr_weather_name(SR_WX_CLEAR), "overcast");
 }
 
 void suite_world(void) {
