@@ -549,11 +549,12 @@ static void test_reachable_dominance(void) {
     }
   }
   SR_CHECK_EQ(ch->camp.capital_bonus[0], 24);
-  SrCity c = *g->city;
-  c.factions.corp_count = 10;
-  SR_CHECK(sr_chess_dominance_threshold(&c) > 0.249f && sr_chess_dominance_threshold(&c) < 0.251f);
-  c.factions.corp_count = 5;
-  SR_CHECK(sr_chess_dominance_threshold(&c) > 0.399f && sr_chess_dominance_threshold(&c) < 0.401f);
+  int corps = g->city->factions.corp_count; /* the city is too big for a copy on the (web) stack */
+  g->city->factions.corp_count = 10;
+  SR_CHECK(sr_chess_dominance_threshold(g->city) > 0.249f && sr_chess_dominance_threshold(g->city) < 0.251f);
+  g->city->factions.corp_count = 5;
+  SR_CHECK(sr_chess_dominance_threshold(g->city) > 0.399f && sr_chess_dominance_threshold(g->city) < 0.401f);
+  g->city->factions.corp_count = corps;
   sr_game_destroy(g);
 }
 
