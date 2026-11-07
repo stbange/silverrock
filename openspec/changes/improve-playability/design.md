@@ -175,9 +175,10 @@ the hunter's operation.
 **Act III climax.**
 - The finale arc has four beats.
 - The last beat is a **set piece** the player must take part in: it never resolves off-screen, and
-  its deadline extends until the player acts or abandons it (abandoning picks the Kingmaker ending
-  for the rival).
-- The ending choice opens after the set piece.
+  its deadline extends until the player acts or abandons it. Only an explicit abandon (R on the
+  Jobs tab) crowns the rival; a failed attempt is re-posted.
+- The ending choice opens after the set piece. Kingmaker shows one row per megacorp, so the player
+  picks the king.
 
 **Staged transitions.** Each act change triggers:
 - a meeting message from the handler;
@@ -198,7 +199,8 @@ the hunter's operation.
 - Each arc type has a cast member who announces each beat in a message naming the people, the
   place and the stakes. The templates live in `sr_story_text.c`, with three variants per beat and
   branch.
-- Skipped beats are reported afterwards ("While you were away…").
+- Skipped beats are reported afterwards ("While you were away…"), but only for beats that involve
+  the patron; other factions' beats only show in the news and the story log.
 
 **Story log.** The terminal's Story tab keeps a log of acts, arcs, beats with their outcomes, and
 trust changes. It is kept in `SrStory` (32 entries) and saved.
@@ -208,8 +210,8 @@ trust changes. It is kept in `SrStory` (32 entries) and saved.
 - The same message from the same sender within 24 hours is merged and shown with a count.
 - Story messages are pinned, and the inbox holds 64 messages.
 
-**Nudge for stalled players.** After 14 days at Pawn in Act I, the handler offers a guided T1
-contract and says what Act II needs.
+**Nudge for stalled players.** After 14 days at Pawn in Act I without a completed job above T0,
+the handler offers a guided T1 contract and says what Act II needs.
 
 ### D10 — News writing (F9)
 

@@ -41,12 +41,12 @@ a scenario in this change's deltas, and "D1"…"D12" refer to design decisions.
 
 ## 5. Persistence and verification
 
-- [ ] 5.1 Save format v5 (blacklist, defections, story log, weekly Street Cred, set piece, capital bonus, medical debt, patron flag on jobs) with migration from v4; round-trip and migration tests (spec: design: Save format)
-- [ ] 5.2 `--playtest … --bands tests/balance/playtest_bands.txt` in the nightly workflow (spec: "Paced campaign")
-- [ ] 5.3 Re-run the 16 playtests and write `docs/reviews/playtest-<date>.md` comparing against the 2026-11-07 notes
-- [ ] 5.4 Update every test the new rules change (the starter economy, M5 trust and defection tests, campaign bot timing), and keep coverage at 95 % or above
+- [x] 5.1 Save format v5 (blacklist, defections, story log, weekly Street Cred, set piece, capital bonus, medical debt, patron flag on jobs) with migration from v4; round-trip and migration tests (spec: design: Save format)
+- [x] 5.2 `--playtest … --bands tests/balance/playtest_bands.txt` in the nightly workflow (spec: "Paced campaign")
+- [x] 5.3 Re-run the 16 playtests and write `docs/reviews/playtest-<date>.md` comparing against the 2026-11-07 notes
+- [x] 5.4 Update every test the new rules change (the starter economy, M5 trust and defection tests, campaign bot timing), and keep coverage at 95 % or above
 - [ ] 5.5 Manual playtest on desktop and phone: job menu, Jobs tab, one hunt, the climax set piece, one ending; record in `tests/manual-verification.md`
-- [ ] 5.6 Confirm every scenario of this change is covered in the traceability report
+- [x] 5.6 Confirm every scenario of this change is covered in the traceability report
 
 ## Workflow follow-up
 

@@ -26,10 +26,11 @@ flowchart LR
   M3 --> M4["M4 The Matrix"] --> M5["M5 Corporate Chess"] --> M6["M6 Content & Polish"] --> M7["M7 1.0"]
 ```
 
-### Status (2026-11-06)
+### Status (2026-11-07)
 
-M0–M5 are implemented. Open items are the manual checks on Windows hardware and real phones (one exit demo per
-milestone), including a full campaign on two seeds for M5. Unit, platform, scenario, browser and gate tests all pass in CI; line coverage is 98.6 %. The
+M0–M5 are implemented, followed by the playability pass (`improve-playability`) after the first long
+playtests: jobs from the faction game, a slower rise, money that matters, real danger and a paced story. Open items are the manual checks on Windows hardware and real phones (one exit demo per
+milestone), including a full campaign on two seeds for M5. Unit, platform, scenario, browser and gate tests all pass in CI; line coverage is 98.2 %. The
 web build is deployed to GitHub Pages from the default branch.
 
 ## 2. First playable slice

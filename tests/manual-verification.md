@@ -35,3 +35,15 @@ Automated proxy: `sr_headless --campaign 20` (story bots reach an ending on ever
 | Linux or Windows desktop, seed A | prologue test gig, retainer, Act II, a defection or betrayal, Act III, an ending | not yet run | | |
 | Linux or Windows desktop, seed B | same, aiming for a different ending (Sunrise needs the Pall Protocol and deep Matrix work) | not yet run | | |
 | Phone (touch) | terminal tabs by stick, buying shares, story choices, billboard ticker readable | not yet run | | |
+
+## Playability pass (improve-playability 5.5)
+
+Automated proxy: `bash tests/balance/run_playtests.sh` (16 runs of 26 weeks, 12 bands, nightly) and
+`tests/unit/test_play.c`. The manual run judges whether the jobs, the danger and the story feel right.
+
+| Target | Check | Result | Date | Tester |
+|---|---|---|---|---|
+| Linux or Windows desktop | take a job from the fixer's job menu and one from the terminal's Jobs tab; accept a job against the patron after the warning | not yet run | | |
+| Linux or Windows desktop | reach Heat 4 or a patron hunt and survive one ambush (fight, flee or pay) | not yet run | | |
+| Linux or Windows desktop | reach Act III, take the climax set piece, crown a king or pick another ending, continue playing | not yet run | | |
+| Phone (touch) | Jobs tab by tap (select, then tap again to accept), abandon a job, read the Story tab log | not yet run | | |
