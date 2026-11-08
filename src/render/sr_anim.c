@@ -786,24 +786,60 @@ void sr_anim_mirror(SrPose *p) {
 
 /* ---- skeleton and forward kinematics ------------------------------------------------------ */
 
+/* Build factors (male baseline): shoulder, waist, hip, chest depth, limb thickness, belly. */
+static const float k_build[SR_BUILD_COUNT][6] = {
+    [SR_BUILD_AVERAGE] = {1.00f, 0.88f, 0.92f, 1.00f, 1.00f, 0.00f},
+    [SR_BUILD_SLENDER] = {0.92f, 0.76f, 0.86f, 0.88f, 0.85f, 0.00f},
+    [SR_BUILD_ATHLETIC] = {1.10f, 0.80f, 0.90f, 1.06f, 1.14f, 0.00f},
+    [SR_BUILD_HEAVY] = {1.12f, 1.18f, 1.16f, 1.24f, 1.26f, 0.10f},
+    [SR_BUILD_THIN] = {0.85f, 0.70f, 0.80f, 0.80f, 0.74f, 0.00f},
+    [SR_BUILD_MUSCULAR] = {1.28f, 0.90f, 0.95f, 1.18f, 1.42f, 0.00f},
+    [SR_BUILD_CURVY] = {0.98f, 0.82f, 1.14f, 1.02f, 1.06f, 0.00f},
+    [SR_BUILD_STOCKY] = {1.18f, 1.06f, 1.04f, 1.16f, 1.22f, 0.04f},
+};
+
 void sr_anim_skel(const SrAppearance *a, SrSkel *s) {
   memset(s, 0, sizeof *s);
-  s->tall = 1.55f + 0.08f * (float)(a->body % 3);
-  s->bw = 0.22f + 0.04f * (float)a->body;
-  s->hip = s->tall * 0.48f;
+  int build = sr_look_build(a);
+  bool f = sr_look_female(a);
+  const float *k = k_build[build];
+  static const float k_height[4] = {0.0f, -0.09f, 0.08f, 0.15f};
+  s->female = f;
+  s->build = (uint8_t)build;
+  s->tall = (f ? 1.63f : 1.74f) + k_height[sr_look_height(a)] + 0.012f * (float)((int)(a->head % 5) - 2);
+  if (build == SR_BUILD_STOCKY) s->tall -= 0.04f;
+  s->hip = s->tall * (f ? 0.49f : 0.48f);
   s->ankle = 0.06f;
   s->thigh = s->hip * 0.5f;
   s->shin = s->hip - s->thigh - s->ankle;
   s->ua = s->tall * 0.17f;
   s->fa = s->tall * 0.135f;
   s->hand = s->tall * 0.055f;
-  s->hs = 0.12f + 0.01f * (float)(a->head % 3);
+  s->hs = (0.12f + 0.01f * (float)(a->head % 3)) * (f ? 0.94f : 1.0f);
   s->chest_h = s->tall * 0.82f - s->hip - 0.08f;
   s->neck_y = s->tall * 0.84f - s->hip - 0.08f;
-  s->sho_x = s->bw + 0.1f;
   s->sho_y = s->tall * 0.8f - s->hip - 0.08f;
-  s->leg_w = (s->bw - 0.02f) * 0.5f;
-  s->hip_x = (s->bw + 0.02f) * 0.5f;
+  /* shapes: women narrower at the shoulder and waist, wider at the hip */
+  s->bw = 0.24f * k[0] * (f ? 0.86f : 1.0f);
+  s->waist = 0.24f * k[1] * (f ? 0.84f : 1.0f);
+  s->hip_w = 0.21f * k[2] * (f ? 1.12f : 1.0f);
+  s->chest_d = 0.14f * k[3];
+  s->belly = k[5];
+  s->bust = f ? (build == SR_BUILD_CURVY   ? 0.065f
+                 : build == SR_BUILD_HEAVY ? 0.06f
+                 : build == SR_BUILD_THIN  ? 0.025f
+                                           : 0.04f)
+              : 0.0f;
+  s->arm_w = 0.05f * k[4] * (f ? 0.86f : 1.0f);
+  s->leg_w = 0.095f * k[4] * (f ? 0.94f : 1.0f);
+  s->hip_x = fmaxf(s->hip_w - s->leg_w, s->leg_w + 0.005f);
+  s->sho_x = s->bw + s->arm_w;
+  s->foot = f ? 0.15f : 0.17f;
+  /* how the body moves */
+  s->sway = (f ? 1.0f : 0.15f) + (build == SR_BUILD_CURVY ? 0.5f : 0.0f);
+  s->arm_out = build == SR_BUILD_MUSCULAR ? 0.16f : build == SR_BUILD_HEAVY || build == SR_BUILD_STOCKY ? 0.1f : 0.0f;
+  s->stance = build == SR_BUILD_HEAVY ? 0.06f : build == SR_BUILD_STOCKY ? 0.04f : 0.0f;
+  s->stride_k = build == SR_BUILD_HEAVY ? 0.9f : build == SR_BUILD_THIN || build == SR_BUILD_SLENDER ? 1.04f : 1.0f;
 }
 
 typedef struct Xf {
@@ -920,7 +956,9 @@ static Gait gait_at(float speed, int base) {
   return g;
 }
 
-float sr_anim_stride(const SrSkel *s, float speed, int base) { return gait_at(speed, base).stride * s->hip; }
+float sr_anim_stride(const SrSkel *s, float speed, int base) {
+  return gait_at(speed, base).stride * s->hip * (s->stride_k > 0 ? s->stride_k : 1.0f);
+}
 
 static float gait_seed(uint64_t key, int salt) {
   return (float)(sr_mix64(key * 0x9E3779B97F4A7C15ull + (uint64_t)salt) % 1000u) / 999.0f * 2.0f - 1.0f;
@@ -929,7 +967,7 @@ static float gait_seed(uint64_t key, int salt) {
 void sr_anim_gait(const SrSkel *s, float speed, float phase, int base, uint64_t key, SrPose *out) {
   memset(out, 0, sizeof *out);
   Gait g = gait_at(speed, base);
-  float L = s->hip, S = g.stride * L;
+  float L = s->hip, S = g.stride * L * (s->stride_k > 0 ? s->stride_k : 1.0f);
   float arm = g.arm * (1.0f + 0.15f * gait_seed(key, 1));
   float lean = g.lean + 0.04f * gait_seed(key, 2);
   float ph = phase - floorf(phase);
@@ -980,6 +1018,14 @@ void sr_anim_gait(const SrSkel *s, float speed, float phase, int base, uint64_t 
   out->j[J_CR] = 0.03f * sinf(2.0f * SR_PI * ph) + (base == SR_CLIP_LIMP ? 0.08f * sinf(2.0f * SR_PI * ph) : 0.0f);
   out->j[J_HP] = -lean * 0.6f + (base == SR_CLIP_LIMP ? 0.15f : 0.0f);
   out->j[J_HW] = -0.5f * out->j[J_CW];
+  /* the body's own way of walking: hips that sway, arms held out, feet apart */
+  float sw = s->sway * (1.0f - 0.6f * clampf((speed - 1.6f) / 1.5f, 0, 1));
+  out->j[J_PX] = 0.028f * sw * sinf(2.0f * SR_PI * ph);
+  out->j[J_CR] -= 0.05f * sw * sinf(2.0f * SR_PI * ph);
+  out->j[J_OL] += s->arm_out;
+  out->j[J_OR] += s->arm_out;
+  out->j[J_BL] += s->stance;
+  out->j[J_BR] += s->stance;
 }
 
 /* ---- full pose --------------------------------------------------------------------------- */
@@ -1041,7 +1087,13 @@ void sr_anim_pose(const SrAnimInput *in, const SrSkel *s, double now, float gait
     if (sr_anim_clip_kind(base) != SR_CK_LOOP) base = SR_CLIP_IDLE;
     const ClipDef *d = clip_def(base);
     sr_anim_sample(base, (float)(now / d->len) + key_offset(in->key), out);
-    if (!lying(base)) posture(in->role, in->key, out);
+    if (!lying(base)) {
+      posture(in->role, in->key, out);
+      out->j[J_OL] += s->arm_out;
+      out->j[J_OR] += s->arm_out;
+      out->j[J_BL] += s->stance;
+      out->j[J_BR] += s->stance;
+    }
     gw = d->ground == G_ALWAYS ? 1.0f : 0.0f;
   }
   bool upright = !once_base && !lying(base);
@@ -1159,6 +1211,40 @@ bool sr_anim_has_coat(const SrAppearance *a) {
   return a->outfit % 4 == 2 && (role == SR_ROLE_EXEC || role == SR_ROLE_FIXER || role == SR_ROLE_DRIFTER ||
                                 role == SR_ROLE_GANG || role == SR_ROLE_WORKER);
 }
+static SrColor cloth(const SrAppearance *a);
+static const SrColor k_finish_c[4] = {
+    {170, 175, 185, 255}, {44, 44, 50, 255}, {96, 100, 110, 255}, {205, 185, 135, 255}};
+
+void sr_anim_arm_look(const SrAppearance *a, int side, SrColor *hand, SrColor *fore, int *layer) {
+  bool chrome = sr_look_limbs(a) & (side == 0 ? SR_LIMB_ARM_L : SR_LIMB_ARM_R);
+  SrColor c = k_finish_c[sr_look_finish(a)];
+  *hand = chrome ? c : sr_anim_skin(a);
+  *fore = chrome ? c : sr_anim_sleeves(a) >= 1 ? sr_anim_skin(a) : cloth(a);
+  *layer = chrome ? SR_LAYER_METAL : SR_LAYER_WHITE;
+}
+
+int sr_anim_sleeves(const SrAppearance *a) {
+  int role = a->outfit / 4, v = a->outfit % 4;
+  if (role == SR_ROLE_EXEC || role == SR_ROLE_COP || role == SR_ROLE_GUARD || role == SR_ROLE_FIXER) return 0;
+  if (role == SR_ROLE_GANG) return v == 3 ? 2 : v == 1 ? 1 : 0;
+  if (role == SR_ROLE_VENDOR || role == SR_ROLE_WORKER) return v == 3 ? 1 : 0;
+  return v == 3 ? 1 : 0;
+}
+
+bool sr_anim_has_skirt(const SrAppearance *a) {
+  int role = a->outfit / 4, v = a->outfit % 4;
+  if (!sr_look_female(a) || role == SR_ROLE_GUARD || role == SR_ROLE_COP || role == SR_ROLE_DRIFTER) return false;
+  return v == 1 || (role == SR_ROLE_EXEC && v == 0);
+}
+
+int sr_anim_hair_style(const SrAppearance *a) {
+  int st = a->hair % 12;
+  /* women more often wear it long; few shave */
+  if (sr_look_female(a) && st == 11) return a->face % 2 ? 9 : 10;
+  if (sr_look_female(a) && st < 2) return 9;
+  return st;
+}
+
 bool sr_anim_has_backpack(const SrAppearance *a) { return (a->accessory & 7) == 6 && a->outfit / 4 != SR_ROLE_EXEC; }
 
 static void hand_prop(SrMesh *m, const Xf *hand, const SrSkel *s, int prop, float fx, const SrAnimInput *in) {
@@ -1262,11 +1348,26 @@ void sr_anim_mesh(SrMesh *m, const SrAnimInput *in, const SrSkel *s, const SrPos
   Bones b;
   bones(s, p, &world, &b);
   SrColor outfit = cloth(a), legs = shade(outfit, 60), sk = sr_anim_skin(a);
-  SrColor sleeve = a->cyber >= 4 ? (SrColor){170, 175, 185, 255} : outfit; /* chrome arms */
-  int arm_layer = a->cyber >= 4 ? SR_LAYER_METAL : SR_LAYER_WHITE;
-  float bw = s->bw, w = s->leg_w;
-  box(m, &b.pelvis, sr_v3(-bw - 0.02f, -0.1f, -0.13f), sr_v3(bw + 0.02f, 0.08f, 0.13f), legs, SR_LAYER_WHITE, 0);
-  box(m, &b.chest, sr_v3(-bw - 0.04f, 0, -0.15f), sr_v3(bw + 0.04f, s->chest_h, 0.15f), outfit, SR_LAYER_WHITE, 0);
+  /* chrome limbs in one of four finishes, seams glowing in an accent colour */
+  static const SrColor k_finish[4] = {
+      {170, 175, 185, 255}, {44, 44, 50, 255}, {96, 100, 110, 255}, {205, 185, 135, 255}};
+  static const SrColor k_accent[4] = {
+      {60, 220, 255, 255}, {255, 50, 50, 255}, {255, 170, 40, 255}, {240, 240, 255, 255}};
+  int limbs = sr_look_limbs(a);
+  SrColor chrome = k_finish[sr_look_finish(a)], seam = k_accent[sr_look_finish(a)];
+  int sleeves = sr_anim_sleeves(a);
+  float bw = s->bw, w = s->leg_w, cd = s->chest_d, ch = s->chest_h;
+  box(m, &b.pelvis, sr_v3(-s->hip_w, -0.1f, -cd * 0.92f), sr_v3(s->hip_w, 0.08f, cd * 0.92f), legs, SR_LAYER_WHITE, 0);
+  /* the torso: a waist and a chest, a belly on heavy builds, a modest bust on women */
+  box(m, &b.chest, sr_v3(-s->waist, -0.02f, -cd * 0.9f), sr_v3(s->waist, ch * 0.45f, cd * 0.9f), outfit, SR_LAYER_WHITE,
+      0);
+  box(m, &b.chest, sr_v3(-bw, ch * 0.4f, -cd), sr_v3(bw, ch, cd), outfit, SR_LAYER_WHITE, 0);
+  if (s->belly > 0)
+    box(m, &b.chest, sr_v3(-s->waist * 0.82f, 0.0f, cd * 0.85f),
+        sr_v3(s->waist * 0.82f, ch * 0.42f, cd * 0.85f + s->belly), outfit, SR_LAYER_WHITE, 0);
+  if (s->bust > 0)
+    box(m, &b.chest, sr_v3(-bw * 0.66f, ch * 0.56f, cd * 0.9f), sr_v3(bw * 0.66f, ch * 0.8f, cd + s->bust),
+        shade(outfit, 94), SR_LAYER_WHITE, 0);
   /* the head: narrower than it is tall, a face on the front, a nose */
   float hs = s->hs, hw = hs * 0.8f, hd = hs * 0.92f, hh = 2 * hs * 1.04f;
   box(m, &b.head, sr_v3(-hw, 0, -hd), sr_v3(hw, hh, hd), sk, SR_LAYER_WHITE, 0);
@@ -1280,18 +1381,44 @@ void sr_anim_mesh(SrMesh *m, const SrAnimInput *in, const SrSkel *s, const SrPos
     box(m, &b.head, sr_v3(-0.014f, hh * 0.36f, hd), sr_v3(0.014f, hh * 0.56f, hd + 0.026f), shade(sk, 92),
         SR_LAYER_WHITE, 0);
   }
+  bool skirt = sr_anim_has_skirt(a);
   for (int side = 0; side < 2; side++) {
-    box(m, &b.thigh[side], sr_v3(-w, -s->thigh, -0.11f), sr_v3(w, 0, 0.11f), legs, SR_LAYER_WHITE, 0);
-    box(m, &b.shin[side], sr_v3(-w * 0.85f, -s->shin, -0.095f), sr_v3(w * 0.85f, 0, 0.095f), legs, SR_LAYER_WHITE, 0);
-    box(m, &b.foot[side], sr_v3(-w * 0.9f, -s->ankle, -0.07f), sr_v3(w * 0.9f, 0, 0.17f), (SrColor){28, 26, 26, 255},
-        SR_LAYER_WHITE, 0);
-    box(m, &b.uarm[side], sr_v3(-0.05f, -s->ua, -0.065f), sr_v3(0.05f, 0, 0.065f), sleeve, arm_layer, 0);
-    box(m, &b.farm[side], sr_v3(-0.045f, -s->fa, -0.055f), sr_v3(0.045f, 0, 0.055f), sleeve, arm_layer, 0);
-    box(m, &b.farm[side], sr_v3(-0.04f, -s->fa - s->hand, -0.045f), sr_v3(0.04f, -s->fa, 0.045f),
-        a->cyber >= 4 ? sleeve : sk, arm_layer, 0);
+    bool chrome_leg = limbs & SR_LIMB_LEGS;
+    bool chrome_arm = limbs & (side == 0 ? SR_LIMB_ARM_L : SR_LIMB_ARM_R);
+    SrColor lc = chrome_leg ? chrome : legs, shin_c = chrome_leg ? chrome : skirt ? shade(sk, 70) : legs;
+    int ll = chrome_leg ? SR_LAYER_METAL : SR_LAYER_WHITE;
+    float lw = chrome_leg ? w * 1.08f : w;
+    box(m, &b.thigh[side], sr_v3(-lw, -s->thigh, -lw * 1.15f), sr_v3(lw, 0, lw * 1.15f), lc, ll, 0);
+    box(m, &b.shin[side], sr_v3(-lw * 0.85f, -s->shin, -lw), sr_v3(lw * 0.85f, 0, lw), shin_c, ll, 0);
+    box(m, &b.foot[side], sr_v3(-w * 0.9f, -s->ankle, -0.07f), sr_v3(w * 0.9f, 0, s->foot),
+        chrome_leg ? shade(chrome, 80) : (SrColor){28, 26, 26, 255}, ll, 0);
+    if (chrome_leg) { /* a glowing knee joint and a piston down the calf */
+      box(m, &b.shin[side], sr_v3(-lw * 0.9f, -0.03f, lw * 0.6f), sr_v3(lw * 0.9f, 0.01f, lw * 1.05f), seam,
+          SR_LAYER_WHITE, 200);
+      box(m, &b.shin[side], sr_v3(-0.015f, -s->shin * 0.8f, -lw - 0.03f), sr_v3(0.015f, -0.05f, -lw), shade(chrome, 70),
+          SR_LAYER_METAL, 0);
+    }
+    /* arms: sleeves long, short or none; chrome replaces the whole arm */
+    float aw = chrome_arm ? s->arm_w * 1.05f : s->arm_w;
+    SrColor up = chrome_arm ? chrome : sleeves == 2 ? sk : outfit;
+    SrColor fore = chrome_arm ? chrome : sleeves >= 1 ? sk : outfit;
+    int al = chrome_arm ? SR_LAYER_METAL : SR_LAYER_WHITE;
+    box(m, &b.uarm[side], sr_v3(-aw, -s->ua, -aw * 1.25f), sr_v3(aw, 0, aw * 1.25f), up, al, 0);
+    box(m, &b.farm[side], sr_v3(-aw * 0.9f, -s->fa, -aw * 1.1f), sr_v3(aw * 0.9f, 0, aw * 1.1f), fore, al, 0);
+    box(m, &b.farm[side], sr_v3(-aw * 0.8f, -s->fa - s->hand, -aw * 0.9f), sr_v3(aw * 0.8f, -s->fa, aw * 0.9f),
+        chrome_arm ? shade(chrome, 85) : sk, al, 0);
+    if (chrome_arm) /* the seam where chrome meets flesh, and the elbow */
+      box(m, &b.uarm[side], sr_v3(-aw * 1.08f, -0.02f, -aw * 1.3f), sr_v3(aw * 1.08f, 0.0f, aw * 1.3f), seam,
+          SR_LAYER_WHITE, 220);
+    if (sleeves == 1 && !chrome_arm) /* the sleeve's edge */
+      box(m, &b.uarm[side], sr_v3(-aw * 1.08f, -s->ua, -aw * 1.32f), sr_v3(aw * 1.08f, -s->ua * 0.75f, aw * 1.32f),
+          outfit, SR_LAYER_WHITE, 0);
   }
+  if (skirt) /* a skirt or the hem of a dress */
+    box(m, &b.pelvis, sr_v3(-s->hip_w * 1.08f, -s->thigh * 0.95f, -cd * 1.02f),
+        sr_v3(s->hip_w * 1.08f, -0.08f, cd * 1.02f), shade(outfit, 90), SR_LAYER_WHITE, 0);
   float top = hh;
-  int style = a->hair % 12;
+  int style = sr_anim_hair_style(a);
   SrColor hc = hair[a->hair_color % 12];
   int hem = a->hair_color >= 6 ? 120 : 0;
   if (in->hood) {
@@ -1300,11 +1427,24 @@ void sr_anim_mesh(SrMesh *m, const SrAnimInput *in, const SrSkel *s, const SrPos
   } else if (style < 4) { /* mohawk / crest */
     box(m, &b.head, sr_v3(-0.03f, top, -hd), sr_v3(0.03f, top + 0.12f + 0.03f * (float)style, hd), hc, SR_LAYER_WHITE,
         hem);
-  } else if (style < 9) { /* cap of hair */
+  } else if (style < 9) { /* short hair; a bob for some */
     box(m, &b.head, sr_v3(-hw - 0.01f, top - 0.06f, -hd - 0.01f), sr_v3(hw + 0.01f, top + 0.03f, hd + 0.01f), hc,
         SR_LAYER_WHITE, hem);
+    if (style >= 7 && s->female)
+      box(m, &b.head, sr_v3(-hw - 0.02f, hh * 0.35f, -hd - 0.02f), sr_v3(hw + 0.02f, top - 0.04f, -hd * 0.1f), hc,
+          SR_LAYER_WHITE, hem);
+  } else if (style == 9) { /* long hair over the back and the shoulders */
+    box(m, &b.head, sr_v3(-hw - 0.012f, top - 0.05f, -hd - 0.012f), sr_v3(hw + 0.012f, top + 0.025f, hd + 0.01f), hc,
+        SR_LAYER_WHITE, hem);
+    box(m, &b.head, sr_v3(-hw - 0.02f, -0.18f, -hd - 0.03f), sr_v3(hw + 0.02f, top - 0.03f, -hd * 0.3f), hc,
+        SR_LAYER_WHITE, hem);
+  } else if (style == 10) { /* tied back */
+    box(m, &b.head, sr_v3(-hw - 0.01f, top - 0.06f, -hd - 0.01f), sr_v3(hw + 0.01f, top + 0.02f, hd + 0.01f), hc,
+        SR_LAYER_WHITE, hem);
+    box(m, &b.head, sr_v3(-0.035f, hh * 0.25f, -hd - 0.09f), sr_v3(0.035f, hh * 0.8f, -hd + 0.01f), hc, SR_LAYER_WHITE,
+        hem);
   }
-  if (a->cyber) /* glowing optics, on the face */
+  if (sr_look_cyber_level(a) >= 1) /* glowing optics, on the face */
     box(m, &b.head, sr_v3(-hw * 0.8f, hh * 0.55f, hd + 0.002f), sr_v3(hw * 0.8f, hh * 0.64f, hd + 0.02f),
         (SrColor){255, 40, 40, 255}, SR_LAYER_WHITE, 255);
   if (a->marker) { /* faction marker: halo, shoulder plates or mask by marker id */
@@ -1314,10 +1454,12 @@ void sr_anim_mesh(SrMesh *m, const SrAnimInput *in, const SrSkel *s, const SrPos
         box(m, &b.head, sr_v3(-0.2f, top + 0.15f, -0.2f), sr_v3(0.2f, top + 0.18f, 0.2f), mk, SR_LAYER_WHITE, 255);
         break;
       case 1:
-        box(m, &b.chest, sr_v3(-bw - 0.12f, s->chest_h - 0.06f, -0.16f), sr_v3(bw + 0.12f, s->chest_h + 0.02f, 0.16f),
-            mk, SR_LAYER_WHITE, 60);
+        box(m, &b.chest, sr_v3(-bw - 0.12f, ch - 0.06f, -cd - 0.02f), sr_v3(bw + 0.12f, ch + 0.02f, cd + 0.02f), mk,
+            SR_LAYER_WHITE, 60);
         break;
-      default: box(m, &b.head, sr_v3(-hs, 0, hs), sr_v3(hs, hs, hs + 0.02f), mk, SR_LAYER_WHITE, 80); break;
+      default:
+        box(m, &b.head, sr_v3(-hw, 0, hd + 0.003f), sr_v3(hw, hh * 0.5f, hd + 0.022f), mk, SR_LAYER_WHITE, 80);
+        break;
     }
   }
   if (sr_anim_has_coat(a)) { /* coat tails follow the thighs at half their swing */
@@ -1326,12 +1468,12 @@ void sr_anim_mesh(SrMesh *m, const SrAnimInput *in, const SrSkel *s, const SrPos
       float flap = 0.06f * sinf((float)in->key * 0.37f + in->pos.x * 0.5f) * (in->speed < 0.3f ? 1.0f : 0.0f);
       Xf tail = xf_joint(sr_v3(sx * s->hip_x, -0.04f, 0), 0, -0.5f * p->j[J_HL + side] - flap, 0);
       Xf t = xf_mul(&b.pelvis, &tail);
-      box(m, &t, sr_v3(-w - 0.04f, -s->hip * 0.62f, -0.15f), sr_v3(w + 0.04f, 0, 0.15f), shade(outfit, 85),
+      box(m, &t, sr_v3(-w - 0.04f, -s->hip * 0.62f, -cd - 0.01f), sr_v3(w + 0.04f, 0, cd + 0.01f), shade(outfit, 85),
           SR_LAYER_WHITE, 0);
     }
   }
   if (sr_anim_has_backpack(a))
-    box(m, &b.chest, sr_v3(-bw + 0.02f, s->chest_h * 0.25f, -0.32f), sr_v3(bw - 0.02f, s->chest_h * 0.9f, -0.15f),
+    box(m, &b.chest, sr_v3(-bw + 0.02f, ch * 0.25f, -cd - 0.17f), sr_v3(bw - 0.02f, ch * 0.9f, -cd),
         shade(sr_corp_color(a->hair_color * 2), 50), SR_LAYER_WHITE, 0);
   for (int side = 0; side < 2; side++) {
     int prop = side == 1 ? in->prop_r : in->prop_l;

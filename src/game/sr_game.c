@@ -834,6 +834,7 @@ void sr_game_begin_create(SrGame *g, uint64_t seed) {
   g->create_seed = seed;
   g->create_bg = SR_BG_STREET_KID;
   g->create_look = sr_hash_combine(seed, 0x91A7E5u);
+  memset(g->create_body, 0, sizeof g->create_body);
   g->screen = SR_SCREEN_CREATE;
 }
 
@@ -841,10 +842,62 @@ void sr_game_create_select(SrGame *g, int bg) {
   if (bg >= 0 && bg < SR_BG_COUNT) g->create_bg = bg;
 }
 
-void sr_game_create_randomize(SrGame *g) { g->create_look = sr_mix64(g->create_look + 0x9E37u); }
+void sr_game_create_randomize(SrGame *g) {
+  g->create_look = sr_mix64(g->create_look + 0x9E37u);
+  memset(g->create_body, 0, sizeof g->create_body);
+}
+
+static const int k_chrome_limbs[SR_CREATE_CHROME_OPTIONS] = {
+    0, SR_LIMB_ARM_L, SR_LIMB_ARM_R, SR_LIMB_ARM_L | SR_LIMB_ARM_R, SR_LIMB_LEGS, 7};
+
+static int chrome_option(const SrAppearance *a) {
+  int l = sr_look_limbs(a);
+  for (int i = 0; i < SR_CREATE_CHROME_OPTIONS; i++)
+    if (k_chrome_limbs[i] == l) return i;
+  return 0;
+}
 
 SrAppearance sr_game_create_preview(const SrGame *g) {
-  return sr_appearance_generate(g->create_look, SR_ROLE_WORKER, 0);
+  SrAppearance a = sr_appearance_generate(g->create_look, SR_ROLE_WORKER, 0);
+  const int8_t *cb = g->create_body; /* choice + 1; 0 keeps the roll */
+  int build = cb[SR_CREATE_BUILD] ? cb[SR_CREATE_BUILD] - 1 : sr_look_build(&a);
+  bool female = cb[SR_CREATE_FRAME] ? cb[SR_CREATE_FRAME] == 2 : sr_look_female(&a);
+  int height = cb[SR_CREATE_HEIGHT] ? cb[SR_CREATE_HEIGHT] - 1 : sr_look_height(&a);
+  sr_look_set_body(&a, build, female, height);
+  if (cb[SR_CREATE_CHROME]) {
+    int limbs = k_chrome_limbs[(cb[SR_CREATE_CHROME] - 1) % SR_CREATE_CHROME_OPTIONS];
+    int level = sr_look_cyber_level(&a);
+    if (limbs && level < 2) level = 2;
+    sr_look_set_cyber(&a, level, limbs, (int)(g->create_look % 4u));
+  }
+  return a;
+}
+
+void sr_game_create_cycle(SrGame *g, SrCreateBody what) {
+  static const int count[SR_CREATE_BODY_COUNT] = {SR_BUILD_COUNT, 2, 4, SR_CREATE_CHROME_OPTIONS};
+  if ((int)what < 0 || what >= SR_CREATE_BODY_COUNT) return;
+  SrAppearance a = sr_game_create_preview(g);
+  int cur = what == SR_CREATE_BUILD    ? sr_look_build(&a)
+            : what == SR_CREATE_FRAME  ? (int)sr_look_female(&a)
+            : what == SR_CREATE_HEIGHT ? sr_look_height(&a)
+                                       : chrome_option(&a);
+  g->create_body[what] = (int8_t)((cur + 1) % count[what] + 1);
+}
+
+const char *sr_game_create_label(const SrGame *g, SrCreateBody what) {
+  static const char *const builds[SR_BUILD_COUNT] = {"AVERAGE", "SLENDER",  "ATHLETIC", "HEAVY",
+                                                     "THIN",    "MUSCULAR", "CURVY",    "STOCKY"};
+  static const char *const heights[4] = {"AVERAGE", "SHORT", "TALL", "VERY TALL"};
+  static const char *const chrome[SR_CREATE_CHROME_OPTIONS] = {"NONE",      "LEFT ARM", "RIGHT ARM",
+                                                               "BOTH ARMS", "LEGS",     "ARMS AND LEGS"};
+  SrAppearance a = sr_game_create_preview(g);
+  switch (what) {
+    case SR_CREATE_BUILD: return builds[sr_look_build(&a)];
+    case SR_CREATE_FRAME: return sr_look_female(&a) ? "FEMININE" : "MASCULINE";
+    case SR_CREATE_HEIGHT: return heights[sr_look_height(&a)];
+    case SR_CREATE_CHROME: return chrome[chrome_option(&a)];
+    default: return "";
+  }
 }
 
 SrResult sr_game_create_confirm(SrGame *g) {

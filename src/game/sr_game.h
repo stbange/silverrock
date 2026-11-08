@@ -198,6 +198,7 @@ typedef struct SrGame {
   uint64_t create_seed;
   uint64_t create_look;
   int create_bg;
+  int8_t create_body[4]; /* chosen build, frame, height and chrome, plus one (0: as rolled); SrCreateBody */
 } SrGame;
 
 SrGame *sr_game_create(void);
@@ -383,6 +384,18 @@ void sr_game_begin_create(SrGame *g, uint64_t seed);
 void sr_game_create_select(SrGame *g, int background);
 void sr_game_create_randomize(SrGame *g);
 SrAppearance sr_game_create_preview(const SrGame *g);
+/* Body choices on the creation screen: each cycles through its options, starting from the roll. */
+typedef enum {
+  SR_CREATE_BUILD,
+  SR_CREATE_FRAME,
+  SR_CREATE_HEIGHT,
+  SR_CREATE_CHROME,
+  SR_CREATE_BODY_COUNT
+} SrCreateBody;
+#define SR_CREATE_CHROME_OPTIONS 6 /* none, left arm, right arm, both arms, legs, arms and legs */
+void sr_game_create_cycle(SrGame *g, SrCreateBody what);
+/* Label of the current choice, for the creation screen. */
+const char *sr_game_create_label(const SrGame *g, SrCreateBody what);
 SrResult sr_game_create_confirm(SrGame *g);
 
 #endif

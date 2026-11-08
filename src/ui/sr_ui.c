@@ -711,24 +711,59 @@ static void create_screen(SrUi *ui, const SrGame *g, const SrInput *in) {
   snprintf(buf, sizeof buf, "TRAINED: %s, %s", sr_skill_name((SrSkill)d->trained[0]),
            sr_skill_name((SrSkill)d->trained[1]));
   text_fit(ui, x, y + line * 0.3f, buf, k_cyan, s, (float)ui->w * 0.62f - x);
-  /* appearance preview: a portrait built from the generated parts */
+  /* appearance preview: a figure built from the body's measures, chrome where it has it */
   SrAppearance a = sr_game_create_preview(g);
-  static const SrColor skin[8] = {{250, 210, 180, 255}, {230, 180, 140, 255}, {200, 150, 110, 255}, {170, 120, 80, 255},
-                                  {140, 95, 60, 255},   {110, 70, 45, 255},   {80, 52, 35, 255},    {60, 40, 28, 255}};
-  float px = (float)ui->w * 0.7f, py = (float)ui->h * 0.25f, u = 6.0f * (float)s;
+  SrSkel sk;
+  sr_anim_skel(&a, &sk);
+  float px = (float)ui->w * 0.76f, py = (float)ui->h * 0.12f, u = 26.0f * (float)s; /* u: pixels per metre / 4 */
+  float scale = 4.0f * u, top = py + (1.95f - sk.tall) * scale;
+  SrColor skin = sr_anim_skin(&a), coat = sr_anim_cloth(&a),
+          legs = {(uint8_t)(coat.r * 3 / 5), (uint8_t)(coat.g * 3 / 5), (uint8_t)(coat.b * 3 / 5), 255};
+  SrColor hand_l, fore_l, hand_r, fore_r;
+  int lay;
+  sr_anim_arm_look(&a, 0, &hand_l, &fore_l, &lay);
+  sr_anim_arm_look(&a, 1, &hand_r, &fore_r, &lay);
+  float head = sk.hs * 2.08f * scale, hw = sk.hs * 1.6f * scale;
+  float y_sh = top + (sk.tall - (sk.hip + 0.08f + sk.sho_y)) * scale, y_hip = top + (sk.tall - sk.hip) * scale;
+  float y_foot = top + sk.tall * scale;
+  sr_ui_rect(ui, px - hw / 2, top, hw, head, skin);
+  int style = sr_anim_hair_style(&a);
   SrColor hair = sr_corp_color(a.hair_color * 2);
-  SrColor coat = sr_corp_color(a.outfit_color + 8);
-  sr_ui_rect(ui, px - 3 * u, py + 9 * u, 6 * u + (float)a.body * u, 9 * u, coat);
-  sr_ui_rect(ui, px - 2 * u, py + 2 * u, 4 * u, 6 * u, skin[a.skin & 7]);
-  if (a.hair % 12 < 4)
-    sr_ui_rect(ui, px - u / 2, py - (float)(a.hair % 4) * u, u, 2 * u + (float)(a.hair % 4) * u, hair);
-  else if (a.hair % 12 < 9)
-    sr_ui_rect(ui, px - 2 * u, py + u, 4 * u, 1.5f * u, hair);
-  if (a.cyber) sr_ui_rect(ui, px - 1.5f * u, py + 4 * u, 3 * u, 0.6f * u, k_red);
+  if (style < 4)
+    sr_ui_rect(ui, px - hw * 0.1f, top - head * 0.25f, hw * 0.2f, head * 0.35f, hair);
+  else if (style < 11)
+    sr_ui_rect(ui, px - hw / 2, top - head * 0.08f, hw, head * (style == 9 ? 1.25f : 0.3f), hair);
+  if (sr_look_cyber_level(&a)) sr_ui_rect(ui, px - hw * 0.4f, top + head * 0.36f, hw * 0.8f, head * 0.08f, k_red);
+  float bw = sk.bw * scale, ww = sk.waist * scale, hipw = sk.hip_w * scale, aw = sk.arm_w * 2.0f * scale;
+  sr_ui_rect(ui, px - bw, y_sh, 2 * bw, (y_hip - y_sh) * 0.55f, coat);
+  sr_ui_rect(ui, px - ww, y_sh + (y_hip - y_sh) * 0.5f, 2 * ww, (y_hip - y_sh) * 0.5f, coat);
+  float arm_len = (sk.ua + sk.fa) * scale;
+  sr_ui_rect(ui, px - bw - aw, y_sh, aw, arm_len * 0.55f,
+             sr_anim_sleeves(&a) == 2              ? fore_l
+             : (sr_look_limbs(&a) & SR_LIMB_ARM_L) ? fore_l
+                                                   : coat);
+  sr_ui_rect(ui, px - bw - aw, y_sh + arm_len * 0.55f, aw, arm_len * 0.45f, fore_l);
+  sr_ui_rect(ui, px + bw, y_sh, aw, arm_len * 0.55f,
+             sr_anim_sleeves(&a) == 2              ? fore_r
+             : (sr_look_limbs(&a) & SR_LIMB_ARM_R) ? fore_r
+                                                   : coat);
+  sr_ui_rect(ui, px + bw, y_sh + arm_len * 0.55f, aw, arm_len * 0.45f, fore_r);
+  SrColor lc = (sr_look_limbs(&a) & SR_LIMB_LEGS) ? (SrColor){170, 175, 185, 255} : legs;
+  sr_ui_rect(ui, px - hipw, y_hip, 2 * hipw, (y_foot - y_hip) * 0.12f, legs);
+  sr_ui_rect(ui, px - hipw, y_hip, hipw * 0.9f, y_foot - y_hip, lc);
+  sr_ui_rect(ui, px + hipw * 0.1f, y_hip, hipw * 0.9f, y_foot - y_hip, lc);
+  if (sr_anim_has_skirt(&a)) sr_ui_rect(ui, px - hipw * 1.1f, y_hip, hipw * 2.2f, (y_foot - y_hip) * 0.45f, coat);
+  /* the body choices */
+  static const char *const what[SR_CREATE_BODY_COUNT] = {"B BUILD", "F FRAME", "H HEIGHT", "C CHROME"};
+  float by = (float)ui->h * 0.55f;
+  for (int k = 0; k < SR_CREATE_BODY_COUNT; k++) {
+    snprintf(buf, sizeof buf, "%s: %s", what[k], sr_game_create_label(g, (SrCreateBody)k));
+    text_fit(ui, (float)ui->w * 0.55f, by + (float)k * (float)ui->h * 0.05f, buf, k_white, s, (float)ui->w * 0.43f);
+  }
   bool touch = in && in->scheme == SR_SCHEME_TOUCH;
   text_fit(ui, x, (float)ui->h - line * 1.5f,
            touch ? "TAP LEFT: BACKGROUND  RIGHT: LOOK  BOTTOM RIGHT: START"
-                 : "1-5 BACKGROUND   R RANDOMISE LOOK   ENTER START",
+                 : "1-5 BACKGROUND   R RANDOMISE LOOK   B F H C BODY   ENTER START",
            k_amber, s, (float)ui->w - 2 * x);
 }
 

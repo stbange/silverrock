@@ -314,7 +314,7 @@ already avoids.
 | Item | Low (phone) | High (desktop) |
 |---|---|---|
 | Near skeleton characters | 24 | 48 |
-| Triangles per near character | ≤ 320 | ≤ 320 |
+| Triangles per near character | ≤ 380 | ≤ 380 (raised from 320 by add-body-variety) |
 | Pose evaluation per frame | ≤ 0.4 ms | ≤ 0.8 ms (reference desktop, measured by the benchmark route) |
 | Headlight cones | 8 | 16 |
 | Muzzle and tracer lights | 4 | 8 (6 at medium) |

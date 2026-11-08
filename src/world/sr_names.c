@@ -131,6 +131,21 @@ static const char *district_suffix(SrDistrictType t, SrRng *r) {
     if (!sr_name_blocked(out) || attempt > 32) return;                                                                 \
   }
 
+int sr_name_frame(const char *full) {
+  /* the given names the generator uses, as read by most people: 1 female, 0 male, -1 either */
+  static const char *const female[] = {"Ada",     "Greta", "Ilse", "Kaya", "Mara",  "Odile", "Sunniva", "Uma",  "Vesna",
+                                       "Xiomara", "Zora",  "Ines", "Noor", "Priya", "Anouk", "Celeste", "Freya"};
+  static const char *const male[] = {"Dario", "Farid", "Hiro",  "Joaquin", "Nnamdi", "Pavel", "Rafa", "Tomas",
+                                     "Yusuf", "Mateo", "Oskar", "Bashir",  "Dmitri", "Emeka", "Teo"};
+  if (!full) return -1;
+  size_t n = strcspn(full, " ");
+  for (size_t i = 0; i < SR_ARRAY_LEN(female); i++)
+    if (strlen(female[i]) == n && strncmp(full, female[i], n) == 0) return 1;
+  for (size_t i = 0; i < SR_ARRAY_LEN(male); i++)
+    if (strlen(male[i]) == n && strncmp(full, male[i], n) == 0) return 0;
+  return -1;
+}
+
 void sr_name_person(uint64_t seed, uint64_t id, char *out, size_t cap) {
   GEN_LOOP("name.person", {
     const char *a = PICK(&r, k_given);

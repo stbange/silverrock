@@ -1166,7 +1166,7 @@ static void test_crowd_lod(void) {
   for (int i = 0; i < n; i++) {
     float dx = inst[i * SR_INST_FLOATS] - g->player.pos.x, dz = inst[i * SR_INST_FLOATS + 2] - g->player.pos.z;
     SR_CHECK(dx * dx + dz * dz > SR_CROWD_NEAR_M * SR_CROWD_NEAR_M); /* only far citizens are instanced */
-    SR_CHECK(inst[i * SR_INST_FLOATS + 6] > 1.5f);                   /* height scale */
+    SR_CHECK(inst[i * SR_INST_FLOATS + 6] > 1.4f);                   /* height scale */
   }
   int cap = sr_build_crowd_lod(&g->crowd, NULL, &cx, g->player.pos, 0.0f, 200.0f, &near, inst, 3);
   SR_CHECK_EQ(cap, 3); /* past the budget, the rest are drawn detailed */

@@ -96,6 +96,7 @@ and spec deltas (22 capabilities, 206 requirements, 310 scenarios). Implemented 
 | M5 Corporate Chess | [`add-corporate-chess`](openspec/changes/add-corporate-chess) | faction-simulation, city-politics, corporate-market, news-media, story-campaign |
 | Playability pass | [`improve-playability`](openspec/changes/improve-playability) | job-system, faction-simulation, character-progression, player-life, law-and-heat, story-campaign, news-media |
 | City atmosphere | [`improve-city-atmosphere`](openspec/changes/improve-city-atmosphere) | retro-rendering, city-generation, world-environment, news-media, story-campaign |
+| Body variety | [`add-body-variety`](openspec/changes/add-body-variety) | population-simulation, retro-rendering, game-persistence, player-life |
 | Animation | [`improve-animation`](openspec/changes/improve-animation) | retro-rendering, population-simulation, combat, player-life |
 
 Validate the specs:

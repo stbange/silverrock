@@ -1485,6 +1485,61 @@ static void test_anim_shots(void) {
   sr_mesh_free(&st->ground);
   sr_mesh_free(&st->people);
   free(st);
+  /* body lineups: eight builds for each frame, then chrome limbs, sleeves, skirts and hair */
+  st = (AnimStage *)calloc(1, sizeof *st);
+  sr_mesh_init(&st->ground);
+  sr_mesh_init(&st->people);
+  sr_mesh_box(&st->ground, sr_v3(-8, -0.05f, -8), sr_v3(8, 0, 8), (SrColor){60, 62, 70, 255}, SR_LAYER_SIDEWALK, 1.0f,
+              0);
+  for (int line = 0; line < 4; line++) {
+    sr_mesh_clear(&st->people);
+    for (int k = 0; k < 8; k++) {
+      SrAppearance ba = sr_appearance_generate(500u + (uint64_t)(line * 8 + k), (SrRole)(k % SR_ROLE_COUNT), 0);
+      if (line < 2) {
+        sr_look_set_body(&ba, k, line == 1, k % 4 == 3 ? SR_HEIGHT_TALL : SR_HEIGHT_AVERAGE);
+        sr_look_set_cyber(&ba, 0, 0, 0);
+      } else if (line == 2) { /* chrome: an arm, both arms, legs, everything, in the four finishes */
+        static const int limbs[8] = {SR_LIMB_ARM_L, SR_LIMB_ARM_R, 3, SR_LIMB_LEGS, 7, 3, 4, 7};
+        sr_look_set_body(&ba, (k * 3) % 8, k % 2 == 1, SR_HEIGHT_AVERAGE);
+        sr_look_set_cyber(&ba, 4, limbs[k], k % 4);
+      } else { /* clothes and hair: sleeves, skirts, long hair, ponytails */
+        sr_look_set_body(&ba,
+                         k % 3 == 0   ? SR_BUILD_SLENDER
+                         : k % 3 == 1 ? SR_BUILD_CURVY
+                                      : SR_BUILD_ATHLETIC,
+                         k % 2 == 0, SR_HEIGHT_AVERAGE);
+        static const int outfit_roles[8] = {SR_ROLE_EXEC,  SR_ROLE_GANG,   SR_ROLE_WORKER, SR_ROLE_GANG,
+                                            SR_ROLE_FIXER, SR_ROLE_VENDOR, SR_ROLE_EXEC,   SR_ROLE_GANG};
+        ba.outfit = (uint8_t)(outfit_roles[k] * 4 + (k % 2 == 0 ? 1 : 3));
+        ba.hair = (uint8_t)(k == 0 ? 9 : k == 2 ? 10 : k == 4 ? 11 : 5 + k % 4);
+        sr_look_set_cyber(&ba, 0, 0, 0);
+      }
+      SrAnimInput in;
+      memset(&in, 0, sizeof in);
+      in.key = 9000u + (uint64_t)(line * 8 + k);
+      in.look = &ba;
+      in.role = (uint8_t)(ba.outfit / 4);
+      in.pos = sr_v3(-3.15f + 0.9f * (float)k, 0, 0);
+      in.dir = sr_v3(0.25f, 0, 1.0f);
+      in.once_t0 = -1;
+      in.base = SR_CLIP_IDLE;
+      SrSkel sk;
+      sr_anim_skel(&ba, &sk);
+      SrPose p0;
+      sr_anim_pose(&in, &sk, 1.0, 0, &p0);
+      sr_anim_mesh(&st->people, &in, &sk, &p0, atan2f(in.dir.x, in.dir.z));
+    }
+    int w, h;
+    uint8_t *rgb = anim_render(&g_app, st, sr_v3(0, 1.1f, 4.9f), 0.0f, -0.04f, &w, &h);
+    if (!rgb) continue;
+    char name[64];
+    snprintf(name, sizeof name, "bodies_%d", line);
+    png_or_ppm(dir, name, rgb, w, h);
+    free(rgb);
+  }
+  sr_mesh_free(&st->ground);
+  sr_mesh_free(&st->people);
+  free(st);
   /* faces up close: every style and expression on four skin tones */
   st = (AnimStage *)calloc(1, sizeof *st);
   sr_mesh_init(&st->ground);

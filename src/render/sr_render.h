@@ -493,6 +493,8 @@ SrColor sr_outfit_color(const SrAppearance *a);
 /* Clothing and skin colours of a character. */
 SrColor sr_anim_cloth(const SrAppearance *a);
 SrColor sr_anim_skin(const SrAppearance *a);
+/* Colours of one arm (0 left, 1 right): hand and forearm (chrome, bare skin or sleeve) and the layer. */
+void sr_anim_arm_look(const SrAppearance *a, int side, SrColor *hand, SrColor *fore, int *layer);
 
 /* The street of a block (sr_street_mesh.c): kerbs, markings, props, overhead lines and billboards
  * (when ads is given). detail 0..2. */

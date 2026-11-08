@@ -837,13 +837,16 @@ Below the city grid lie ruins of pre-Pall networks: unstable, uncharted, home to
 Characters are built from rigid low-poly parts (300–800 triangles) in the style of late-90s games, with small
 procedural face textures. The generator combines:
 
-- body type, head shape, skin tone, face details (eyes, scars, tattoos, make-up);
+- body: eight builds (average, slender, athletic, heavy, thin, muscular, curvy, stocky) weighted by role, masculine
+  and feminine frames, four height classes, head shape, skin tone, face details (stubble, scars, tattoos);
 - hairstyle (from mohawks to buns to shaved) and hair colour (natural or neon);
-- clothing by role and class (suits, jackets, long coats, hoodies, overalls, uniforms, armour);
+- clothing by role and class (suits, jackets, long coats, hoodies, overalls, uniforms, armour), with short sleeves,
+  tank tops, skirts and dress hems, and hair from shaved to long or tied back;
 - **faction markers:** gang colours plus a signature element (Static Saints: glowing halo implants; Rust Dogs: welded
   shoulder plates; Velvet Knives: velvet masks; Hollow Choir: white face plates), corp security uniforms in corp
   colours;
-- visible cyberware (chrome arms, glowing optics, face plates);
+- visible cyberware: glowing optics, face plates, and chrome arms and legs (one arm, both, the legs or all four) in
+  four finishes with glowing seams, which the player also sees on their own hands;
 - accessories (umbrellas, briefcases, takeaway boxes, shopping bags, cigarettes).
 
 Rule: every faction and role must be recognisable at 30 m by **silhouette and dominant colour**, and every faction

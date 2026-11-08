@@ -561,7 +561,6 @@ int sr_build_crowd_lod(const SrCrowd *cr, SrAnimCache *anim, const SrCrowdCtx *x
     SrAnimInput in;
     sr_agent_anim(a, x, &in);
     float *f = inst + n * SR_INST_FLOATS;
-    float tall = 1.55f + 0.08f * (float)(a->look.body % 3);
     SrColor o = sr_anim_cloth(&a->look), sk = sr_anim_skin(&a->look);
     int code = inst_code(&in);
     SrSkel skel;
@@ -572,8 +571,8 @@ int sr_build_crowd_lod(const SrCrowd *cr, SrAnimCache *anim, const SrCrowdCtx *x
     f[2] = a->pos.z;
     f[3] = (fabsf(in.dir.x) + fabsf(in.dir.z)) > 1e-4f ? atan2f(in.dir.x, in.dir.z) : 0.0f;
     f[4] = phase - floorf(phase);
-    f[5] = (0.22f + 0.04f * a->look.body) / 0.22f;
-    f[6] = tall;
+    f[5] = skel.bw / 0.24f;
+    f[6] = skel.tall;
     f[7] = (float)code;
     f[8] = o.r / 255.0f;
     f[9] = o.g / 255.0f;

@@ -1401,7 +1401,7 @@ static void test_budget_and_saves(void) {
     sr_mesh_free(&m);
   }
   printf("  triangles per near character: at most %d\n", worst);
-  SR_CHECK(worst <= 320);
+  SR_CHECK(worst <= 380);
   /* a peak crowd at every detail level: near skeletons, beams and lights within the budget */
   SrGame *g = sr_game_create();
   sr_game_new(g, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Budget");
@@ -1597,6 +1597,191 @@ static void test_faces(void) {
   SR_CHECK(sr_anim_face_style(&a) >= 0 && sr_anim_face_style(&a) < 4);
 }
 
+/* ---- bodies ----------------------------------------------------------------------------- */
+
+static void test_bodies(void) {
+  SR_SPEC("population-simulation", "Bodies of every kind");
+  SR_SPEC("population-simulation", "Builds fit the role");
+  SR_SPEC("population-simulation", "Bodies match names");
+  SR_SPEC("retro-rendering", "Chrome limbs show");
+  SR_SPEC("game-persistence", "Older looks stay the same");
+  SR_SPEC("player-life", "Choose the body");
+  /* measures: muscle, fat, thinness, frame and height all change the skeleton */
+  SrSkel sk[2][SR_BUILD_COUNT];
+  for (int f = 0; f < 2; f++)
+    for (int b = 0; b < SR_BUILD_COUNT; b++) {
+      SrAppearance a = look_of(0, SR_ROLE_WORKER);
+      sr_look_set_body(&a, b, f == 1, SR_HEIGHT_AVERAGE);
+      sr_anim_skel(&a, &sk[f][b]);
+      SR_CHECK(sk[f][b].female == (f == 1));
+    }
+  for (int f = 0; f < 2; f++) {
+    SR_CHECK(sk[f][SR_BUILD_MUSCULAR].arm_w > sk[f][SR_BUILD_THIN].arm_w * 1.7f);
+    SR_CHECK(sk[f][SR_BUILD_HEAVY].waist > sk[f][SR_BUILD_SLENDER].waist * 1.4f);
+    SR_CHECK(sk[f][SR_BUILD_HEAVY].belly > 0 && sk[f][SR_BUILD_ATHLETIC].belly == 0);
+    SR_CHECK(sk[f][SR_BUILD_CURVY].hip_w > sk[f][SR_BUILD_AVERAGE].hip_w * 1.15f);
+    SR_CHECK(sk[f][SR_BUILD_MUSCULAR].bw > sk[f][SR_BUILD_AVERAGE].bw * 1.2f);
+    SR_CHECK(sk[f][SR_BUILD_THIN].bw < sk[f][SR_BUILD_AVERAGE].bw * 0.9f);
+  }
+  for (int b = 0; b < SR_BUILD_COUNT; b++) { /* women: narrower shoulders, wider hips, a bust */
+    SR_CHECK(sk[1][b].bw < sk[0][b].bw && sk[1][b].hip_w > sk[0][b].hip_w);
+    SR_CHECK(sk[1][b].bust > 0 && sk[0][b].bust == 0);
+    SR_CHECK(sk[1][b].tall < sk[0][b].tall);
+    SR_CHECK(sk[1][b].hip_x >= sk[1][b].leg_w); /* the legs stay apart */
+  }
+  float h[4];
+  for (int k = 0; k < 4; k++) {
+    SrAppearance a = look_of(0, SR_ROLE_WORKER);
+    a.head = 2;
+    sr_look_set_body(&a, SR_BUILD_AVERAGE, false, k);
+    SrSkel s;
+    sr_anim_skel(&a, &s);
+    h[k] = s.tall;
+  }
+  SR_CHECK(h[SR_HEIGHT_SHORT] < h[SR_HEIGHT_AVERAGE] && h[SR_HEIGHT_AVERAGE] < h[SR_HEIGHT_TALL] &&
+           h[SR_HEIGHT_TALL] < h[SR_HEIGHT_VERY_TALL]);
+  SR_CHECK(h[SR_HEIGHT_VERY_TALL] - h[SR_HEIGHT_SHORT] > 0.2f);
+  /* every build and frame walks with planted feet, in its own way */
+  for (int f = 0; f < 2; f++)
+    for (int b = 0; b < SR_BUILD_COUNT; b++) {
+      const SrSkel *s = &sk[f][b];
+      float stride = sr_anim_stride(s, 1.4f, SR_CLIP_WALK), slip = 0, moved = 0;
+      SrPose prev;
+      sr_anim_gait(s, 1.4f, 0, SR_CLIP_WALK, 3, &prev);
+      for (int i = 1; i <= 100; i++) {
+        float d0 = (float)(i - 1) * 0.01f * stride, d1 = (float)i * 0.01f * stride;
+        SrPose cur;
+        sr_anim_gait(s, 1.4f, d1 / stride, SR_CLIP_WALK, 3, &cur);
+        for (int side = 0; side < 2; side++) {
+          SrVec3 f0 = sr_anim_point(s, &prev, side), f1 = sr_anim_point(s, &cur, side);
+          if (f0.y > s->ankle + 0.002f || f1.y > s->ankle + 0.002f) continue;
+          slip += fabsf((d1 + f1.z) - (d0 + f0.z));
+          moved += d1 - d0;
+        }
+        prev = cur;
+      }
+      SR_CHECK(slip <= 0.1f * moved);
+    }
+  SrPose sway_f, sway_m;
+  sr_anim_gait(&sk[1][SR_BUILD_CURVY], 1.3f, 0.25f, SR_CLIP_WALK, 3, &sway_f);
+  sr_anim_gait(&sk[0][SR_BUILD_MUSCULAR], 1.3f, 0.25f, SR_CLIP_WALK, 3, &sway_m);
+  SR_CHECK(fabsf(sway_f.j[SR_J_PELVIS_X]) > fabsf(sway_m.j[SR_J_PELVIS_X]) * 2.0f); /* hips that sway */
+  SR_CHECK(sway_m.j[SR_J_SHOA_L] > sway_f.j[SR_J_SHOA_L] + 0.1f);                   /* arms held out */
+  /* builds by role, frames half and half, every build somewhere */
+  int seen[SR_BUILD_COUNT] = {0}, women = 0, strong_cops = 0, thin_drifters = 0, n = 2000;
+  int sleeves[3] = {0}, skirts = 0, long_hair = 0;
+  for (int k = 0; k < n; k++) {
+    SrAppearance a = sr_appearance_generate((uint64_t)k * 7919u, (SrRole)(k % SR_ROLE_COUNT), 0);
+    seen[sr_look_build(&a)]++;
+    women += sr_look_female(&a);
+    SR_CHECK(sr_look_build(&a) < SR_BUILD_COUNT && sr_look_height(&a) < 4 && sr_look_cyber_level(&a) <= 5);
+    if (k % SR_ROLE_COUNT == SR_ROLE_COP)
+      strong_cops += sr_look_build(&a) == SR_BUILD_ATHLETIC || sr_look_build(&a) == SR_BUILD_MUSCULAR;
+    if (k % SR_ROLE_COUNT == SR_ROLE_DRIFTER) thin_drifters += sr_look_build(&a) == SR_BUILD_THIN;
+    sleeves[sr_anim_sleeves(&a)]++;
+    skirts += sr_anim_has_skirt(&a);
+    long_hair += sr_anim_hair_style(&a) == 9 || sr_anim_hair_style(&a) == 10;
+    if (sr_look_cyber_level(&a) >= 4) SR_CHECK((sr_look_limbs(&a) & 3) == 3); /* heavy chrome: both arms */
+    if (sr_look_cyber_level(&a) < 2) SR_CHECK(sr_look_limbs(&a) == 0);
+  }
+  for (int b = 0; b < SR_BUILD_COUNT; b++) SR_CHECK(seen[b] > 0);
+  SR_CHECK(women > n * 2 / 5 && women < n * 3 / 5);
+  SR_CHECK(strong_cops * 5 > (n / SR_ROLE_COUNT) * 2);    /* at least 40 % */
+  SR_CHECK(thin_drifters * 10 > (n / SR_ROLE_COUNT) * 3); /* at least 30 % */
+  SR_CHECK(sleeves[0] > 0 && sleeves[1] > 0 && sleeves[2] > 0 && skirts > 0 && long_hair > 0);
+  printf("  bodies: %d women of %d; sleeves %d/%d/%d, skirts %d, long hair %d\n", women, n, sleeves[0], sleeves[1],
+         sleeves[2], skirts, long_hair);
+  /* notables' bodies match their given names */
+  const SrPopulation *pop = g_game->pop;
+  int checked = 0;
+  for (int i = 0; i < pop->count; i++) {
+    int fr = sr_name_frame(pop->npcs[i].name);
+    if (fr < 0) continue;
+    SR_CHECK_EQ((int)sr_look_female(&pop->npcs[i].look), fr);
+    checked++;
+  }
+  SR_CHECK(checked > 100);
+  SR_CHECK_EQ(sr_name_frame("Quinn Halloway"), -1);
+  SR_CHECK_EQ(sr_name_frame("Greta Voss"), 1);
+  SR_CHECK_EQ(sr_name_frame("Dario Kesh"), 0);
+  SR_CHECK_EQ(sr_name_frame(NULL), -1);
+  /* chrome limbs: metal parts and glowing seams where the body has them */
+  SrAppearance c = look_of(1, SR_ROLE_GANG);
+  sr_look_set_cyber(&c, 3, 0, 0);
+  SrAnimInput in = input_for(&c, SR_CLIP_IDLE);
+  SrSkel s;
+  sr_anim_skel(&c, &s);
+  SrPose p;
+  sr_anim_pose(&in, &s, 1.0, 0, &p);
+  int metal_none = 0, metal_arm = 0, metal_all = 0, seams = 0;
+  SrMesh m;
+  sr_mesh_init(&m);
+  sr_anim_mesh(&m, &in, &s, &p, 0);
+  for (int v = 0; v < m.nv; v++) metal_none += m.v[v].layer == SR_LAYER_METAL;
+  sr_look_set_cyber(&c, 3, SR_LIMB_ARM_R, 1);
+  sr_mesh_clear(&m);
+  sr_anim_mesh(&m, &in, &s, &p, 0);
+  for (int v = 0; v < m.nv; v++) metal_arm += m.v[v].layer == SR_LAYER_METAL;
+  sr_look_set_cyber(&c, 5, 7, 2);
+  sr_mesh_clear(&m);
+  sr_anim_mesh(&m, &in, &s, &p, 0);
+  for (int v = 0; v < m.nv; v++) {
+    metal_all += m.v[v].layer == SR_LAYER_METAL;
+    seams += m.v[v].emissive >= 200 && m.v[v].layer == SR_LAYER_WHITE;
+  }
+  SR_CHECK_EQ(metal_none, 0);
+  SR_CHECK(metal_arm >= 3 * 24 && metal_all > metal_arm * 2);
+  SR_CHECK(seams > 0);
+  SrColor hand, fore;
+  int lay;
+  sr_anim_arm_look(&c, 0, &hand, &fore, &lay);
+  SR_CHECK_EQ(lay, SR_LAYER_METAL);
+  /* older saves: body 0..3 and cyber 0..5 read as before, with the same keys */
+  for (int body = 0; body < 4; body++)
+    for (int cy = 0; cy <= 5; cy++) {
+      SrAppearance o = look_of(0, SR_ROLE_WORKER);
+      o.body = (uint8_t)body;
+      o.cyber = (uint8_t)cy;
+      SR_CHECK_EQ(sr_look_build(&o), body);
+      SR_CHECK(!sr_look_female(&o) && sr_look_height(&o) == SR_HEIGHT_AVERAGE);
+      SR_CHECK_EQ(sr_look_cyber_level(&o), cy);
+      SR_CHECK_EQ(sr_look_limbs(&o), cy >= 4 ? 3 : 0);
+      uint64_t k = o.body; /* the key as it was computed before */
+      k = (k << 3) | o.head;
+      k = (k << 3) | o.skin;
+      k = (k << 4) | o.face;
+      k = (k << 4) | o.hair;
+      k = (k << 4) | o.hair_color;
+      k = (k << 6) | o.outfit;
+      k = (k << 4) | o.outfit_color;
+      k = (k << 6) | o.marker;
+      k = (k << 3) | o.cyber;
+      k = (k << 3) | o.accessory;
+      SR_CHECK_EQ(sr_appearance_key(&o), k);
+    }
+  sr_mesh_free(&m);
+  /* character creation: build, frame, height and chrome can be chosen */
+  SrGame *g = sr_game_create();
+  sr_game_begin_create(g, 77);
+  SrAppearance before = sr_game_create_preview(g);
+  for (int w = 0; w < SR_CREATE_BODY_COUNT; w++) {
+    const char *l0 = sr_game_create_label(g, (SrCreateBody)w);
+    sr_game_create_cycle(g, (SrCreateBody)w);
+    SR_CHECK(strcmp(l0, sr_game_create_label(g, (SrCreateBody)w)) != 0);
+  }
+  SrAppearance after = sr_game_create_preview(g);
+  SR_CHECK(sr_look_build(&after) == (sr_look_build(&before) + 1) % SR_BUILD_COUNT);
+  SR_CHECK(sr_look_female(&after) != sr_look_female(&before));
+  for (int k = 0; k < 8; k++) sr_game_create_cycle(g, SR_CREATE_CHROME);
+  SR_CHECK(sr_game_create_label(g, SR_CREATE_CHROME)[0] != '\0');
+  sr_game_create_cycle(g, SR_CREATE_BODY_COUNT); /* ignored */
+  SR_CHECK(sr_game_create_label(g, SR_CREATE_BODY_COUNT)[0] == '\0');
+  SR_CHECK_EQ(sr_game_create_confirm(g), SR_OK);
+  SR_CHECK_EQ(sr_look_build(&g->player.look), sr_look_build(&after));
+  sr_game_create_randomize(g);
+  sr_game_destroy(g);
+}
+
 void suite_anim(void) {
   g_game = sr_game_create();
   sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Anim");
@@ -1615,5 +1800,6 @@ void suite_anim(void) {
   SR_RUN(test_world_motion);
   SR_RUN(test_budget_and_saves);
   SR_RUN(test_faces);
+  SR_RUN(test_bodies);
   sr_game_destroy(g_game);
 }

@@ -50,7 +50,7 @@ phases of `improve-animation`. The strips are in `docs/screenshots/anim/`:
     in the downpour changes pose in at least half of the frame pairs.
   - In the firefight, a guard's flash brightens the dark room by about 29 levels.
 - **Budgets:**
-  - At most 306 triangles per near character with faces, against a budget of 320.
+  - At most 306 triangles per near character with faces, against a budget of 320 (raised to 380 by `add-body-variety`, whose bodies reach 366).
   - Near skeletons are capped at 24, 36 and 48 by detail level.
   - Headlight beams are capped at 8, 12 and 16.
   - Muzzle lights are capped at 4, 6 and 8 per frame.

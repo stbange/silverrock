@@ -884,7 +884,7 @@ static void test_character_creation(void) {
   sr_game_create_randomize(g);
   SrAppearance b = sr_game_create_preview(g);
   SR_CHECK(sr_appearance_key(&a) != sr_appearance_key(&b));
-  SR_CHECK(b.skin < 8 && b.hair < 12 && b.body < 4); /* valid parts */
+  SR_CHECK(b.skin < 8 && b.hair < 12 && b.body < 64 && sr_look_build(&b) < SR_BUILD_COUNT); /* valid parts */
   sr_game_create_select(g, SR_BG_MEDIC);
   sr_game_create_select(g, 99); /* ignored */
   SR_CHECK_EQ(g->create_bg, SR_BG_MEDIC);

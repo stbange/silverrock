@@ -262,6 +262,8 @@ const char *sr_doctrine_name(SrDoctrine d);
 
 /* Names */
 void sr_name_person(uint64_t seed, uint64_t id, char *out, size_t cap);
+/* Frame a given name suggests: 1 female, 0 male, -1 either (Quinn, Wren, Sol...). */
+int sr_name_frame(const char *full);
 void sr_name_corp(uint64_t seed, uint64_t id, char *out, size_t cap);
 void sr_name_gang(uint64_t seed, uint64_t id, char *out, size_t cap);
 void sr_name_district(uint64_t seed, uint64_t id, SrDistrictType t, char *out, size_t cap);

@@ -26,5 +26,6 @@ keep the repository small.
 | `street_flee.gif` | Shots fired on the Strip: the crowd runs, cowers and films |
 | `street_junction.gif` | Traffic in fog at an intersection: headlights, braking, turns |
 | `view_model.png` | Pistol, rifle and knife: idle, shot, reload, swing, throw, reach |
+| `bodies.png` | Lineups: the eight builds on masculine and feminine frames; chrome arms and legs in four finishes; skirts, short sleeves, tank tops and hairstyles |
 | `faces.png` | The eight expressions (neutral, stern, fear, pain, talk, surprise, closed, content) on four skin tones; each row uses another face style |
 | `firefight_flash.png` | A dark room before and during a guard's shot: the flash lights the walls |

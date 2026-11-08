@@ -28,7 +28,45 @@ SrAppearance sr_appearance_generate(uint64_t key, SrRole role, int marker) {
   int cyber_chance = role == SR_ROLE_GANG ? 700 : role == SR_ROLE_GUARD ? 500 : 200;
   a.cyber = (uint8_t)(sr_rng_chance(&r, cyber_chance) ? sr_rng_range(&r, 1, 5) : 0);
   a.accessory = (uint8_t)sr_rng_range(&r, 0, 7);
+  /* the body: build weighted by role, frame, height; chrome limbs for the augmented (drawn after the
+   * older fields, so heads, hair and clothes stay as they were) */
+  static const uint8_t k_builds[SR_ROLE_COUNT][8] = {
+      [SR_ROLE_WORKER] = {SR_BUILD_AVERAGE, SR_BUILD_AVERAGE, SR_BUILD_HEAVY, SR_BUILD_STOCKY, SR_BUILD_SLENDER,
+                          SR_BUILD_THIN, SR_BUILD_CURVY, SR_BUILD_ATHLETIC},
+      [SR_ROLE_VENDOR] = {SR_BUILD_AVERAGE, SR_BUILD_HEAVY, SR_BUILD_HEAVY, SR_BUILD_STOCKY, SR_BUILD_CURVY,
+                          SR_BUILD_THIN, SR_BUILD_AVERAGE, SR_BUILD_SLENDER},
+      [SR_ROLE_GANG] = {SR_BUILD_MUSCULAR, SR_BUILD_ATHLETIC, SR_BUILD_STOCKY, SR_BUILD_THIN, SR_BUILD_SLENDER,
+                        SR_BUILD_CURVY, SR_BUILD_MUSCULAR, SR_BUILD_AVERAGE},
+      [SR_ROLE_GUARD] = {SR_BUILD_MUSCULAR, SR_BUILD_ATHLETIC, SR_BUILD_ATHLETIC, SR_BUILD_STOCKY, SR_BUILD_AVERAGE,
+                         SR_BUILD_MUSCULAR, SR_BUILD_HEAVY, SR_BUILD_ATHLETIC},
+      [SR_ROLE_EXEC] = {SR_BUILD_SLENDER, SR_BUILD_SLENDER, SR_BUILD_AVERAGE, SR_BUILD_ATHLETIC, SR_BUILD_CURVY,
+                        SR_BUILD_HEAVY, SR_BUILD_THIN, SR_BUILD_AVERAGE},
+      [SR_ROLE_COP] = {SR_BUILD_ATHLETIC, SR_BUILD_MUSCULAR, SR_BUILD_STOCKY, SR_BUILD_HEAVY, SR_BUILD_AVERAGE,
+                       SR_BUILD_ATHLETIC, SR_BUILD_AVERAGE, SR_BUILD_MUSCULAR},
+      [SR_ROLE_FIXER] = {SR_BUILD_AVERAGE, SR_BUILD_SLENDER, SR_BUILD_HEAVY, SR_BUILD_CURVY, SR_BUILD_STOCKY,
+                         SR_BUILD_THIN, SR_BUILD_ATHLETIC, SR_BUILD_AVERAGE},
+      [SR_ROLE_DRIFTER] = {SR_BUILD_THIN, SR_BUILD_THIN, SR_BUILD_SLENDER, SR_BUILD_AVERAGE, SR_BUILD_HEAVY,
+                           SR_BUILD_STOCKY, SR_BUILD_THIN, SR_BUILD_AVERAGE},
+  };
+  bool female = sr_rng_chance(&r, 500);
+  int build = k_builds[(unsigned)role < SR_ROLE_COUNT ? role : 0][sr_rng_range(&r, 0, 7)];
+  static const uint8_t k_heights[8] = {SR_HEIGHT_AVERAGE, SR_HEIGHT_AVERAGE, SR_HEIGHT_AVERAGE, SR_HEIGHT_SHORT,
+                                       SR_HEIGHT_SHORT,   SR_HEIGHT_TALL,    SR_HEIGHT_TALL,    SR_HEIGHT_VERY_TALL};
+  sr_look_set_body(&a, build, female, k_heights[sr_rng_range(&r, 0, 7)]);
+  int level = a.cyber, limbs = 0;
+  if (level >= 2 && sr_rng_chance(&r, 350)) limbs |= sr_rng_chance(&r, 500) ? SR_LIMB_ARM_L : SR_LIMB_ARM_R;
+  if (level >= 4) limbs |= SR_LIMB_ARM_L | SR_LIMB_ARM_R;
+  if (level >= 3 && sr_rng_chance(&r, 300)) limbs |= SR_LIMB_LEGS;
+  sr_look_set_cyber(&a, level, limbs, sr_rng_range(&r, 0, 3));
   return a;
+}
+
+void sr_look_set_body(SrAppearance *a, int build, bool female, int height) {
+  a->body = (uint8_t)((build & 7) | (female ? 8 : 0) | ((height & 3) << 4));
+}
+
+void sr_look_set_cyber(SrAppearance *a, int level, int limbs, int finish) {
+  a->cyber = (uint8_t)((level & 7) | ((limbs & 7) << 3) | (limbs ? (finish & 3) << 6 : 0));
 }
 
 uint64_t sr_appearance_key(const SrAppearance *a) {
@@ -41,9 +79,9 @@ uint64_t sr_appearance_key(const SrAppearance *a) {
   k = (k << 6) | a->outfit;
   k = (k << 4) | a->outfit_color;
   k = (k << 6) | a->marker;
-  k = (k << 3) | a->cyber;
+  k = (k << 3) | (a->cyber & 7u);
   k = (k << 3) | a->accessory;
-  return k;
+  return k ^ ((uint64_t)(a->cyber >> 3) << 58); /* limbs and finish on top: older looks keep their keys */
 }
 
 /* ---- services ------------------------------------------------------------------------- */
@@ -115,6 +153,8 @@ static SrNpc *add_npc(SrPopulation *p, const SrCity *c, SrRole role, int faction
   sr_name_person(c->seed, 20000u + n->id, n->name, sizeof n->name);
   int marker = faction >= 0 ? c->factions.f[faction].marker : 0;
   n->look = sr_appearance_generate(sr_hash_combine(c->seed, n->id), role, marker);
+  int frame = sr_name_frame(n->name); /* the body matches the name */
+  if (frame >= 0) sr_look_set_body(&n->look, sr_look_build(&n->look), frame == 1, sr_look_height(&n->look));
   n->role = (uint8_t)role;
   n->faction = (int8_t)faction;
   SrRng r = sr_rng_stream(c->seed, "npc", n->id, 0);

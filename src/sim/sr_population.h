@@ -9,9 +9,42 @@
 #define SR_MAX_NPCS              3000
 #define SR_MAX_AMBIENT_PER_BLOCK 96
 
+/* `body` packs the build (bits 0-2, SrBuild), the frame (bit 3: 0 male, 1 female) and the height
+ * class (bits 4-5, SrHeight). `cyber` packs the augmentation level (bits 0-2, 0..5) and chrome limbs
+ * (bit 3 left arm, bit 4 right arm, bit 5 legs) with the finish (bits 6-7). Older saves hold
+ * body 0..3 and cyber 0..5, which read as the same people as before. */
 typedef struct SrAppearance {
   uint8_t body, head, skin, face, hair, hair_color, outfit, outfit_color, marker, cyber, accessory;
 } SrAppearance;
+
+typedef enum SrBuild {
+  SR_BUILD_AVERAGE,
+  SR_BUILD_SLENDER,
+  SR_BUILD_ATHLETIC,
+  SR_BUILD_HEAVY,
+  SR_BUILD_THIN,
+  SR_BUILD_MUSCULAR,
+  SR_BUILD_CURVY,
+  SR_BUILD_STOCKY,
+  SR_BUILD_COUNT
+} SrBuild;
+
+typedef enum SrHeight { SR_HEIGHT_AVERAGE, SR_HEIGHT_SHORT, SR_HEIGHT_TALL, SR_HEIGHT_VERY_TALL } SrHeight;
+
+enum { SR_LIMB_ARM_L = 1, SR_LIMB_ARM_R = 2, SR_LIMB_LEGS = 4 };
+
+static inline int sr_look_build(const SrAppearance *a) { return a->body & 7; }
+static inline bool sr_look_female(const SrAppearance *a) { return (a->body >> 3) & 1; }
+static inline int sr_look_height(const SrAppearance *a) { return (a->body >> 4) & 3; }
+static inline int sr_look_cyber_level(const SrAppearance *a) { return a->cyber & 7; }
+/* Chrome limbs; a level 4+ augmentation without limb bits (older saves) means both arms. */
+static inline int sr_look_limbs(const SrAppearance *a) {
+  int l = (a->cyber >> 3) & 7;
+  return l ? l : (a->cyber & 7) >= 4 ? (SR_LIMB_ARM_L | SR_LIMB_ARM_R) : 0;
+}
+static inline int sr_look_finish(const SrAppearance *a) { return (a->cyber >> 6) & 3; }
+void sr_look_set_body(SrAppearance *a, int build, bool female, int height);
+void sr_look_set_cyber(SrAppearance *a, int level, int limbs, int finish);
 
 typedef enum SrRole {
   SR_ROLE_WORKER,

@@ -326,15 +326,17 @@ static void start_created(SrApp *a) {
   sr_scene_init(&a->body_scene, true);
 }
 
-/* Creation screen by pointer: left half cycles the background, right half re-rolls the look,
- * bottom right starts. */
+/* Creation screen by pointer: left half cycles the background; on the right, the top re-rolls the
+ * look, the rows below cycle build, frame, height and chrome, and the bottom starts. */
 static void create_tap(SrApp *a, float x, float y) {
   if (x < 0.5f)
     sr_game_create_select(a->game, (a->game->create_bg + 1) % SR_BG_COUNT);
   else if (y > 0.75f)
     start_created(a);
-  else
+  else if (y < 0.55f)
     sr_game_create_randomize(a->game);
+  else
+    sr_game_create_cycle(a->game, (SrCreateBody)SR_CLAMP((int)((y - 0.55f) / 0.05f), 0, SR_CREATE_BODY_COUNT - 1));
 }
 
 /* Shop by pointer: a row buys it, the bottom strip leaves. ny is normalised (0..1). */
@@ -363,6 +365,10 @@ void sr_app_event(SrApp *a, const SDL_Event *e) {
         SDL_Scancode sc = e->key.scancode;
         if (sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_5) sr_game_create_select(g, (int)(sc - SDL_SCANCODE_1));
         if (sc == SDL_SCANCODE_R) sr_game_create_randomize(g);
+        if (sc == SDL_SCANCODE_B) sr_game_create_cycle(g, SR_CREATE_BUILD);
+        if (sc == SDL_SCANCODE_F) sr_game_create_cycle(g, SR_CREATE_FRAME);
+        if (sc == SDL_SCANCODE_H) sr_game_create_cycle(g, SR_CREATE_HEIGHT);
+        if (sc == SDL_SCANCODE_C) sr_game_create_cycle(g, SR_CREATE_CHROME);
         if (sc == SDL_SCANCODE_DOWN) sr_game_create_select(g, (g->create_bg + 1) % SR_BG_COUNT);
         if (sc == SDL_SCANCODE_RETURN) start_created(a);
         break;
@@ -456,6 +462,14 @@ void sr_app_event(SrApp *a, const SDL_Event *e) {
           start_created(a);
         else if (e->gbutton.button == SDL_GAMEPAD_BUTTON_WEST)
           sr_game_create_randomize(g);
+        else if (e->gbutton.button == SDL_GAMEPAD_BUTTON_NORTH)
+          sr_game_create_cycle(g, SR_CREATE_BUILD);
+        else if (e->gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)
+          sr_game_create_cycle(g, SR_CREATE_FRAME);
+        else if (e->gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_UP)
+          sr_game_create_cycle(g, SR_CREATE_HEIGHT);
+        else if (e->gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)
+          sr_game_create_cycle(g, SR_CREATE_CHROME);
         else
           sr_game_create_select(g, (g->create_bg + 1) % SR_BG_COUNT);
         break;

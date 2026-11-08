@@ -55,6 +55,14 @@ typedef struct SrPose {
 /* Body measures from the appearance (metres). */
 typedef struct SrSkel {
   float tall, bw, hip, thigh, shin, ankle, ua, fa, hand, hs, chest_h, neck_y, sho_x, sho_y, hip_x, leg_w;
+  /* the body's shape: half widths and depths (m) and the way it moves */
+  float waist, hip_w, chest_d, belly, bust, arm_w, foot;
+  float sway;     /* hip sway in the walk */
+  float arm_out;  /* arms held away from the body (muscle, bulk) */
+  float stance;   /* feet apart */
+  float stride_k; /* stride relative to leg length */
+  bool female;
+  uint8_t build;
 } SrSkel;
 
 typedef enum SrClip {
@@ -239,6 +247,12 @@ int sr_anim_face_style(const SrAppearance *a);
 /* Hand prop carried by an appearance (briefcase, bag, box, cigarette, phone or none). */
 int sr_anim_accessory(const SrAppearance *a);
 bool sr_anim_has_coat(const SrAppearance *a);
+/* Sleeves of the outfit: 0 long, 1 short (bare forearms), 2 none (bare arms). */
+int sr_anim_sleeves(const SrAppearance *a);
+/* A skirt or the hem of a dress over the thighs. */
+bool sr_anim_has_skirt(const SrAppearance *a);
+/* Hair: 0-3 crest, 4-8 short or bob, 9 long, 10 ponytail, 11 shaved. */
+int sr_anim_hair_style(const SrAppearance *a);
 bool sr_anim_has_backpack(const SrAppearance *a);
 
 #endif
