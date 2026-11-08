@@ -249,8 +249,12 @@ void sr_game_teleport_building(SrGame *g, int building) {
   g->player.yaw = 0; /* facing -z: towards the building */
 }
 
+double sr_game_fx_now(const SrGame *g) { return (double)g->steps / 60.0; }
+
 static void move_player(SrGame *g, const SrActionState *a, float dt) {
   SrPlayer *p = &g->player;
+  g->fx.look_x = a->look_x;
+  g->fx.look_y = a->look_y;
   p->yaw = sr_wrap_angle(p->yaw - a->look_x);
   p->pitch = sr_clampf(p->pitch - a->look_y, -1.4f, 1.4f);
   bool crouch = a->down[SR_ACT_CROUCH];
@@ -274,6 +278,7 @@ static void move_player(SrGame *g, const SrActionState *a, float dt) {
   if (!sr_game_blocked_here(g, p->pos.x + vx, p->pos.z)) p->pos.x += vx;
   if (!sr_game_blocked_here(g, p->pos.x, p->pos.z + vz)) p->pos.z += vz;
   g->speed = sqrtf((p->pos.x - x0) * (p->pos.x - x0) + (p->pos.z - z0) * (p->pos.z - z0)) / dt;
+  if (g->on_ground) g->fx.bob += g->speed * dt;
   /* jumping */
   float eye = g->floor_y + (crouch ? CROUCH_HEIGHT : EYE_HEIGHT);
   if (a->pressed[SR_ACT_JUMP] && g->on_ground) {
@@ -286,11 +291,23 @@ static void move_player(SrGame *g, const SrActionState *a, float dt) {
     if (p->pos.y <= eye) {
       p->pos.y = eye;
       g->on_ground = true;
+      g->fx.land_t = sr_game_fx_now(g); /* the view dips on landing, a heavy one shakes */
+      g->fx.land_v = -g->vel_y;
+      if (g->fx.land_v > 6.0f) {
+        g->fx.shake_t = g->fx.land_t;
+        g->fx.shake = sr_clampf((g->fx.land_v - 6.0f) / 6.0f, 0, 1);
+      }
       g->vel_y = 0;
     }
   } else {
     p->pos.y = eye;
   }
+  /* the eye eases into and out of a crouch over 0.15 s; big jumps (stairs, teleports) snap */
+  float rate = (EYE_HEIGHT - CROUCH_HEIGHT) / 0.15f * dt, want = g->on_ground ? eye : p->pos.y;
+  if (fabsf(g->fx.eye_y - want) > 1.0f)
+    g->fx.eye_y = want;
+  else
+    g->fx.eye_y += sr_clampf(want - g->fx.eye_y, -rate, rate);
   if (len > 0.1f && sprint) sr_progress_use_skill(&p->prog, SR_SK_ATHLETICS, SR_USE_HOSTILE, 0);
 }
 
@@ -335,11 +352,16 @@ void sr_game_step(SrGame *g, const SrActionState *a) {
       if (a->pressed[SR_ACT_JACKIN]) sr_game_jack_in(g);
       if (a->pressed[SR_ACT_NETSIGHT]) sr_game_netsight(g);
       move_player(g, a, dt);
-      if (a->pressed[SR_ACT_INTERACT]) sr_game_interact(g);
+      double fx_now = sr_game_fx_now(g);
+      if (a->pressed[SR_ACT_INTERACT] && sr_game_interact(g) == SR_OK) g->fx.reach_t = fx_now;
       if (a->pressed[SR_ACT_FIRE]) sr_game_fire(g);
+      if (a->pressed[SR_ACT_RELOAD]) { /* the magazine swap is shown; ammo is counted per round */
+        g->fx.reload_t = fx_now;
+        g->fx.shots = 0;
+      }
       if (a->pressed[SR_ACT_GADGET]) sr_game_ability(g);
       for (int q = 0; q < 4; q++)
-        if (a->pressed[SR_ACT_QUICK1 + q]) sr_game_use_quick(g, q);
+        if (a->pressed[SR_ACT_QUICK1 + q] && sr_game_use_quick(g, q)) g->fx.throw_t = fx_now;
     }
     if (a->pressed[SR_ACT_TERMINAL]) g->screen = SR_SCREEN_TERMINAL;
   }
@@ -658,8 +680,23 @@ void sr_game_fire(SrGame *g) {
   SrPlayer *p = &g->player;
   if (p->equipped < 0 || p->equipped >= p->inv.count) return;
   const SrItem *w = &p->inv.items[p->equipped];
-  if (w->kind != SR_IK_WEAPON || sr_archetype(w->type)->category == SR_WC_MELEE) return;
+  if (w->kind != SR_IK_WEAPON) return;
+  if (sr_archetype(w->type)->category == SR_WC_MELEE) {
+    g->fx.melee_t = sr_game_fx_now(g); /* a swing */
+    return;
+  }
   int ammo = sr_inv_find(&p->inv, SR_IK_AMMO, -1);
+  if (ammo >= 0) { /* the kick and flash of the shot, and a reload after a magazine's worth */
+    static const float k_kick[SR_WC_COUNT] = {0.6f, 1.0f, 1.6f, 0.5f, 0.0f};
+    int cat = sr_archetype(w->type)->category;
+    g->fx.shot_t = sr_game_fx_now(g);
+    g->fx.recoil = k_kick[cat];
+    int mag = sr_archetype(w->type)->mag;
+    if (++g->fx.shots >= (mag > 0 ? mag : 12)) {
+      g->fx.reload_t = g->fx.shot_t + 0.25;
+      g->fx.shots = 0;
+    }
+  }
   if (ammo < 0) {
     sr_game_toast(g, "Click. Out of ammo.");
     return;

@@ -486,7 +486,12 @@ bool sr_site_gadget(SrSite *s, SrSiteCtx *ctx, int gadget, SrVec3 eye, float yaw
         g->e.health -= def->damage * (1.0f - dist / def->radius * 0.5f);
         if (g->e.health <= 0) guard_down(s, ctx->deltas, g, true);
       }
-      if (flat_dist(eye, at) < def->radius) ctx->player_damage += def->damage * 0.5f;
+      if (flat_dist(eye, at) < def->radius) {
+        ctx->player_damage += def->damage * 0.5f;
+        ctx->damage_from = at;
+        ctx->damage_known = true;
+      }
+      ctx->blast = SR_MAX(ctx->blast, sr_clampf(1.0f - flat_dist(eye, at) / (def->radius * 2.5f), 0, 1));
       sr_site_noise(s, at, 40.0f);
       s->hostile = true;
       return true;
@@ -685,8 +690,11 @@ static void update_guard(SrSite *s, SrSiteCtx *ctx, SrGuard *g, float dt) {
         g->shot_time = s->time;
         g->shot_tracer = s->shots_fired % 3 == 0;
         uint64_t key = sr_hash_combine(ctx->key, g->id * 977u + (uint64_t)s->shots_fired);
-        if (sr_enemy_fire(&g->e, d, ctx->difficulty, key))
+        if (sr_enemy_fire(&g->e, d, ctx->difficulty, key)) {
           ctx->player_damage += GUARD_DMG * sr_difficulty(ctx->difficulty)->enemy_damage;
+          ctx->damage_from = g->e.pos;
+          ctx->damage_known = true;
+        }
         sr_site_noise(s, g->e.pos, 25.0f);
       }
       break;
@@ -805,6 +813,8 @@ static void update_cameras(SrSite *s, SrSiteCtx *ctx, float dt) {
     s->turret_cd = 0.6f;
     s->shots_fired++;
     ctx->player_damage += 6.0f * sr_difficulty(ctx->difficulty)->enemy_damage;
+    ctx->damage_from = tp;
+    ctx->damage_known = true;
   }
 }
 

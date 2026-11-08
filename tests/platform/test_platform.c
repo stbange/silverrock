@@ -1485,6 +1485,37 @@ static void test_anim_shots(void) {
   sr_mesh_free(&st->ground);
   sr_mesh_free(&st->people);
   free(st);
+  /* the player's hands and weapon: idle, a shot, a reload, a swing, a throw and a reach */
+  SrGame *g = g_app.game;
+  static const AtmosView street = {"view", SR_D_COMMERCIAL, AV_STREET, 23, 0, SR_WX_DRIZZLE, 0};
+  atmos_place(g, &street);
+  g->steps = 600;
+  static const int cats[3] = {SR_WC_PISTOL, SR_WC_LONG, SR_WC_MELEE};
+  for (int wi = 0; wi < 3; wi++) {
+    int arch = 0;
+    while (arch + 1 < sr_archetype_count() && sr_archetype(arch)->category != cats[wi]) arch++;
+    g->player.inv.count = 0;
+    sr_inv_add(&g->player.inv, sr_item_weapon(arch, 0, 1, 7));
+    g->player.equipped = 0;
+    static const char *acts[6] = {"idle", "shot", "reload", "melee", "throw", "reach"};
+    for (int k = 0; k < 6; k++) {
+      double now = sr_game_fx_now(g);
+      memset(&g->fx, 0, sizeof g->fx);
+      g->fx.recoil = 1.0f;
+      if (k == 1) g->fx.shot_t = now - 0.008;
+      if (k == 2) g->fx.reload_t = now - 0.5;
+      if (k == 3) g->fx.melee_t = now - 0.15;
+      if (k == 4) g->fx.throw_t = now - 0.2;
+      if (k == 5) g->fx.reach_t = now - 0.25;
+      int w, h;
+      uint8_t *rgb = render_internal(&g_app, &w, &h);
+      if (!rgb) continue;
+      char name[96];
+      snprintf(name, sizeof name, "view_%d_%s_0", wi, acts[k]);
+      png_or_ppm(dir, name, rgb, w, h);
+      free(rgb);
+    }
+  }
 }
 
 void suite_platform(void) {

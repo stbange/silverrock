@@ -801,8 +801,8 @@ static void scene_pass(SrGlBackend *b, const SrFrame *f, unsigned fbo, int iw, i
   pDepthMask(GL_TRUE);
   for (int i = 0; i < f->ndraws; i++) {
     const SrDraw *d = &f->draws[i];
-    if (d->pass == SR_PASS_GLOW || d->pass == SR_PASS_HALO || d->pass == SR_PASS_SKY)
-      continue; /* glows after the solid geometry */
+    if (d->pass == SR_PASS_GLOW || d->pass == SR_PASS_HALO || d->pass == SR_PASS_SKY || d->pass == SR_PASS_VIEW)
+      continue; /* glows after the solid geometry, the view model last */
     if (d->pass == SR_PASS_WORLD)
       pUniform2f(b->u_fogr, f->fog_start, f->fog_end);
     else if (d->pass == SR_PASS_FAR)
@@ -838,6 +838,19 @@ static void scene_pass(SrGlBackend *b, const SrFrame *f, unsigned fbo, int iw, i
   pUniform1i(b->u_glow, 0);
   pDepthMask(GL_TRUE);
   pBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  /* the player's hands and weapon: over a fresh depth buffer, so walls never cut them */
+  bool cleared = false;
+  for (int i = 0; i < f->ndraws; i++) {
+    const SrDraw *d = &f->draws[i];
+    if (d->pass != SR_PASS_VIEW) continue;
+    if (!cleared) {
+      pClear(GL_DEPTH_BUFFER_BIT);
+      cleared = true;
+    }
+    pUniform2f(b->u_fogr, 1e6f, 2e6f);
+    set_lights(b, f, d);
+    draw_mesh(b, d->mesh);
+  }
 }
 
 /* Small target for the meat-cam (the body's surroundings during a dive). */

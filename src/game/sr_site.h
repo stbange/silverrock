@@ -119,6 +119,9 @@ typedef struct SrSiteCtx {
   SrDifficulty difficulty;
   uint64_t key;        /* deterministic shot key base */
   float player_damage; /* out: damage dealt to the player this update */
+  SrVec3 damage_from;  /* out: where the last damage came from */
+  bool damage_known;   /* out: damage_from is set */
+  float blast;         /* out: strength of an explosion felt by the player, 0..1 */
 } SrSiteCtx;
 
 /* Opens a site for an interior (already generated): applies deltas and spawns guards. */

@@ -161,14 +161,20 @@ void sr_build_host(const SrGame *g, float t, SrMesh *m) {
     if (!ice->active) continue;
     SrVec3 p = ice->e.pos;
     SrColor c = ice_color((SrIceType)ice->type);
-    if (ice->type == SR_ICE_BARRIER) {
-      sr_mesh_wire_box(m, sr_v3(p.x - 2.0f, p.y - 2.0f, p.z - 2.0f), sr_v3(p.x + 2.0f, p.y + 2.0f, p.z + 2.0f), c);
+    if (ice->type == SR_ICE_BARRIER) { /* a barrier ripples */
+      float b = 2.0f + 0.15f * sinf(t * 4.0f + (float)k);
+      sr_mesh_wire_box(m, sr_v3(p.x - b, p.y - b, p.z - b), sr_v3(p.x + b, p.y + b, p.z + b), c);
     } else {
       float r = ice->type == SR_ICE_BLACK || ice->type == SR_ICE_KILLER ? 0.8f : 0.55f;
+      if (ice->type == SR_ICE_BLACK) r *= 1.0f + 0.2f * sinf(t * 6.0f); /* black ICE throbs */
       wire_diamond(m, p, r, c, t * 2.0f + (float)k);
-      if (ice->type == SR_ICE_WATCHER) /* the eye */
-        sr_mesh_wire_box(m, sr_v3(p.x - 0.15f, p.y - 0.15f, p.z - 0.15f), sr_v3(p.x + 0.15f, p.y + 0.15f, p.z + 0.15f),
+      if (ice->type == SR_ICE_WATCHER) { /* the eye turns toward the avatar */
+        SrVec3 to = sr_v3_sub(d->pos, p);
+        float len = sr_v3_len(to);
+        SrVec3 e = len > 0.01f ? sr_v3_add(p, sr_v3_scale(to, 0.35f / len)) : p;
+        sr_mesh_wire_box(m, sr_v3(e.x - 0.15f, e.y - 0.15f, e.z - 0.15f), sr_v3(e.x + 0.15f, e.y + 0.15f, e.z + 0.15f),
                          rgb(255, 255, 255));
+      }
     }
   }
 }

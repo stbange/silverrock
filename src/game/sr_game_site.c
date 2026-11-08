@@ -123,8 +123,25 @@ void sr_game_leave(SrGame *g) {
   }
 }
 
+void sr_game_fx_hurt(SrGame *g, float dmg, bool known, SrVec3 from, float blast) {
+  double now = sr_game_fx_now(g);
+  if (blast > 0) {
+    g->fx.shake_t = now;
+    g->fx.shake = blast;
+  }
+  if (dmg <= 0) return;
+  g->fx.hurt_t = now;
+  g->fx.hurt_known = known;
+  if (known) { /* the source relative to the view: 0 ahead, positive to the right */
+    float s = sinf(g->player.yaw), c = cosf(g->player.yaw);
+    float dx = from.x - g->player.pos.x, dz = from.z - g->player.pos.z;
+    g->fx.hurt_dir = atan2f(dx * c - dz * s, -dx * s - dz * c);
+  }
+}
+
 SrResult sr_game_climb_down(SrGame *g) {
   if (g->roof_building < 0) return SR_ERR_INVALID;
+  g->fx.reach_t = sr_game_fx_now(g);
   int b = g->roof_building;
   sr_game_skip(g, 30, false);
   sr_game_teleport_building(g, b);
@@ -326,6 +343,7 @@ bool sr_game_use_gadget(SrGame *g, int gd) {
         ctx.toxin_filter = sr_game_has_cyber(g, 12);
         used = sr_site_gadget(&g->site, &ctx, gd, p->pos, p->yaw);
         p->health -= ctx.player_damage;
+        sr_game_fx_hurt(g, ctx.player_damage, ctx.damage_known, ctx.damage_from, ctx.blast);
       } else if (d->category == SR_GC_THROWABLE && gd != SR_GD_STICKYCAM && gd != SR_GD_DATASPIKE) {
         SrVec3 at = sr_v3_add(p->pos, sr_v3_scale(sr_dir_from_yaw_pitch(p->yaw, 0), 10.0f));
         street_noise(g, at, gd == SR_GD_LURE ? 6.0f : d->radius * 3.0f);
@@ -626,6 +644,7 @@ void sr_game_site_step(SrGame *g, float dt) {
   sr_site_update(&g->site, &ctx, dt);
   float dmg = ctx.player_damage * (1.0f - p->armor) * (g->buff_pain > 0 ? 0.75f : 1.0f);
   p->health -= dmg;
+  sr_game_fx_hurt(g, dmg, ctx.damage_known, ctx.damage_from, ctx.blast);
   int combat = 0;
   for (int i = 0; i < g->site.guard_count; i++) {
     const SrGuard *gd = &g->site.guards[i];

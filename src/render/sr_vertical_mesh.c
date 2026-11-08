@@ -101,14 +101,23 @@ void sr_build_metro_tracks(const SrCity *c, SrMesh *m) {
 
 #define TRAIN_TRAVEL_S 90
 
-bool sr_metro_train_pos(const SrCity *c, int edge, int64_t t, SrVec3 *pos, SrVec3 *dir) {
+int sr_metro_train_state(const SrCity *c, int edge, int64_t t, SrVec3 *pos, SrVec3 *dir) {
   const SrEdge *e = &c->metro_edges[edge];
-  /* the last train that left station a toward b, from the metro timetable */
-  int64_t dep = sr_metro_next_train(c, e->a, 0, t - 240);
-  if (dep > t || t - dep >= TRAIN_TRAVEL_S) return false;
-  float f = (float)(t - dep) / (float)TRAIN_TRAVEL_S;
   float p[3][2];
   sr_metro_route(c, edge, p);
+  /* standing at station a with the doors open before the next departure */
+  int64_t next = sr_metro_next_train(c, e->a, 0, t);
+  if (next >= t && next - t < SR_TRAIN_DWELL_S) {
+    *pos = sr_v3(p[0][0], SR_METRO_Y, p[0][1]);
+    float dx = p[1][0] - p[0][0], dz = p[1][1] - p[0][1], dl = fabsf(dx) + fabsf(dz);
+    *dir = dl > 0 ? sr_v3(dx / dl, 0, dz / dl) : sr_v3(1, 0, 0);
+    return 2;
+  }
+  /* the last train that left station a toward b, from the metro timetable */
+  int64_t dep = sr_metro_next_train(c, e->a, 0, t - 240);
+  if (dep > t || t - dep >= TRAIN_TRAVEL_S) return 0;
+  float f = (float)(t - dep) / (float)TRAIN_TRAVEL_S;
+  f = f * f * (3.0f - 2.0f * f); /* pulls away and brakes into the next station */
   float l0 = fabsf(p[1][0] - p[0][0]) + fabsf(p[1][1] - p[0][1]),
         l1 = fabsf(p[2][0] - p[1][0]) + fabsf(p[2][1] - p[1][1]);
   float d = f * (l0 + l1);
@@ -118,14 +127,19 @@ bool sr_metro_train_pos(const SrCity *c, int edge, int64_t t, SrVec3 *pos, SrVec
   *pos = sr_v3(x, SR_METRO_Y, z);
   float dx = p[s + 1][0] - p[s][0], dz = p[s + 1][1] - p[s][1], dl = fabsf(dx) + fabsf(dz);
   *dir = dl > 0 ? sr_v3(dx / dl, 0, dz / dl) : sr_v3(1, 0, 0);
-  return true;
+  return 1;
+}
+
+bool sr_metro_train_pos(const SrCity *c, int edge, int64_t t, SrVec3 *pos, SrVec3 *dir) {
+  return sr_metro_train_state(c, edge, t, pos, dir) != 0;
 }
 
 int sr_build_trains(const SrCity *c, int64_t t, SrVec3 eye, SrMesh *out) {
   int n = 0;
   for (int e = 0; e < c->metro_edge_count; e++) {
     SrVec3 p, d;
-    if (!sr_metro_train_pos(c, e, t, &p, &d)) continue;
+    int st = sr_metro_train_state(c, e, t, &p, &d);
+    if (!st) continue;
     if (fabsf(p.x - eye.x) > 400.0f || fabsf(p.z - eye.z) > 400.0f) continue;
     float yaw = atan2f(d.x, d.z);
     for (int car = 0; car < 3; car++) { /* three cars, lit windows along both sides */
@@ -134,6 +148,22 @@ int sr_build_trains(const SrCity *c, int64_t t, SrVec3 eye, SrMesh *out) {
                    (SrColor){150, 155, 165, 255}, SR_LAYER_METAL, 0);
       sr_mesh_part(out, cp, yaw, sr_v3(0, 0, 0), 0.0f, sr_v3(-1.45f, 1.3f, -5.5f), sr_v3(1.45f, 2.3f, 5.5f),
                    (SrColor){255, 230, 170, 255}, SR_LAYER_WHITE, 220);
+      for (int k = -1; k <= 1; k += 2) { /* doors: slid open at the station, light spilling out */
+        float slide = st == 2 ? 0.75f : 0.0f;
+        for (int side = -1; side <= 1; side += 2) {
+          float x = 1.47f * (float)side;
+          sr_mesh_part(out, cp, yaw, sr_v3(0, 0, 0), 0.0f, sr_v3(x - 0.03f, 0.1f, (float)k * 2.5f - 0.7f - slide),
+                       sr_v3(x + 0.03f, 2.6f, (float)k * 2.5f - slide), (SrColor){120, 125, 135, 255}, SR_LAYER_METAL,
+                       0);
+          sr_mesh_part(out, cp, yaw, sr_v3(0, 0, 0), 0.0f, sr_v3(x - 0.03f, 0.1f, (float)k * 2.5f + slide),
+                       sr_v3(x + 0.03f, 2.6f, (float)k * 2.5f + 0.7f + slide), (SrColor){120, 125, 135, 255},
+                       SR_LAYER_METAL, 0);
+          if (st == 2)
+            sr_mesh_part(out, cp, yaw, sr_v3(0, 0, 0), 0.0f, sr_v3(x - 0.02f, 0.1f, (float)k * 2.5f - 0.7f),
+                         sr_v3(x + 0.02f, 2.5f, (float)k * 2.5f + 0.7f), (SrColor){255, 235, 190, 255}, SR_LAYER_WHITE,
+                         240);
+        }
+      }
     }
     n++;
   }

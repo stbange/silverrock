@@ -2,6 +2,7 @@
  * combat, the player's body and world motion. */
 #include "core/sr_rng.h"
 #include "render/sr_render.h"
+#include "ui/sr_ui.h"
 #include "sr_test.h"
 
 #include <math.h>
@@ -1008,6 +1009,375 @@ static void test_guards(void) {
   free(site);
 }
 
+/* ---- the player's body ------------------------------------------------------------------- */
+
+static int arch_of(int cat) {
+  for (int i = 0; i < sr_archetype_count(); i++)
+    if (sr_archetype(i)->category == cat) return i;
+  return 0;
+}
+
+static uint64_t view_digest(SrGame *g, SrMesh *m) {
+  sr_build_view_model(g, sr_view_camera(g), 0, 0, m);
+  return sr_mesh_digest(m);
+}
+
+static void test_view_model(void) {
+  SR_SPEC("retro-rendering", "Hands and weapon in view");
+  SR_SPEC("retro-rendering", "The weapon moves with the body");
+  SR_SPEC("retro-rendering", "Shots kick and light the room");
+  SrGame *g = sr_game_create();
+  sr_game_new(g, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "View");
+  sr_game_leave(g);
+  g->steps = 6000;
+  SrMesh m;
+  sr_mesh_init(&m);
+  g->player.inv.count = 0;
+  g->player.equipped = -1;
+  SR_CHECK_EQ(sr_view_category(g), -1);
+  SR_CHECK_EQ(sr_build_view_model(g, sr_view_camera(g), 0, 0, &m), 0); /* unarmed, idle: nothing */
+  g->fx.reach_t = sr_game_fx_now(g) - 0.2;
+  SR_CHECK(sr_build_view_model(g, sr_view_camera(g), 0, 0, &m) > 0); /* a hand reaching for a door */
+  g->fx.reach_t = 0;
+  /* a model for every category, within the budget, always in front of the eye */
+  for (int cat = 0; cat < SR_WC_COUNT; cat++) {
+    g->player.inv.count = 0;
+    sr_inv_add(&g->player.inv, sr_item_weapon(arch_of(cat), 0, 1, 5));
+    g->player.equipped = 0;
+    SR_CHECK_EQ(sr_view_category(g), cat);
+    SrViewCam c = sr_view_camera(g);
+    int tris = sr_build_view_model(g, c, 0, 0, &m);
+    SR_CHECK(tris > 0 && tris <= 400);
+    SrVec3 fwd = sr_dir_from_yaw_pitch(c.yaw, c.pitch);
+    for (int v = 0; v < m.nv; v++) {
+      SrVec3 d = sr_v3_sub(sr_v3(m.v[v].x, m.v[v].y, m.v[v].z), c.eye);
+      SR_CHECK(sr_v3_len(d) < 1.3f);
+      SR_CHECK(sr_v3_dot(d, fwd) > -0.6f);
+    }
+  }
+  /* the rifle: bob, sprint, crouch, sway, shot, reload, swing, throw, reach all move it */
+  g->player.inv.count = 0;
+  sr_inv_add(&g->player.inv, sr_item_weapon(arch_of(SR_WC_LONG), 0, 1, 5));
+  g->player.equipped = 0;
+  g->on_ground = true;
+  uint64_t idle = view_digest(g, &m);
+  g->speed = 4.0f;
+  g->fx.bob = 0.37f;
+  uint64_t walking = view_digest(g, &m);
+  SR_CHECK(walking != idle);
+  g->speed = 7.0f;
+  SR_CHECK(view_digest(g, &m) != walking);
+  g->speed = 0;
+  g->fx.bob = 0;
+  g->player.crouched = true;
+  SR_CHECK(view_digest(g, &m) != idle);
+  g->player.crouched = false;
+  sr_build_view_model(g, sr_view_camera(g), 0.03f, 0.02f, &m);
+  SR_CHECK(sr_mesh_digest(&m) != idle);
+  double now = sr_game_fx_now(g);
+  double *timers[5] = {&g->fx.shot_t, &g->fx.reload_t, &g->fx.melee_t, &g->fx.throw_t, &g->fx.reach_t};
+  g->fx.recoil = 1.0f;
+  for (int k = 0; k < 5; k++) {
+    *timers[k] = now - 0.1;
+    SR_CHECK(view_digest(g, &m) != idle);
+    *timers[k] = now - 5.0; /* long over: back at rest */
+    SR_CHECK_EQ(view_digest(g, &m), idle);
+    *timers[k] = 0;
+  }
+  /* a shot: the weapon kicks back, the view kicks up, the muzzle lights the room for two frames */
+  SrViewCam c0 = sr_view_camera(g);
+  SrVec3 mz;
+  SR_CHECK(!sr_view_muzzle(g, c0, 0, 0, &mz));
+  g->fx.shot_t = now - 0.01;
+  SrViewCam c1 = sr_view_camera(g);
+  SR_CHECK(c1.pitch > c0.pitch);
+  SR_CHECK(sr_view_muzzle(g, c1, 0, 0, &mz));
+  SR_CHECK(sr_v3_len(sr_v3_sub(mz, c1.eye)) < 1.2f);
+  SrMesh fx;
+  sr_mesh_init(&fx);
+  sr_build_muzzle_fx(g, c1, 0, 0, &fx);
+  SR_CHECK(fx.nv >= 8); /* the flash and a shell */
+  g->fx.shot_t = now - 0.06;
+  SR_CHECK(!sr_view_muzzle(g, sr_view_camera(g), 0, 0, &mz)); /* the light is gone after two frames */
+  g->fx.shot_t = now - 1.0;
+  SR_CHECK_NEAR(sr_view_camera(g).pitch, c0.pitch, 1e-6); /* recovered */
+  /* firing through the game sets the timers, and a magazine's worth starts a reload */
+  sr_inv_add(&g->player.inv, sr_item_simple(SR_IK_AMMO, 0, 200));
+  g->fx.shots = 0;
+  g->fx.reload_t = 0;
+  int mag = sr_archetype(arch_of(SR_WC_LONG))->mag;
+  for (int i = 0; i < mag; i++) sr_game_fire(g);
+  SR_CHECK_NEAR(g->fx.shot_t, now, 1e-9);
+  SR_CHECK(g->fx.reload_t > now);
+  /* in the scene: a muzzle light first in the frame, the view model drawn last */
+  SrSceneCache *sc = (SrSceneCache *)calloc(1, sizeof *sc);
+  sr_scene_init(sc, false);
+  SrFrame *f = (SrFrame *)calloc(1, sizeof *f);
+  g->fx.shot_t = now;
+  sr_scene_build(sc, g, 16.0f / 9.0f, f);
+  SR_CHECK(f->nlights > 0 && f->lights[0].radius == 8.0f);
+  bool view = false;
+  for (int i = 0; i < f->ndraws; i++) view |= f->draws[i].pass == SR_PASS_VIEW;
+  SR_CHECK(view);
+  SR_CHECK(sc->view_tris > 0);
+  sr_scene_free(sc);
+  free(sc);
+  free(f);
+  sr_mesh_free(&fx);
+  sr_mesh_free(&m);
+  sr_game_destroy(g);
+}
+
+static void test_camera_motion(void) {
+  SR_SPEC("player-life", "Head bob");
+  SR_SPEC("player-life", "Landing dips the view");
+  SR_SPEC("player-life", "Damage shows its direction");
+  SR_SPEC("player-life", "Head bob can be turned off");
+  SR_SPEC("player-life", "Shake can be turned off");
+  SrGame *g = sr_game_create();
+  sr_game_new(g, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Cam");
+  sr_game_leave(g);
+  g->steps = 6000;
+  g->on_ground = true;
+  g->fx.eye_y = g->player.pos.y;
+  /* walking: the eye rises and falls about 3 cm, sways 1.5 cm; double sprinting, half crouched */
+  float range[3] = {0}, sway[3] = {0};
+  float speeds[3] = {4.0f, 7.0f, 2.0f};
+  for (int mode = 0; mode < 3; mode++) {
+    g->speed = speeds[mode];
+    g->player.crouched = mode == 2;
+    float lo = 1e9f, hi = -1e9f, sl = 1e9f, sh = -1e9f;
+    for (int i = 0; i < 100; i++) {
+      g->fx.bob = (float)i * 0.03f;
+      SrViewCam c = sr_view_camera(g);
+      lo = fminf(lo, c.bob_y);
+      hi = fmaxf(hi, c.bob_y);
+      sl = fminf(sl, c.bob_x);
+      sh = fmaxf(sh, c.bob_x);
+    }
+    range[mode] = hi - lo;
+    sway[mode] = (sh - sl) * 0.5f;
+  }
+  SR_CHECK_NEAR(range[0], 0.03f, 0.004f);
+  SR_CHECK_NEAR(sway[0], 0.015f * 2.0f, 0.004f);
+  SR_CHECK_NEAR(range[1], 2.0f * range[0], 0.005f);
+  SR_CHECK_NEAR(range[2], 0.5f * range[0], 0.003f);
+  /* off: a constant eye height; the position the game aims from never moves */
+  g->settings.head_bob = false;
+  g->player.crouched = false;
+  g->speed = 7.0f;
+  SrVec3 aim = g->player.pos;
+  for (int i = 0; i < 50; i++) {
+    g->fx.bob = (float)i * 0.05f;
+    SrViewCam c = sr_view_camera(g);
+    SR_CHECK_NEAR(c.eye.y, g->fx.eye_y, 1e-6);
+    SR_CHECK_NEAR(c.bob_x, 0, 1e-6);
+  }
+  SR_CHECK(g->player.pos.x == aim.x && g->player.pos.y == aim.y);
+  g->settings.head_bob = true;
+  g->speed = 0;
+  /* landing: a dip proportional to the fall speed, at most 8 cm, recovered */
+  double now = sr_game_fx_now(g);
+  float base = sr_view_camera(g).eye.y;
+  g->fx.land_t = now - 0.175;
+  g->fx.land_v = 3.0f;
+  float dip_soft = base - sr_view_camera(g).eye.y;
+  g->fx.land_v = 30.0f;
+  float dip_hard = base - sr_view_camera(g).eye.y;
+  SR_CHECK(dip_soft > 0.02f && dip_soft < dip_hard);
+  SR_CHECK(dip_hard <= 0.0801f);
+  g->fx.land_t = now - 1.0;
+  SR_CHECK_NEAR(sr_view_camera(g).eye.y, base, 1e-6);
+  /* a real jump lands through the game */
+  SrActionState act;
+  memset(&act, 0, sizeof act);
+  act.pressed[SR_ACT_JUMP] = true;
+  sr_game_step(g, &act);
+  act.pressed[SR_ACT_JUMP] = false;
+  for (int i = 0; i < 120 && !g->on_ground; i++) sr_game_step(g, &act);
+  SR_CHECK(g->on_ground);
+  SR_CHECK(g->fx.land_v > 3.0f);
+  /* damage: the view flinches away and the red edge shows the side */
+  float yaw0 = sr_view_camera(g).yaw;
+  now = sr_game_fx_now(g);
+  SrVec3 right = sr_v3_add(g->player.pos, sr_v3(cosf(g->player.yaw) * 5.0f, 0, -sinf(g->player.yaw) * 5.0f));
+  sr_game_fx_hurt(g, 10.0f, true, right, 0);
+  SR_CHECK(g->fx.hurt_dir > 1.2f && g->fx.hurt_dir < 1.9f);
+  SR_CHECK(sr_view_camera(g).yaw > yaw0);
+  float dir;
+  bool known;
+  SR_CHECK(sr_view_hurt_edge(g, &dir, &known) > 0.9f);
+  SR_CHECK(known && dir > 0);
+  SrUi ui;
+  sr_ui_init(&ui);
+  SrInput in;
+  sr_input_init(&in, false);
+  sr_ui_begin(&ui, 1280, 720, 2);
+  sr_ui_build(&ui, g, &in, false);
+  int red = 0;
+  for (int v = 0; v < ui.mesh.nv; v++) red += ui.mesh.v[v].r == 200 && ui.mesh.v[v].g == 10 && ui.mesh.v[v].x > 1100;
+  SR_CHECK(red >= 4); /* on the right edge */
+  sr_game_fx_hurt(g, 5.0f, false, right, 0);
+  sr_ui_begin(&ui, 1280, 720, 2);
+  sr_ui_build(&ui, g, &in, false);
+  sr_ui_free(&ui);
+  g->fx.hurt_t = now - 2.0;
+  SR_CHECK_NEAR(sr_view_hurt_edge(g, &dir, &known), 0, 0);
+  sr_game_fx_hurt(g, 0, false, right, 0); /* nothing felt */
+  /* shake: full, low, off */
+  sr_game_fx_hurt(g, 0, false, right, 1.0f);
+  g->fx.shake_t = sr_game_fx_now(g) - 0.05;
+  float moved[3];
+  for (int k = 0; k < 3; k++) {
+    g->settings.camera_shake = 2 - k;
+    SrViewCam c = sr_view_camera(g);
+    moved[k] = fabsf(c.yaw - g->player.yaw) + fabsf(c.pitch - g->player.pitch);
+  }
+  SR_CHECK(moved[0] > moved[1] && moved[1] > 0);
+  SR_CHECK_NEAR(moved[2], 0, 1e-6);
+  /* settings round trip */
+  SrSettings st;
+  sr_settings_default(&st);
+  SR_CHECK(st.head_bob && st.camera_shake == 2);
+  SR_CHECK(sr_settings_parse(&st, "head_bob=0\ncamera_shake=1\n") == 2);
+  SR_CHECK(!st.head_bob && st.camera_shake == 1);
+  char buf[2048];
+  sr_settings_write(&st, buf, sizeof buf);
+  SR_CHECK(strstr(buf, "head_bob=0") && strstr(buf, "camera_shake=1"));
+  /* the eye eases into a crouch over about 0.15 s */
+  g->settings.camera_shake = 2;
+  act.down[SR_ACT_CROUCH] = true;
+  float e0 = g->fx.eye_y;
+  sr_game_step(g, &act);
+  SR_CHECK(g->fx.eye_y < e0 && g->fx.eye_y > e0 - 0.3f);
+  for (int i = 0; i < 12; i++) sr_game_step(g, &act);
+  SR_CHECK_NEAR(g->fx.eye_y, g->player.pos.y, 1e-4);
+  sr_game_destroy(g);
+}
+
+/* ---- world motion ----------------------------------------------------------------------- */
+
+static void test_world_motion(void) {
+  SR_SPEC("retro-rendering", "Doors swing");
+  SR_SPEC("retro-rendering", "Shutters roll at opening time");
+  SR_SPEC("population-simulation", "Trains stop at stations");
+  /* a door swings from shut to open over about 0.3 s */
+  SrSite *site = (SrSite *)calloc(1, sizeof *site);
+  site->in.w = 2;
+  site->in.h = 2;
+  site->in.doors[0] = 3; /* east and south */
+  float ang[SR_INT_MAX_ROOMS * 2] = {0};
+  SrMesh m;
+  sr_mesh_init(&m);
+  float at_150 = 0;
+  for (int i = 0; i < 18; i++) {
+    sr_mesh_clear(&m);
+    sr_build_doors(site, ang, 1.0f / 60.0f, false, &m);
+    if (i == 8) at_150 = ang[0];
+  }
+  SR_CHECK(at_150 > 0.35f && at_150 < 0.65f);
+  SR_CHECK_NEAR(ang[0], 1.0f, 1e-4);
+  SR_CHECK_NEAR(ang[1], 1.0f, 1e-4);
+  SR_CHECK(m.nv == 2 * 24);
+  float x_open = -1e9f;
+  for (int v = 0; v < 24; v++) x_open = fmaxf(x_open, m.v[v].x);
+  SR_CHECK(x_open > site->ox + 4.0f + 1.0f); /* the east door swung into the next room */
+  site->in.doors[0] = 0;                     /* gone: nothing drawn */
+  sr_mesh_clear(&m);
+  sr_build_doors(site, ang, 1.0f / 60.0f, true, &m);
+  SR_CHECK_EQ(m.nv, 0);
+  free(site);
+  /* shutters roll over about three real seconds at opening and closing */
+  const SrCity *c = g_game->city;
+  int shop = -1;
+  for (int b = 0; b < c->building_count && shop < 0; b++) {
+    if (c->buildings[b].poi == SR_POI_NONE) continue;
+    int open, hours;
+    sr_poi_hours(c, b, &open, &hours);
+    if (hours < 24) shop = b;
+  }
+  SR_CHECK(shop >= 0);
+  int open, hours;
+  sr_poi_hours(c, shop, &open, &hours);
+  int64_t t0 = 3 * 86400 + (int64_t)open * 3600;
+  int rate = 20;
+  SR_CHECK_NEAR(sr_shutter_open(c, shop, t0 - 60, rate), 0, 0);
+  float mid = sr_shutter_open(c, shop, t0 + 30, rate);
+  SR_CHECK(mid > 0.3f && mid < 0.7f);
+  SR_CHECK_NEAR(sr_shutter_open(c, shop, t0 + 3 * rate, rate), 1, 1e-6);
+  int64_t close = t0 + (int64_t)hours * 3600;
+  float closing = sr_shutter_open(c, shop, close - 30, rate);
+  SR_CHECK(closing > 0.3f && closing < 0.7f);
+  SR_CHECK_NEAR(sr_shutter_open(c, shop, close + 10, rate), 0, 0);
+  int32_t sx, sy;
+  sr_building_center(&c->buildings[shop], &sx, &sy);
+  SrDeltas *dl = (SrDeltas *)&g_game->deltas;
+  sr_deltas_set(dl, c->buildings[shop].id, 1);
+  sr_mesh_clear(&m);
+  sr_build_poi_fronts(c, dl, sr_v3((float)sx / 100.0f, 1.7f, (float)sy / 100.0f), t0 + 30, rate, &m);
+  sr_mesh_clear(&m);
+  sr_build_poi_fronts(c, dl, sr_v3(-9000, 0, -9000), t0, rate, &m);
+  SR_CHECK_EQ(m.nv, 0);
+  /* trains brake into the station, stand with their doors open, and pull away */
+  int edge = -1;
+  for (int e = 0; e < c->metro_edge_count && edge < 0; e++) edge = e;
+  if (edge >= 0) {
+    int states[3] = {0};
+    SrVec3 prev = sr_v3(0, 0, 0);
+    int dwell_run = 0, best_run = 0;
+    float slow = 1e9f, fast = 0;
+    for (int64_t t = 86400; t < 86400 + 900; t++) {
+      SrVec3 pos, dir;
+      int st = sr_metro_train_state(c, edge, t, &pos, &dir);
+      states[st]++;
+      dwell_run = st == 2 ? dwell_run + 1 : 0;
+      best_run = SR_MAX(best_run, dwell_run);
+      if (st == 1 && t > 86400) {
+        float v = sr_v3_len(sr_v3_sub(pos, prev));
+        if (v < 50.0f) {
+          slow = fminf(slow, v);
+          fast = fmaxf(fast, v);
+        }
+      }
+      prev = pos;
+    }
+    SR_CHECK(states[2] > 0 && states[1] > 0);
+    SR_CHECK(best_run >= SR_TRAIN_DWELL_S - 1);
+    SR_CHECK(slow < fast * 0.3f); /* it slows into the station */
+    SrMesh tm;
+    sr_mesh_init(&tm);
+    for (int64_t t = 86400; t < 86400 + 900; t++) {
+      SrVec3 pos, dir;
+      if (sr_metro_train_state(c, edge, t, &pos, &dir) != 2) continue;
+      SR_CHECK(sr_build_trains(c, t, pos, &tm) >= 1);
+      break;
+    }
+    sr_mesh_free(&tm);
+  }
+  /* ICE: barriers ripple, black ICE throbs, watchers eye the avatar */
+  SrGame *g = sr_game_create();
+  sr_game_new(g, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Ice");
+  g->dive.ice_count = 3;
+  for (int k = 0; k < 3; k++) {
+    g->dive.ice[k].active = true;
+    g->dive.ice[k].e.pos = sr_v3((float)k * 5.0f, 1, 0);
+  }
+  g->dive.ice[0].type = SR_ICE_BARRIER;
+  g->dive.ice[1].type = SR_ICE_BLACK;
+  g->dive.ice[2].type = SR_ICE_WATCHER;
+  g->dive.pos = sr_v3(10, 1, 6);
+  SrMesh a, b;
+  sr_mesh_init(&a);
+  sr_mesh_init(&b);
+  sr_build_host(g, 1.0f, &a);
+  sr_build_host(g, 1.3f, &b);
+  SR_CHECK(sr_mesh_digest(&a) != sr_mesh_digest(&b));
+  sr_mesh_free(&a);
+  sr_mesh_free(&b);
+  sr_game_destroy(g);
+  sr_mesh_free(&m);
+}
+
 void suite_anim(void) {
   g_game = sr_game_create();
   sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Anim");
@@ -1021,5 +1391,8 @@ void suite_anim(void) {
   SR_RUN(test_vehicles);
   SR_RUN(test_aerodynes);
   SR_RUN(test_guards);
+  SR_RUN(test_view_model);
+  SR_RUN(test_camera_motion);
+  SR_RUN(test_world_motion);
   sr_game_destroy(g_game);
 }

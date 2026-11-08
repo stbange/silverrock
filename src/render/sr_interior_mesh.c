@@ -192,9 +192,9 @@ void sr_build_interior_room(const SrSite *s, int room, SrMesh *m) {
   if (rx == 0) wall_z(m, z0, z1, x0, false, 0, false, wall);
   if (ry == 0) wall_x(m, x0, x1, z0, false, 0, false, wall);
   bool e_door = rx + 1 < in->w && (in->doors[room] & 1);
-  wall_z(m, z0, z1, x1, e_door, z0 + CELL / 2, e_door && !sr_site_door_open(s, room, 0), wall);
+  wall_z(m, z0, z1, x1, e_door, z0 + CELL / 2, false, wall); /* door leaves swing in sr_build_doors */
   bool s_door = ry + 1 < in->h && (in->doors[room] & 2);
-  wall_x(m, x0, x1, z1, s_door, x0 + CELL / 2, s_door && !sr_site_door_open(s, room, 1), wall);
+  wall_x(m, x0, x1, z1, s_door, x0 + CELL / 2, false, wall);
   /* vent grilles */
   if (in->vents[room] & 1)
     box(m, x1 - 0.12f, Y0 + 0.05f, z0 + CELL / 2 + SR_SITE_VENT_OFFSET - 0.4f, x1 + 0.12f, Y0 + 0.65f,
@@ -258,6 +258,29 @@ void sr_build_site_dynamic(const SrSite *s, const SrDeltas *d, float t, SrMesh *
         box(m, p.x - 0.05f, Y0 + 0.3f, p.z - 0.05f, p.x + 0.05f, Y0 + 0.4f, p.z + 0.05f, rgb(255, 200, 40),
             SR_LAYER_WHITE, 255);
         break;
+    }
+  }
+}
+
+void sr_build_doors(const SrSite *s, float *angle, float dt, bool snap, SrMesh *m) {
+  /* each door leaf swings about its hinge toward its state over 0.3 s (angle 0 shut, 1 open) */
+  const SrInterior *in = &s->in;
+  float d = SR_SITE_DOOR_HALF, step = dt / 0.3f;
+  for (int room = 0; room < in->w * in->h; room++) {
+    int rx = room % in->w, ry = room / in->w;
+    float x0 = s->ox + (float)rx * CELL, z0 = s->oz + (float)ry * CELL, x1 = x0 + CELL, z1 = z0 + CELL;
+    for (int dir = 0; dir < 2; dir++) {
+      bool has = dir == 0 ? rx + 1 < in->w && (in->doors[room] & 1) : ry + 1 < in->h && (in->doors[room] & 2);
+      if (!has) continue;
+      float want = sr_site_door_open(s, room, dir) ? 1.0f : 0.0f, *a = &angle[room * 2 + dir];
+      *a = snap ? want : *a + sr_clampf(want - *a, -step, step);
+      float sw = *a * SR_PI * 0.5f;
+      if (dir == 0) /* a door in the east wall: hinged at its north edge, opening east */
+        sr_mesh_part(m, sr_v3(x1, Y0, z0 + CELL / 2 - d), -SR_PI * 0.5f + sw, sr_v3(0, 0, 0), 0, sr_v3(0, 0, -0.04f),
+                     sr_v3(2 * d, 2.2f, 0.04f), rgb(150, 50, 50), SR_LAYER_METAL, 0);
+      else /* a door in the south wall: hinged at its west edge, opening south */
+        sr_mesh_part(m, sr_v3(x0 + CELL / 2 - d, Y0, z1), -sw, sr_v3(0, 0, 0), 0, sr_v3(0, 0, -0.04f),
+                     sr_v3(2 * d, 2.2f, 0.04f), rgb(150, 50, 50), SR_LAYER_METAL, 0);
     }
   }
 }

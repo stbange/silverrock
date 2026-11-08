@@ -928,6 +928,7 @@ void sr_scene_free(SrSceneCache *s) {
   for (int i = 0; i < 24; i++) sr_mesh_free(&s->blocks[i].mesh);
   sr_mesh_free(&s->pools);
   sr_mesh_free(&s->crowd_fx);
+  sr_mesh_free(&s->view_model);
   free(s->beacons);
   s->beacons = NULL;
 }
@@ -937,7 +938,8 @@ static void add_draw(SrFrame *f, SrMesh *m, SrPass pass, SrVec3 at) {
   SrDraw *d = &f->draws[f->ndraws++];
   d->mesh = m;
   d->pass = pass;
-  d->nlights = pass == SR_PASS_WORLD ? sr_select_lights(f->lights, f->nlights, at, d->lights) : 0;
+  d->nlights =
+      pass == SR_PASS_WORLD || pass == SR_PASS_VIEW ? sr_select_lights(f->lights, f->nlights, at, d->lights) : 0;
 }
 
 /* Matrix frame: black void, the grid or the current host, from the persona's eyes. */
@@ -972,8 +974,33 @@ static void build_matrix_frame(SrSceneCache *s, const SrGame *g, float aspect, S
   }
 }
 
+/* The weapon sways after the look and settles over about 0.08 s. */
+static void update_sway(SrSceneCache *s, const SrGame *g) {
+  float tx = SR_CLAMP(g->fx.look_x * 0.6f, -0.05f, 0.05f), ty = SR_CLAMP(g->fx.look_y * 0.6f, -0.04f, 0.04f);
+  float k = 1.0f / 60.0f / 0.08f;
+  s->sway_x += (tx - s->sway_x) * k;
+  s->sway_y += (ty - s->sway_y) * k;
+}
+
+/* A shot lights the surroundings for about two frames (before the draws pick their lights). */
+static void muzzle_light(SrSceneCache *s, const SrGame *g, SrViewCam vc, SrFrame *f) {
+  SrVec3 m;
+  if (!sr_view_muzzle(g, vc, s->sway_x, s->sway_y, &m)) return;
+  int i = f->nlights < SR_MAX_FRAME_LIGHTS ? f->nlights++ : SR_MAX_FRAME_LIGHTS - 1;
+  for (int k = i; k > 0; k--) f->lights[k] = f->lights[k - 1]; /* first, so every draw nearby picks it */
+  SrVec3 ahead = sr_v3_add(m, sr_v3_scale(sr_dir_from_yaw_pitch(vc.yaw, vc.pitch), 1.5f)); /* the room, not the hand */
+  f->lights[0] = (SrLight){ahead, 8.0f, 1.1f, 0.8f, 0.4f};
+}
+
+/* The hands and weapon, drawn last over a cleared depth buffer so walls never cut them. */
+static void scene_body(SrSceneCache *s, const SrGame *g, SrViewCam vc, SrFrame *f) {
+  s->view_tris = sr_build_view_model(g, vc, s->sway_x, s->sway_y, &s->view_model);
+  sr_build_muzzle_fx(g, vc, s->sway_x, s->sway_y, &s->crowd_fx);
+  add_draw(f, &s->view_model, SR_PASS_VIEW, vc.eye);
+}
+
 /* Interior frame: room meshes (rebuilt when doors, devices or lights change), guards, effects. */
-static void build_site_frame(SrSceneCache *s, const SrGame *g, SrFrame *f) {
+static void build_site_frame(SrSceneCache *s, const SrGame *g, SrFrame *f, SrViewCam vc) {
   const SrSite *site = &g->site;
   uint64_t key = sr_site_mesh_key(site, &g->deltas);
   int rooms = site->in.w * site->in.h;
@@ -991,8 +1018,12 @@ static void build_site_frame(SrSceneCache *s, const SrGame *g, SrFrame *f) {
   f->fog_end = 45.0f;
   f->wetness = 0;
   f->nlights = sr_site_collect_lights(site, f->lights, SR_MAX_FRAME_LIGHTS);
+  if (!g->dive.active) muzzle_light(s, g, vc, f);
   for (int r = 0; r < rooms; r++) add_draw(f, &s->rooms[r], SR_PASS_WORLD, sr_site_room_center(site, r));
   sr_build_site_dynamic(site, &g->deltas, (float)g->steps / 60.0f, &s->site_dyn);
+  bool snap = s->door_building != site->building + 1;
+  s->door_building = site->building + 1;
+  sr_build_doors(site, s->door_angle, 1.0f / 60.0f, snap, &s->site_dyn);
   add_draw(f, &s->site_dyn, SR_PASS_WORLD, g->player.pos);
   sr_anim_cache_begin(&s->anim, (double)site->time);
   sr_build_guards(site, &s->anim, (double)site->time, g->player.pos, &s->guards);
@@ -1016,8 +1047,10 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   const SrCity *c = g->city;
   const SrPlayer *p = &g->player;
   int64_t t = sr_game_time(g);
-  f->eye = p->pos;
-  f->view = sr_m4_fps_view(p->pos, p->yaw, p->pitch);
+  update_sway(s, g);
+  SrViewCam vc = sr_view_camera(g); /* head bob, landing dip, eased crouch, recoil, flinch, shake */
+  f->eye = vc.eye;
+  f->view = sr_m4_fps_view(vc.eye, vc.yaw, vc.pitch);
   f->proj = sr_m4_perspective(70.0f * SR_PI / 180.0f, aspect > 0 ? aspect : 16.0f / 9.0f, 0.1f, 4000.0f);
   SrWeatherState w = sr_game_weather(g);
   SrSky sky = sr_sky_weather(sr_sky_at(t, g->pall_removed), &w);
@@ -1092,14 +1125,15 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
       f->eye = cp;
       f->view = sr_m4_fps_view(cp, yaw, -0.45f);
       f->crt = true;
-      build_site_frame(s, g, f);
+      build_site_frame(s, g, f, vc);
       return;
     }
     build_matrix_frame(s, g, aspect, f);
     return;
   }
   if (g->site.active) {
-    build_site_frame(s, g, f);
+    build_site_frame(s, g, f, vc);
+    scene_body(s, g, vc, f);
     return;
   }
   if (s->light_grid.city_seed != c->seed || s->light_grid.blocks != c->grid * c->grid || !s->light_grid.lights)
@@ -1116,6 +1150,7 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
     if (district == g->net.blackout_district)
       for (int j = 0; j < 3; j++) f->ambient[j] *= 0.45f;
   }
+  muzzle_light(s, g, vc, f);
   if (s->turf_version != g->chess.turf_version) { /* gangs moved: repaint the walls */
     s->turf_version = g->chess.turf_version;
     for (int i = 0; i < SR_CHUNK_CACHE; i++) s->chunks.chunks[i].valid = false;
@@ -1292,7 +1327,8 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
       sr_city_block_origin(by * c->grid + bx, c->grid, &sox, &soy);
       add_draw(f, sm, SR_PASS_WORLD, sr_v3((float)sox / 100.0f + 48.0f, 2.0f, (float)soy / 100.0f + 48.0f));
     }
-  sr_build_poi_fronts(c, &g->deltas, p->pos, t, &s->fronts); /* open shops light up their fronts */
+  sr_build_poi_fronts(c, &g->deltas, p->pos, t, g->settings.time_rate,
+                      &s->fronts); /* open shops light up their fronts */
   const SrNews *latest = g->chess.news.count > 0 ? sr_news_latest(&g->chess.news, 0) : NULL;
   sr_build_tickers(c, latest ? latest->headline : "", p->pos, f->time_s, &s->fronts);
   int heat = 0;
@@ -1344,6 +1380,7 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   sr_build_trains(c, t, p->pos, &s->trains);
   add_draw(f, &s->trains, SR_PASS_WORLD, p->pos);
   add_draw(f, &s->wet, SR_PASS_GLOW, p->pos);
+  scene_body(s, g, vc, f);
 }
 
 void sr_scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame *f) { scene_build(s, g, aspect, f, true); }

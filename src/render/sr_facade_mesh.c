@@ -97,10 +97,23 @@ void sr_build_crown(SrMesh *m, const SrFacade *f, float x0, float z0, float x1, 
 }
 
 /* Open places near the camera: the lit shopfront, lobby or stall over the shutter of the chunk. */
-void sr_build_poi_fronts(const SrCity *c, const SrDeltas *d, SrVec3 eye, int64_t t, SrMesh *out) {
+float sr_shutter_open(const SrCity *c, int building, int64_t t, int time_rate) {
+  /* 1 open, 0 shut; in between while the shutter rolls, over about three real seconds */
+  int open, hours;
+  sr_poi_hours(c, building, &open, &hours);
+  if (hours >= 24) return 1.0f;
+  float roll = 3.0f * (float)SR_MAX(time_rate, 1);
+  float since = (float)(((t % 86400) - (int64_t)open * 3600 + 86400) % 86400);
+  float until = (float)hours * 3600.0f - since;
+  if (until <= 0) return 0.0f;
+  return sr_clampf(fminf(since / roll, until / roll), 0, 1);
+}
+
+int sr_build_poi_fronts(const SrCity *c, const SrDeltas *d, SrVec3 eye, int64_t t, int time_rate, SrMesh *out) {
   sr_mesh_clear(out);
+  int rolling = 0;
   int blk = sr_city_block_at(c, (int32_t)(eye.x * 100.0f), (int32_t)(eye.z * 100.0f));
-  if (blk < 0) return;
+  if (blk < 0) return 0;
   for (int dy = -1; dy <= 1; dy++)
     for (int dx = -1; dx <= 1; dx++) {
       int bx = blk % c->grid + dx, by = blk / c->grid + dy;
@@ -113,13 +126,24 @@ void sr_build_poi_fronts(const SrCity *c, const SrDeltas *d, SrVec3 eye, int64_t
         SrFacade f;
         sr_facade_for(c, bi, &f);
         if (f.base != SR_BASE_SHOPFRONT) continue; /* lobbies and stalls are always lit in the chunk */
-        bool open = sr_deltas_get(d, bd->id) != 0 && sr_poi_open(c, bi, t);
-        if (!open) continue;
+        if (sr_deltas_get(d, bd->id) == 0) continue;
+        float u = sr_shutter_open(c, bi, t, time_rate);
+        if (u <= 0) continue;
+        if (u < 1) { /* rolling: at most two near the camera, the rest snap */
+          if (rolling >= 2) u = sr_poi_open(c, bi, t) ? 1.0f : 0.0f;
+          if (u <= 0) continue;
+          if (u < 1) rolling++;
+        }
         float x0 = (float)bd->x0 / 100.0f, x1 = (float)bd->x1 / 100.0f, z1 = (float)bd->y1 / 100.0f + 0.04f;
-        wall(out, x0, z1, x1, z1, 0.0f, BASE_H, f.uv_u, f.uv_u + (x1 - x0) / 9.0f, 1.0f, 0.0f, rgb(f.tint, 100),
+        float top = BASE_H * u; /* the lit front shows below the rising shutter */
+        wall(out, x0, z1, x1, z1, 0.0f, top, f.uv_u, f.uv_u + (x1 - x0) / 9.0f, 1.0f, 1.0f - u, rgb(f.tint, 100),
              SR_LAYER_BASE_FIRST + SR_BASE_SHOPFRONT, 110, 0);
+        if (u < 1) /* the shutter's bottom bar */
+          sr_mesh_box(out, sr_v3(x0, top - 0.08f, z1), sr_v3(x1, top, z1 + 0.06f), (SrColor){90, 92, 96, 255},
+                      SR_LAYER_METAL, 0, 0);
       }
     }
+  return rolling;
 }
 
 /* The door of a place, under its sign (a dark recess with a lit frame). */

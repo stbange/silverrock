@@ -245,6 +245,8 @@ uint64_t sr_site_mesh_key(const SrSite *s, const SrDeltas *d);
 void sr_build_site_dynamic(const SrSite *s, const SrDeltas *d, float time_s, SrMesh *out);
 /* Guards posed by their alert state, hits and falls (time in game seconds; the cache may be NULL). */
 void sr_build_guards(const SrSite *s, SrAnimCache *anim, double now, SrVec3 player, SrMesh *out);
+/* Door leaves swinging toward their state over 0.3 s; angle holds 2 per room (0 shut, 1 open). */
+void sr_build_doors(const SrSite *s, float *angle, float dt, bool snap, SrMesh *out);
 /* Animation input of one guard (now in site seconds). */
 void sr_guard_anim(const SrSite *s, const SrGuard *g, const SrAppearance *a, double now, SrVec3 player,
                    SrAnimInput *in);
@@ -252,6 +254,24 @@ void sr_guard_anim(const SrSite *s, const SrGuard *g, const SrAppearance *a, dou
 int sr_build_enemy_fire(const SrSite *s, double now, SrVec3 player, SrVec3 eye, SrMesh *fx, SrLight *lights, int nl,
                         int max_lights);
 int sr_site_collect_lights(const SrSite *s, SrLight *out, int max);
+/* The player's body (sr_viewmodel.c): the camera with head bob, landing dip, eased crouch, recoil,
+ * flinch and shake, and the hands and weapon. */
+typedef struct SrViewCam {
+  SrVec3 eye;
+  float yaw, pitch;
+  float bob_x, bob_y; /* head bob offsets this frame (metres) */
+} SrViewCam;
+SrViewCam sr_view_camera(const SrGame *g);
+/* Weapon category of the equipped weapon (SR_WC_*), -1 unarmed. */
+int sr_view_category(const SrGame *g);
+/* Builds the view model in world space; returns its triangle count (0 when nothing is shown). */
+int sr_build_view_model(const SrGame *g, SrViewCam c, float sway_x, float sway_y, SrMesh *out);
+/* Muzzle position while a shot's flash lights the room (about two frames). */
+bool sr_view_muzzle(const SrGame *g, SrViewCam c, float sway_x, float sway_y, SrVec3 *pos);
+/* The muzzle flash and the ejected shell of the last shot (glow pass). */
+void sr_build_muzzle_fx(const SrGame *g, SrViewCam c, float sway_x, float sway_y, SrMesh *fx);
+/* Strength 0..1 of the red edge after a hit, and the hit's direction relative to the view. */
+float sr_view_hurt_edge(const SrGame *g, float *dir, bool *known);
 /* Thermal vision: recolours vertices from `from` as glowing heat signatures. */
 void sr_mesh_thermal(SrMesh *m, int from_vertex);
 void sr_build_rain(SrVec3 cam, float intensity, uint64_t frame, const SrCity *c, SrMesh *out);
@@ -296,7 +316,8 @@ typedef enum SrPass {
   SR_PASS_GLOW,
   SR_PASS_HALO,
   SR_PASS_SKY, /* drawn first without depth writes, fully fogged: the sky dome takes the fog colour */
-  SR_PASS_FAR  /* the distant city: fog stretched to three and a half times the fog end */
+  SR_PASS_FAR, /* the distant city: fog stretched to three and a half times the fog end */
+  SR_PASS_VIEW /* the player's hands and weapon: last, over a cleared depth buffer, no fog */
 } SrPass;
 
 typedef struct SrDraw {
@@ -399,6 +420,11 @@ typedef struct SrSceneCache {
   SrMesh crowd_fx;             /* footfall splashes, headlight beams, car spray, muzzle flashes (glow pass) */
   SrAnimCache anim;            /* poses of citizens and guards (presentation only) */
   int near_drawn, beams_drawn; /* diagnostics for the budget test */
+  SrMesh view_model;           /* the player's hands and weapon */
+  float door_angle[SR_INT_MAX_ROOMS * 2];
+  int32_t door_building; /* the site the door angles belong to */
+  float sway_x, sway_y;  /* the weapon's lag behind the look */
+  int view_tris;
   struct {
     int block;
     uint64_t used;
@@ -441,7 +467,11 @@ typedef struct SrSceneCache {
 void sr_build_box_facade(SrMesh *m, const SrFacade *f, float x0, float z0, float x1, float z1, float ybot, float ytop,
                          bool with_base, uint8_t blank);
 void sr_build_crown(SrMesh *m, const SrFacade *f, float x0, float z0, float x1, float z1, float h);
-void sr_build_poi_fronts(const SrCity *c, const SrDeltas *d, SrVec3 eye, int64_t t, SrMesh *out);
+/* Lit fronts of open shops near the eye; shutters roll over about three real seconds at opening
+ * and closing (at most two at once). Returns how many are rolling. */
+int sr_build_poi_fronts(const SrCity *c, const SrDeltas *d, SrVec3 eye, int64_t t, int time_rate, SrMesh *out);
+/* How far a shop's shutter is up: 0 shut, 1 open. */
+float sr_shutter_open(const SrCity *c, int building, int64_t t, int time_rate);
 void sr_build_door(SrMesh *m, float cx, float z, SrColor frame);
 /* A whole building: volumes with facades, crowns, roof kits, landmark crowns. */
 void sr_build_building(const SrCity *c, int building, SrColor neon, SrMesh *m);
@@ -481,6 +511,10 @@ void sr_build_skyways(const SrCity *c, SrMesh *m);
 void sr_build_metro_tracks(const SrCity *c, SrMesh *m);
 /* Where the train between a metro edge's stations is at time t, from the timetable. */
 bool sr_metro_train_pos(const SrCity *c, int edge, int64_t t, SrVec3 *pos, SrVec3 *dir);
+/* The same with the stop: 0 no train, 1 moving (braking into and pulling out of stations),
+ * 2 standing at the station with its doors open. */
+int sr_metro_train_state(const SrCity *c, int edge, int64_t t, SrVec3 *pos, SrVec3 *dir);
+#define SR_TRAIN_DWELL_S 20
 int sr_build_trains(const SrCity *c, int64_t t, SrVec3 eye, SrMesh *out);
 
 /* Motion (sr_motion_mesh.c). */

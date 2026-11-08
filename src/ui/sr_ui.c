@@ -226,6 +226,19 @@ static void hud(SrUi *ui, const SrGame *g, const SrInput *in) {
   }
   /* crosshair */
   sr_ui_rect(ui, (float)ui->w / 2 - (float)s, (float)ui->h / 2 - (float)s, 2.0f * (float)s, 2.0f * (float)s, k_white);
+  /* a red edge on the side a hit came from (both sides when the source is unknown) */
+  float hdir;
+  bool hknown;
+  float hurt = sr_view_hurt_edge(g, &hdir, &hknown);
+  if (hurt > 0) {
+    float W = (float)ui->w, H = (float)ui->h, e = W * 0.06f;
+    SrColor red = {200, 10, 20, (uint8_t)(150.0f * hurt)};
+    bool front = hknown && fabsf(hdir) < 0.8f, back = hknown && fabsf(hdir) > 2.3f;
+    if (front) sr_ui_rect(ui, 0, 0, W, e, red);
+    if (back) sr_ui_rect(ui, 0, H - e, W, e, red);
+    if (!hknown || (!front && !back && hdir < 0)) sr_ui_rect(ui, 0, 0, e, H, red);
+    if (!hknown || (!front && !back && hdir > 0)) sr_ui_rect(ui, W - e, 0, e, H, red);
+  }
   /* context prompt with the interaction's icon */
   const char *label = sr_ui_context_label(g->ctx.kind);
   if (label[0] && touch) { /* on touch the label sits right above the interact button */

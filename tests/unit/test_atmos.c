@@ -688,7 +688,7 @@ static void test_props_collide_and_shops(void) {
   }
   SrMesh m;
   sr_mesh_init(&m);
-  sr_build_poi_fronts(c, &g->deltas, eye, open_t, &m);
+  sr_build_poi_fronts(c, &g->deltas, eye, open_t, 20, &m);
   SR_CHECK(m.nv >= 4);
   bool lit_front = false;
   for (int v = 0; v < m.nv; v++)
@@ -696,7 +696,7 @@ static void test_props_collide_and_shops(void) {
                               fabsf(m.v[v].z - (float)b->y1 / 100.0f) < 0.1f);
   SR_CHECK(lit_front);
   if (closed_t >= 0) {
-    sr_build_poi_fronts(c, &g->deltas, eye, closed_t, &m);
+    sr_build_poi_fronts(c, &g->deltas, eye, closed_t, 20, &m);
     bool still = false;
     for (int v = 0; v < m.nv; v++)
       still = still || (fabsf(m.v[v].x - eye.x) < 1.0f && fabsf(m.v[v].z - (float)b->y1 / 100.0f) < 0.1f);

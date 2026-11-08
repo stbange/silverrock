@@ -102,6 +102,21 @@ typedef struct SrMenu {
 #define SR_GLITCH_PER_MINUTE 1.0f /* configured glitch rate while over neural capacity */
 #define SR_GLITCH_TIME       1.5f
 
+/* First-person presentation, never saved: when things happened (game seconds) so the view model
+ * and the camera can animate them. */
+typedef struct SrViewFx {
+  double shot_t, reload_t, melee_t, throw_t, reach_t, hurt_t, land_t, shake_t;
+  float hurt_dir;       /* where the last hit came from, radians relative to the view (0 ahead, + right) */
+  bool hurt_known;      /* false: no direction (both edges flash) */
+  float land_v;         /* fall speed at the last landing, m/s */
+  float shake;          /* strength of the last shake 0..1 */
+  float recoil;         /* kick of the last shot */
+  int shots;            /* since the last reload */
+  float eye_y;          /* eye height easing toward the stance */
+  float bob;            /* metres walked on the ground: drives the head bob */
+  float look_x, look_y; /* last look input: sways the weapon */
+} SrViewFx;
+
 typedef struct SrGame {
   SrSettings settings;
   SrCity *city;
@@ -158,6 +173,7 @@ typedef struct SrGame {
   uint32_t cyber_offline; /* bitmask of installed implants down for the day (malfunction) */
   int64_t cyber_day;
   float speed; /* measured player speed, m/s */
+  SrViewFx fx; /* first-person presentation (not saved) */
   SrMenu menu;
   int menu_axis;
   /* the Matrix */
@@ -225,6 +241,10 @@ SrMissionResult sr_game_execute(SrGame *g, int32_t job, SrApproach a);
 SrResult sr_game_abandon(SrGame *g, int32_t job);
 int32_t sr_game_report(SrGame *g, int32_t job);
 void sr_game_fire(SrGame *g);
+/* Game seconds for presentation timers (steps / 60). */
+double sr_game_fx_now(const SrGame *g);
+/* Records damage taken (and its source) and explosions felt, for the view's flinch and shake. */
+void sr_game_fx_hurt(SrGame *g, float dmg, bool known, SrVec3 from, float blast);
 /* Uses the gadget bound to a quick slot (0..3); false if empty or none carried. */
 bool sr_game_use_quick(SrGame *g, int slot);
 void sr_game_flatline(SrGame *g);
