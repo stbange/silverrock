@@ -1485,6 +1485,49 @@ static void test_anim_shots(void) {
   sr_mesh_free(&st->ground);
   sr_mesh_free(&st->people);
   free(st);
+  /* faces up close: every style and expression on four skin tones */
+  st = (AnimStage *)calloc(1, sizeof *st);
+  sr_mesh_init(&st->ground);
+  sr_mesh_init(&st->people);
+  sr_mesh_box(&st->ground, sr_v3(-6, -0.05f, -6), sr_v3(6, 0, 6), (SrColor){60, 62, 70, 255}, SR_LAYER_SIDEWALK, 1.0f,
+              0);
+  for (int style = 0; style < 4; style++)
+    for (int e = 0; e < SR_EXPR_COUNT; e++) {
+      sr_mesh_clear(&st->people);
+      for (int k = 0; k < 4; k++) {
+        SrAppearance fa = sr_appearance_generate(300u + (uint64_t)k, SR_ROLE_WORKER, 0);
+        fa.face = (uint8_t)style;
+        fa.skin = (uint8_t)(k * 2);
+        fa.body = 1;
+        fa.cyber = 0;
+        fa.hair = (uint8_t)(4 + k);
+        SrAnimInput in;
+        memset(&in, 0, sizeof in);
+        in.key = 7000u + (uint64_t)k;
+        in.look = &fa;
+        in.role = SR_ROLE_WORKER;
+        in.pos = sr_v3(-0.75f + 0.5f * (float)k, 0, 0);
+        in.dir = sr_v3(0, 0, 1);
+        in.once_t0 = -1;
+        in.base = SR_CLIP_IDLE;
+        in.expr = (uint8_t)e;
+        SrSkel sk;
+        sr_anim_skel(&fa, &sk);
+        SrPose p0;
+        memset(&p0, 0, sizeof p0);
+        sr_anim_mesh(&st->people, &in, &sk, &p0, 0.0f);
+      }
+      int w, h;
+      uint8_t *rgb = anim_render(&g_app, st, sr_v3(0, 1.45f, 1.25f), 0.0f, 0.0f, &w, &h);
+      if (!rgb) continue;
+      char name[64];
+      snprintf(name, sizeof name, "face_s%d_%d", style, e);
+      png_or_ppm(dir, name, rgb, w, h);
+      free(rgb);
+    }
+  sr_mesh_free(&st->ground);
+  sr_mesh_free(&st->people);
+  free(st);
   /* the player's hands and weapon: idle, a shot, a reload, a swing, a throw and a reach */
   SrGame *g = g_app.game;
   static const AtmosView street = {"view", SR_D_COMMERCIAL, AV_STREET, 23, 0, SR_WX_DRIZZLE, 0};

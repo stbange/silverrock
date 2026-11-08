@@ -1078,6 +1078,39 @@ void sr_anim_pose(const SrAnimInput *in, const SrSkel *s, double now, float gait
   ground(s, out, gw);
 }
 
+/* ---- faces ------------------------------------------------------------------------------- */
+
+int sr_anim_face_style(const SrAppearance *a) { return a->face % 4; }
+
+static bool once_active(const SrAnimInput *in, int clip, double now) {
+  if (in->once != clip || in->once_t0 < 0) return false;
+  double ph = (now - in->once_t0) / sr_anim_clip_len(clip);
+  return ph >= 0 && ph < 1.0;
+}
+
+SrExpression sr_anim_expression(const SrAnimInput *in, double now) {
+  int b = in->base, u = in->upper;
+  if (in->once && sr_anim_clip_kind(in->once) == SR_CK_BASE_ONCE && in->once != SR_CLIP_GETUP) return SR_EXPR_CLOSED;
+  if (lying(b)) return SR_EXPR_CLOSED;
+  if (once_active(in, SR_CLIP_FLINCH, now) || once_active(in, SR_CLIP_STAGGER, now) ||
+      once_active(in, SR_CLIP_HEADSHOT, now) || b == SR_CLIP_STUNNED)
+    return SR_EXPR_PAIN;
+  if (u == SR_CLIP_FLEE_ARMS || b == SR_CLIP_COWER || b == SR_CLIP_SURRENDER) return SR_EXPR_FEAR;
+  if (once_active(in, SR_CLIP_RECOIL, now) || b == SR_CLIP_POINT) return SR_EXPR_SURPRISE;
+  /* a blink of a tenth of a second every three to six seconds, out of step between people */
+  double period = 3.0 + (double)(sr_mix64(in->key ^ 0xB11Cull) % 300u) / 100.0;
+  double ph = now / period + (double)(in->key % 997u) / 997.0;
+  bool blink = ph - floor(ph) < 0.1 / period;
+  if (b == SR_CLIP_TALK) return ((int64_t)(now * 7.0) + (int64_t)(in->key % 5u)) % 3 ? SR_EXPR_TALK : SR_EXPR_NEUTRAL;
+  if (blink) return SR_EXPR_CLOSED;
+  if (u == SR_CLIP_AIM || u == SR_CLIP_AIM_PISTOL || u == SR_CLIP_READY || b == SR_CLIP_CROUCH_AIM ||
+      b == SR_CLIP_PEEK || b == SR_CLIP_RESTRAINED || in->hunch > 0.3f)
+    return SR_EXPR_STERN;
+  if (in->role == SR_ROLE_GUARD || in->role == SR_ROLE_COP || in->role == SR_ROLE_GANG) return SR_EXPR_STERN;
+  if (b == SR_CLIP_DANCE) return SR_EXPR_CONTENT;
+  return SR_EXPR_NEUTRAL;
+}
+
 /* ---- mesh -------------------------------------------------------------------------------- */
 
 static SrColor shade(SrColor c, int pct) {
@@ -1234,8 +1267,19 @@ void sr_anim_mesh(SrMesh *m, const SrAnimInput *in, const SrSkel *s, const SrPos
   float bw = s->bw, w = s->leg_w;
   box(m, &b.pelvis, sr_v3(-bw - 0.02f, -0.1f, -0.13f), sr_v3(bw + 0.02f, 0.08f, 0.13f), legs, SR_LAYER_WHITE, 0);
   box(m, &b.chest, sr_v3(-bw - 0.04f, 0, -0.15f), sr_v3(bw + 0.04f, s->chest_h, 0.15f), outfit, SR_LAYER_WHITE, 0);
-  float hs = s->hs;
-  box(m, &b.head, sr_v3(-hs, 0, -hs), sr_v3(hs, 2 * hs, hs), sk, SR_LAYER_WHITE, 0);
+  /* the head: narrower than it is tall, a face on the front, a nose */
+  float hs = s->hs, hw = hs * 0.8f, hd = hs * 0.92f, hh = 2 * hs * 1.04f;
+  box(m, &b.head, sr_v3(-hw, 0, -hd), sr_v3(hw, hh, hd), sk, SR_LAYER_WHITE, 0);
+  {
+    int e = in->expr == SR_EXPR_AUTO ? (int)sr_anim_expression(in, in->face_t) : in->expr % SR_EXPR_COUNT;
+    SrAtlasCell fc = sr_atlas_cell(SR_LAYER_FACES, sr_anim_face_style(a) * SR_EXPR_COUNT + e);
+    float fz = hd + 0.002f;
+    sr_mesh_quad(m, xf_pt(&b.head, sr_v3(-hw, 0, fz)), xf_pt(&b.head, sr_v3(hw, 0, fz)),
+                 xf_pt(&b.head, sr_v3(hw, hh, fz)), xf_pt(&b.head, sr_v3(-hw, hh, fz)), fc.u0, fc.v1, fc.u1, fc.v0, sk,
+                 fc.layer, 0, 0);
+    box(m, &b.head, sr_v3(-0.014f, hh * 0.36f, hd), sr_v3(0.014f, hh * 0.56f, hd + 0.026f), shade(sk, 92),
+        SR_LAYER_WHITE, 0);
+  }
   for (int side = 0; side < 2; side++) {
     box(m, &b.thigh[side], sr_v3(-w, -s->thigh, -0.11f), sr_v3(w, 0, 0.11f), legs, SR_LAYER_WHITE, 0);
     box(m, &b.shin[side], sr_v3(-w * 0.85f, -s->shin, -0.095f), sr_v3(w * 0.85f, 0, 0.095f), legs, SR_LAYER_WHITE, 0);
@@ -1246,22 +1290,22 @@ void sr_anim_mesh(SrMesh *m, const SrAnimInput *in, const SrSkel *s, const SrPos
     box(m, &b.farm[side], sr_v3(-0.04f, -s->fa - s->hand, -0.045f), sr_v3(0.04f, -s->fa, 0.045f),
         a->cyber >= 4 ? sleeve : sk, arm_layer, 0);
   }
-  float top = 2 * hs;
+  float top = hh;
   int style = a->hair % 12;
   SrColor hc = hair[a->hair_color % 12];
   int hem = a->hair_color >= 6 ? 120 : 0;
   if (in->hood) {
-    box(m, &b.head, sr_v3(-hs - 0.03f, hs * 0.5f, -hs - 0.04f), sr_v3(hs + 0.03f, top + 0.04f, hs * 0.75f),
+    box(m, &b.head, sr_v3(-hw - 0.03f, hs * 0.5f, -hd - 0.04f), sr_v3(hw + 0.03f, top + 0.04f, hd * 0.75f),
         shade(outfit, 85), SR_LAYER_WHITE, 0);
   } else if (style < 4) { /* mohawk / crest */
-    box(m, &b.head, sr_v3(-0.03f, top, -hs), sr_v3(0.03f, top + 0.12f + 0.03f * (float)style, hs), hc, SR_LAYER_WHITE,
+    box(m, &b.head, sr_v3(-0.03f, top, -hd), sr_v3(0.03f, top + 0.12f + 0.03f * (float)style, hd), hc, SR_LAYER_WHITE,
         hem);
   } else if (style < 9) { /* cap of hair */
-    box(m, &b.head, sr_v3(-hs - 0.01f, top - 0.06f, -hs - 0.01f), sr_v3(hs + 0.01f, top + 0.03f, hs + 0.01f), hc,
+    box(m, &b.head, sr_v3(-hw - 0.01f, top - 0.06f, -hd - 0.01f), sr_v3(hw + 0.01f, top + 0.03f, hd + 0.01f), hc,
         SR_LAYER_WHITE, hem);
   }
   if (a->cyber) /* glowing optics, on the face */
-    box(m, &b.head, sr_v3(-hs * 0.8f, hs * 1.1f, hs), sr_v3(hs * 0.8f, hs * 1.35f, hs + 0.02f),
+    box(m, &b.head, sr_v3(-hw * 0.8f, hh * 0.55f, hd + 0.002f), sr_v3(hw * 0.8f, hh * 0.64f, hd + 0.02f),
         (SrColor){255, 40, 40, 255}, SR_LAYER_WHITE, 255);
   if (a->marker) { /* faction marker: halo, shoulder plates or mask by marker id */
     SrColor mk = sr_corp_color(a->marker * 5);
@@ -1365,6 +1409,9 @@ void sr_anim_character(SrAnimCache *c, const SrAnimInput *in, SrMesh *out) {
   bool fresh = true;
   SrAnimSlot *sl = c ? slot_for(c, in->key, &fresh) : NULL;
   double now = c ? c->now : 0.0;
+  SrAnimInput fin = *in; /* the face reads the time */
+  fin.face_t = now;
+  in = &fin;
   SrPose pose;
   if (!sl) {
     sr_anim_pose(in, &s, now, in->walk / stride, &pose);

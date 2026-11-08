@@ -8,6 +8,7 @@ phases of `improve-animation`. The strips are in `docs/screenshots/anim/`:
 - `street_*.gif`: four street scenes over four seconds.
 - `view_model.png`: the player's hands and weapons.
 - `firefight_flash.png`: a guard's shot in a dark room.
+- `faces.png`: the eight expressions in four styles on four skin tones.
 
 ## Before and after
 
@@ -24,6 +25,7 @@ phases of `improve-animation`. The strips are in `docs/screenshots/anim/`:
 | N9 Aerodynes don't fly | Boxes sliding along lanes | A weave across the lane with banking, a hover bob, pulsing thrusters, and landings on helipads within 200 m: descend, stand with the beacon on, lift off |
 | N10 No combat feedback | Guards unarmed, no reactions, flat-box deaths | Guards hold rifles or pistols; patrols pause and look around at waypoints; suspicion turns the head; searches raise the weapon; combat aims, strafes, and crouches and peeks from cover; hits flinch away from the shot, heavy hits stagger, headshots snap the head; deaths topple away from the shot and knockouts slump, knees first; surrender, restraint and flashbang poses; muzzle flashes, tracers every third round, and a flash that lights the room |
 | N11 The player has no body | A floating camera | Hands and a model for each weapon category; sway, bob, sprint and crouch offsets; recoil of the weapon and the view; muzzle flash, light and shells; reloads, swings, throws and reaches; head bob, landing dip, eased crouch, flinch with a red edge on the side of the hit, shake; `head_bob` and `camera_shake` settings |
+| Faces (added later) | Blank skin-coloured head cubes | A small face on every near head: low level brows, heavy lids, a nose and a thin mouth, in four styles (plain, stubble, scar, tattoo). Expressions follow what happens: fear in flight, pain when hit, closed eyes when down or asleep, a moving mouth when talking, surprise, a stern look for guards, police, gangers and anyone aiming. People blink. Heads are narrower, with a nose. The rest face is calm, never a grin. |
 | N12 The world snaps | Doors, shutters and trains switch in one frame | Doors swing over 0.3 s; shutters roll at opening and closing; trains brake into stations and stand with their doors open; ICE ripples, throbs and turns its eye toward the avatar |
 
 ## How it is built
@@ -39,7 +41,7 @@ phases of `improve-animation`. The strips are in `docs/screenshots/anim/`:
 
 ## Checks
 
-- **Unit tests:** 193 pass, including 14 in `tests/unit/test_anim.c` that cover every scenario of
+- **Unit tests:** 194 pass, including 15 in `tests/unit/test_anim.c` that cover every scenario of
   the change.
   - The pose digest of the keyframe clips is pinned. Gaits are left out because they use libm
     functions whose last bit can differ between compilers; their properties are tested instead.
@@ -48,7 +50,7 @@ phases of `improve-animation`. The strips are in `docs/screenshots/anim/`:
     in the downpour changes pose in at least half of the frame pairs.
   - In the firefight, a guard's flash brightens the dark room by about 29 levels.
 - **Budgets:**
-  - At most 292 triangles per near character, against a budget of 300.
+  - At most 306 triangles per near character with faces, against a budget of 320.
   - Near skeletons are capped at 24, 36 and 48 by detail level.
   - Headlight beams are capped at 8, 12 and 16.
   - Muzzle lights are capped at 4, 6 and 8 per frame.
@@ -69,5 +71,6 @@ phases of `improve-animation`. The strips are in `docs/screenshots/anim/`:
    reload is shown after a magazine's worth of shots or on the reload key, and never blocks firing.
 4. **Knocked-out guards never wake.** The game never calls the wake-up timer, so the get-up clip
    exists and is tested but is never seen in play.
-5. **Faces stay still.** At 480 × 270 a head is a few pixels across, so expression comes from head
-   motion: nods, glances and look-at.
+5. **Faces are small.** At 480 × 270 a head 5 m away is about ten pixels tall, so a face reads as
+   brows, eyes and mouth up close and fades to a skin tone further off. Expressions swap whole faces;
+   there is no lip sync.

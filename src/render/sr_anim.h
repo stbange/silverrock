@@ -138,6 +138,20 @@ typedef enum SrHandProp {
   SR_HP_COUNT
 } SrHandProp;
 
+/* Facial expressions (columns of the face atlas). Kept small and serious: brows, lids and mouth. */
+typedef enum SrExpression {
+  SR_EXPR_NEUTRAL,
+  SR_EXPR_STERN,
+  SR_EXPR_FEAR,
+  SR_EXPR_PAIN,
+  SR_EXPR_TALK,
+  SR_EXPR_SURPRISE,
+  SR_EXPR_CLOSED,
+  SR_EXPR_CONTENT,
+  SR_EXPR_COUNT,
+  SR_EXPR_AUTO = 255 /* chosen from the clips, the role and the time */
+} SrExpression;
+
 /* What the simulation says about one person this frame. */
 typedef struct SrAnimInput {
   uint64_t key;
@@ -157,6 +171,8 @@ typedef struct SrAnimInput {
   float hunch; /* 0..1: rain posture */
   bool hood;   /* hood up */
   float wind_x, wind_z;
+  uint8_t expr;  /* SrExpression; 0 (neutral) unless set; SR_EXPR_AUTO picks one */
+  double face_t; /* game seconds for blinking and talking (set by sr_anim_character) */
 } SrAnimInput;
 
 #define SR_ANIM_SLOTS 512
@@ -212,6 +228,13 @@ void sr_anim_character(SrAnimCache *c, const SrAnimInput *in, SrMesh *out);
 void sr_anim_cache_end(SrAnimCache *c);
 /* The pose drawn for a key last frame (NULL when absent). */
 const SrAnimSlot *sr_anim_cache_find(const SrAnimCache *c, uint64_t key);
+
+/* The expression a person shows: fear in flight and cover, pain when hit, a moving mouth when
+ * talking, closed eyes asleep or down, stern for guards, police and gangers and anyone aiming, a
+ * blink every few seconds, otherwise a calm neutral face. */
+SrExpression sr_anim_expression(const SrAnimInput *in, double now);
+/* Face style of an appearance: 0 plain, 1 stubble, 2 scar, 3 tattoo. */
+int sr_anim_face_style(const SrAppearance *a);
 
 /* Hand prop carried by an appearance (briefcase, bag, box, cigarette, phone or none). */
 int sr_anim_accessory(const SrAppearance *a);

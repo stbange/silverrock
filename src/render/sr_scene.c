@@ -344,6 +344,7 @@ void sr_build_character_walk(const SrAppearance *a, SrVec3 p, SrVec3 dir, float 
   in.base = SR_CLIP_IDLE;
   in.prop_r = (uint8_t)(umbrella ? SR_HP_UMBRELLA : sr_anim_accessory(a));
   in.upper = umbrella ? SR_CLIP_UMBRELLA : SR_CLIP_NONE;
+  in.expr = SR_EXPR_AUTO;
   sr_anim_character(NULL, &in, m);
 }
 
@@ -417,6 +418,7 @@ void sr_agent_anim(const SrAgent *a, const SrCrowdCtx *x, SrAnimInput *in) {
   in->wind_x = x->wind.x;
   in->wind_z = x->wind.z;
   in->once_t0 = -1;
+  in->expr = SR_EXPR_AUTO;
   bool standing = a->vel <= 0.3f;
   int act = a->activity;
   in->base = (uint8_t)(standing ? act_clip(act) : SR_CLIP_WALK);

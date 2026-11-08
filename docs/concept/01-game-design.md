@@ -856,7 +856,9 @@ role and a per-person seed. Standing citizens are never frozen: they take up wha
 stalls, vending machines, crossings, club queues, barrel fires), smoke, phone, lean, window-shop and talk in
 small groups. Rain changes how they move (umbrellas held into the wind, hoods, hunched hurrying, splashes), and
 so do fear (a panicked run, cowering), curiosity (pointing, filming) and authority (officers on a beat, weapons
-readied at high Heat). Guards show their alert state in their stance, flinch at hits and fall away from the shot.
+readied at high Heat). Guards show their alert state in their stance, flinch at hits and fall away from the shot. Faces are small and
+serious (low level brows, heavy lids, a thin mouth), and change with what happens: fear, pain, a stern look, closed
+eyes, a moving mouth when talking; people blink, and nobody grins.
 The player sees their own hands and weapon, with recoil, a muzzle flash that lights the room, reloads and reaches.
 
 ### 16.4 The Matrix look

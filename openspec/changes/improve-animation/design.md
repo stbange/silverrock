@@ -31,7 +31,7 @@ keyframes.
 **Non-Goals**
 
 - Skinned meshes, inverse kinematics on uneven ground (the ground is flat), and ragdoll physics.
-- Faces that animate (the faces are 8 × 8 texels).
+- Faces with lip sync or blended expressions (D17 swaps whole expressions on a small texture).
 - Sound. There is no audio system yet. The foot-plant and shot events this change produces are
   where sound will hook in later.
 - Third-person play and cutscenes.
@@ -314,7 +314,7 @@ already avoids.
 | Item | Low (phone) | High (desktop) |
 |---|---|---|
 | Near skeleton characters | 24 | 48 |
-| Triangles per near character | ≤ 300 | ≤ 300 |
+| Triangles per near character | ≤ 320 | ≤ 320 |
 | Pose evaluation per frame | ≤ 0.4 ms | ≤ 0.8 ms (reference desktop, measured by the benchmark route) |
 | Headlight cones | 8 | 16 |
 | Muzzle and tracer lights | 4 | 8 (6 at medium) |
@@ -361,6 +361,32 @@ The automated budget test from `improve-city-atmosphere` (D13 there) gains these
   - In the firefight scene, a guard's muzzle flash lights the wall behind it.
 - **Benchmark.** The atmosphere benchmark route gains the busy crossing and the firefight. It is
   run on high and low.
+
+### D17 — Faces (added after the first review)
+
+- **A face on the front of the head.** A 32 × 32 cell of a face atlas (two layers, `SR_LAYER_FACES`),
+  drawn on white and multiplied by the skin colour, so one atlas serves every skin tone. Four styles
+  come from `appearance.face`: plain, stubble, a scar across the eye, and line tattoos under the eye.
+- **Serious by construction.** The brows are low, level and heavy, the lids are dark over a small
+  iris, and the white barely shows. There is a shadow under the brow ridge, beside the nose and under
+  the cheekbones, and the mouth is a thin level line. Expressions move only the brows (one texel),
+  the lids and the mouth. No expression grins: the content face lifts the corners by a single texel.
+- **Head shape.** The head is narrower than it is tall (0.8 × 1.04 of the old cube), with a small
+  nose box, so it reads less like a die.
+- **Expressions** (`SrExpression`): neutral, stern, fear, pain, talking, surprise, closed and
+  content. `sr_anim_expression` picks one:
+  - Closed eyes for falls, sleep and lying.
+  - Pain for flinches, staggers, headshots and stuns.
+  - Fear in flight, cowering and surrender.
+  - Surprise for the startled recoil and pointing.
+  - The mouth opening and closing for the speaker of a group.
+  - Stern for aiming, readiness, peeking, restraint, hunching in the rain, and for guards, police
+    and gangers.
+  - Content for dancers.
+  - Otherwise neutral, with a blink of a tenth of a second every three to six seconds, out of step
+    by key.
+- **At a distance** the face is a few pixels across and reads as brows, eyes and mouth. The far
+  crowd keeps its plain heads.
 
 ## Risks / Trade-offs
 

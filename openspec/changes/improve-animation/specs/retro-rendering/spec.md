@@ -63,6 +63,24 @@ they hold umbrellas, walk and splash, and carried accessories SHALL show in thei
 - **WHEN** a citizen whose appearance has a briefcase, bag, takeaway box, cigarette or phone is drawn within 12 m
 - **THEN** the item is held in the hand and moves with the arm, and a cigarette tip or phone screen glows
 
+### Requirement: Faces
+Near characters SHALL show a small procedural face (eyes, brows, nose, mouth) whose expression follows what they are
+doing and what happens to them. Faces SHALL stay serious: a calm neutral face at rest, small eyes, level brows and a
+straight mouth, never a grin.
+
+#### Scenario: Faces show feeling
+- **WHEN** a person flees or cowers, is hit, is down or asleep, talks, points at an event, or aims a weapon
+- **THEN** the face shows fear, pain, closed eyes, a moving mouth, surprise or a stern look, respectively
+
+#### Scenario: Faces stay serious
+- **WHEN** a citizen stands idle
+- **THEN** the face is neutral, with level brows and a closed, level mouth; guards, police and gang members look
+  stern; and no expression lifts the mouth corners by more than one texel
+
+#### Scenario: People blink
+- **WHEN** a standing person is watched for a minute
+- **THEN** the eyes close briefly about every three to six seconds, out of step with the people around them
+
 ### Requirement: Vehicle animation
 Cars SHALL show turning wheels, suspension, fading brake lights, indicators before turns and headlight beams, and
 aerodynes SHALL bank into turns and hover.

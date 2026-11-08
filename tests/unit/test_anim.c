@@ -1401,7 +1401,7 @@ static void test_budget_and_saves(void) {
     sr_mesh_free(&m);
   }
   printf("  triangles per near character: at most %d\n", worst);
-  SR_CHECK(worst <= 300);
+  SR_CHECK(worst <= 320);
   /* a peak crowd at every detail level: near skeletons, beams and lights within the budget */
   SrGame *g = sr_game_create();
   sr_game_new(g, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Budget");
@@ -1470,6 +1470,133 @@ static void test_budget_and_saves(void) {
   sr_game_destroy(g);
 }
 
+/* ---- faces ------------------------------------------------------------------------------ */
+
+static int face_px(const uint8_t *px, int style, int expr, int x, int y) {
+  int cell = style * SR_EXPR_COUNT + expr, c = cell % 16;
+  int ox = (c % 4) * 32, oy = (c / 4) * 32;
+  return px[((oy + y) * SR_TEX_SIZE + ox + x) * 4];
+}
+
+static void test_faces(void) {
+  SR_SPEC("retro-rendering", "Faces show feeling");
+  SR_SPEC("retro-rendering", "Faces stay serious");
+  SR_SPEC("retro-rendering", "People blink");
+  SrAppearance a = look_of(1, SR_ROLE_WORKER);
+  /* the expression follows the clip, the hit and the role */
+  SrAnimInput in = input_for(&a, SR_CLIP_IDLE);
+  in.key = 4242;
+  struct {
+    int base, upper, once;
+    double t0;
+    int want;
+  } cases[] = {
+      {SR_CLIP_IDLE, SR_CLIP_FLEE_ARMS, 0, -1, SR_EXPR_FEAR},
+      {SR_CLIP_COWER, 0, 0, -1, SR_EXPR_FEAR},
+      {SR_CLIP_SURRENDER, 0, 0, -1, SR_EXPR_FEAR},
+      {SR_CLIP_IDLE, 0, SR_CLIP_FLINCH, 9.9, SR_EXPR_PAIN},
+      {SR_CLIP_STUNNED, 0, 0, -1, SR_EXPR_PAIN},
+      {SR_CLIP_DIE_BACK, 0, SR_CLIP_DIE_BACK, 9.0, SR_EXPR_CLOSED},
+      {SR_CLIP_SLEEP, 0, 0, -1, SR_EXPR_CLOSED},
+      {SR_CLIP_POINT, 0, 0, -1, SR_EXPR_SURPRISE},
+      {SR_CLIP_IDLE, 0, SR_CLIP_RECOIL, 9.95, SR_EXPR_SURPRISE},
+      {SR_CLIP_IDLE, SR_CLIP_AIM, 0, -1, SR_EXPR_STERN},
+      {SR_CLIP_PEEK, 0, 0, -1, SR_EXPR_STERN},
+      {SR_CLIP_DANCE, 0, 0, -1, SR_EXPR_CONTENT},
+  };
+  for (int i = 0; i < (int)SR_ARRAY_LEN(cases); i++) {
+    in.base = (uint8_t)cases[i].base;
+    in.upper = (uint8_t)cases[i].upper;
+    in.once = (uint8_t)cases[i].once;
+    in.once_t0 = cases[i].t0;
+    /* at a moment when this person is not blinking */
+    double t = 10.0;
+    for (int k = 0; k < 40 && sr_anim_expression(&in, t) == SR_EXPR_CLOSED && cases[i].want != SR_EXPR_CLOSED; k++)
+      t += 0.05;
+    SR_CHECK_EQ(sr_anim_expression(&in, t), cases[i].want);
+  }
+  /* talking: the mouth opens and closes */
+  in = input_for(&a, SR_CLIP_TALK);
+  int open = 0, shut = 0;
+  for (int k = 0; k < 60; k++) {
+    SrExpression e = sr_anim_expression(&in, 5.0 + k / 30.0);
+    open += e == SR_EXPR_TALK;
+    shut += e == SR_EXPR_NEUTRAL;
+  }
+  SR_CHECK(open > 10 && shut > 10);
+  /* the mesh carries the face cell of the style and expression on the head's front */
+  in = input_for(&a, SR_CLIP_IDLE);
+  in.expr = SR_EXPR_STERN;
+  SrSkel sk;
+  sr_anim_skel(&a, &sk);
+  SrPose p;
+  sr_anim_pose(&in, &sk, 1.0, 0, &p);
+  SrMesh m;
+  sr_mesh_init(&m);
+  sr_anim_mesh(&m, &in, &sk, &p, 0);
+  SrAtlasCell fc = sr_atlas_cell(SR_LAYER_FACES, sr_anim_face_style(&a) * SR_EXPR_COUNT + SR_EXPR_STERN);
+  int face_verts = 0;
+  for (int v = 0; v < m.nv; v++)
+    face_verts += m.v[v].layer == fc.layer && (fabsf(m.v[v].u - fc.u0) < 1e-5f || fabsf(m.v[v].u - fc.u1) < 1e-5f);
+  SR_CHECK_EQ(face_verts, 4);
+  sr_mesh_free(&m);
+  /* serious faces: civilians rest neutral, guards, police and gangers stern */
+  for (int role = 0; role < SR_ROLE_COUNT; role++) {
+    SrAppearance r = look_of(0, role);
+    SrAnimInput ri = input_for(&r, SR_CLIP_IDLE);
+    ri.role = (uint8_t)role;
+    double t = 20.0;
+    while (sr_anim_expression(&ri, t) == SR_EXPR_CLOSED) t += 0.05;
+    bool hard = role == SR_ROLE_GUARD || role == SR_ROLE_COP || role == SR_ROLE_GANG;
+    SR_CHECK_EQ(sr_anim_expression(&ri, t), hard ? SR_EXPR_STERN : SR_EXPR_NEUTRAL);
+  }
+  /* the atlas: level brows and a straight mouth at rest; no grin anywhere; small eyes */
+  uint8_t *px = (uint8_t *)malloc((size_t)SR_TEX_SIZE * SR_TEX_SIZE * 4);
+  for (int layer = 0; layer < 2; layer++) {
+    sr_texgen_layer(SR_LAYER_FACES + layer, px);
+    for (int c = 0; c < 16; c++) {
+      int cell = layer * 16 + c, style = cell / SR_EXPR_COUNT, e = cell % SR_EXPR_COUNT;
+      if (e == SR_EXPR_NEUTRAL) {
+        SR_CHECK_EQ(face_px(px, style, e, 7, 10), face_px(px, style, e, 12, 10)); /* level brow */
+        SR_CHECK(face_px(px, style, e, 7, 10) < 90);
+        for (int x = 12; x <= 19; x++) SR_CHECK(face_px(px, style, e, x, 24) < 110); /* a closed, level mouth */
+      }
+      /* mouth corners never rise more than one texel above the line, and only in the content face */
+      int lifted = face_px(px, style, e, 11, 23) < 150 || face_px(px, style, e, 20, 23) < 150;
+      SR_CHECK(!lifted);
+      int lift12 = face_px(px, style, e, 12, 23) < 150;
+      SR_CHECK(!lift12 || e == SR_EXPR_CONTENT);
+      /* eyes: dark texels in an eye's box span at most three rows */
+      int rows = 0;
+      for (int y = 11; y <= 15; y++) { /* below the brow, above a tattoo */
+        bool dark = false;
+        for (int x = 9; x <= 10; x++) dark |= face_px(px, style, e, x, y) < 130;
+        rows += dark;
+      }
+      SR_CHECK(rows <= 3);
+    }
+  }
+  free(px);
+  /* blinking: about every three to six seconds, out of step between people */
+  in = input_for(&a, SR_CLIP_IDLE);
+  int closed = 0, blinks = 0, together = 0;
+  bool was = false;
+  SrAnimInput other = in;
+  other.key = in.key + 1;
+  for (int k = 0; k < 60 * 60; k++) {
+    double t = 100.0 + k / 60.0;
+    bool c = sr_anim_expression(&in, t) == SR_EXPR_CLOSED;
+    closed += c;
+    blinks += c && !was;
+    was = c;
+    together += c && sr_anim_expression(&other, t) == SR_EXPR_CLOSED;
+  }
+  SR_CHECK(blinks >= 9 && blinks <= 21);
+  SR_CHECK(closed > 0 && closed < 60 * 60 / 15);
+  SR_CHECK(together < closed);
+  SR_CHECK(sr_anim_face_style(&a) >= 0 && sr_anim_face_style(&a) < 4);
+}
+
 void suite_anim(void) {
   g_game = sr_game_create();
   sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Anim");
@@ -1487,5 +1614,6 @@ void suite_anim(void) {
   SR_RUN(test_camera_motion);
   SR_RUN(test_world_motion);
   SR_RUN(test_budget_and_saves);
+  SR_RUN(test_faces);
   sr_game_destroy(g_game);
 }

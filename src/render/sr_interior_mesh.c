@@ -297,6 +297,7 @@ void sr_guard_anim(const SrSite *s, const SrGuard *g, const SrAppearance *a, dou
   in->speed = g->speed;
   in->walk = g->walk;
   in->once_t0 = -1;
+  in->expr = SR_EXPR_AUTO;
   bool rifle = g->id % 3u != 0;
   in->prop_r = (uint8_t)(rifle ? SR_HP_RIFLE : SR_HP_PISTOL);
   float yaw = atan2f(in->dir.x, in->dir.z), rel = sr_wrap_angle(g->hit_dir - yaw);

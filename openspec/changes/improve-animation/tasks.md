@@ -88,3 +88,10 @@ deltas, and "D1"…"D16" refer to design decisions.
 - [x] 10.4 After strips and `docs/reviews/animation-<date>-after.md` against N1–N12; concept §16.3 and §19; README and roadmap
 - [ ] 10.5 Manual look on desktop and phone (a busy crossing, rain under an awning, a firefight, driving traffic, a landing aerodyne); record in `tests/manual-verification.md`
 - [x] 10.6 Coverage at 95 % or above; traceability covers every scenario of this change
+
+## 11. Faces (about 2 days, added after the first review)
+
+- [x] 11.1 Face atlas in two texture layers: 4 styles (plain, stubble, scar, tattoo) × 8 expressions, drawn on white and multiplied by the skin colour; serious proportions: low level brows, heavy lids, small irises, a nose shadow, a thin mouth (D17)
+- [x] 11.2 Narrower, taller heads with a nose; the face quad on the head's front; hair, hood, optics and masks fitted to the new head
+- [x] 11.3 Expression choice from clips, hits, role and time: fear, pain, closed eyes, talking mouth, surprise, stern, content; blinking every three to six seconds (spec: "Faces show feeling", "Faces stay serious", "People blink")
+- [x] 11.4 Close-up face strips in the filmstrip test; tests on the atlas and the choice; budget 320 triangles per near character
