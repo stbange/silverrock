@@ -61,7 +61,7 @@ Joint angles:
 | Hip and shoulder | Pitch and roll |
 | Knee and elbow | Pitch only |
 
-A pose is 22 floats (`SrPose`). Proportions come from the appearance, as they do today:
+A pose is 26 floats (`SrPose`): 25 joint channels, including a root pitch, roll and height used for falls and lying poses, plus one channel for the glow of a held cigarette or phone. Proportions come from the appearance, as they do today:
 `tall` and `bw` scale pivots and boxes, so body types differ in limb length as well as width.
 
 Hair, markers, optics and hats attach to the head. Shoulder plates attach to the chest. Hand
@@ -89,15 +89,15 @@ arm swing, bounce, lean and tempo by up to ±15 %. Role adds posture: guards and
 upright, Barrens residents stoop, suits walk stiffer, and kids bounce. Mood adds lean: rain hunches
 the shoulders, fear hurries the step.
 
-About 40 clips are expected, 2–4 KB of tables in all.
+There are 52 clips, a few kilobytes of tables in all. Standing clips are put on the ground automatically: the pelvis drops until the lower ankle touches the floor, so crouching, sitting and kneeling need no hand-tuned heights.
 
 ### D3 — Locomotion, turns and starts (N2, N3)
 
 - **Speed picks the gait.** Below 0.3 m/s the person stands. Then walk, hurry above 1.7 m/s, run
   above 2.6 m/s. Neighbouring gaits blend by speed, so a person who speeds up changes gait
   smoothly.
-- **Feet plant.** A foot on the ground moves backward at the ground speed within 10 % (tested).
-- **Hips move.** They bob twice per cycle and sway sideways once.
+- **Feet plant.** Each foot follows a planned path (flat on the ground in stance, an arc in swing), and a two-bone solve in the side plane finds the hip and knee. A foot on the ground moves backward at the ground speed within 10 % (tested; in practice it stays put).
+- **Hips move.** Walking rides a smooth curve that falls just after each footfall, kept low enough for both legs to reach; running rides as high as the legs allow, with a flight phase.
 - **Turns are smooth.** The rendered heading follows the sim direction at up to 360°/s (540°/s
   when running), and the body leans into the turn by up to 8°.
 - **Starts and stops take time.** The sim accelerates agents to cruise speed over about 0.4 s
@@ -144,7 +144,8 @@ already avoids.
 - **Groups.** Two or three agents who stop within 2 m may form a group, from the key of the first.
   They face each other and take turns gesturing: one speaks while the others nod.
 - **Activities last.** Each takes 6–40 s, then the agent walks on. The sim keeps the activity id
-  and timer. The renderer picks the clip.
+  and timer. The renderer picks the clip. The activity is chosen once the agent has come to rest, so
+  the props within reach are the ones it actually stands by.
 - **Districts weigh the choices.** The Spire has fewer smokers and more phones. The Barrens have
   sleepers and beggars. Entertainment has dancers. The Docks and Industrial districts have workers
   on a smoke break in overalls.
@@ -212,7 +213,7 @@ already avoids.
 ### D10 — The first-person body (N11)
 
 - **View model.**
-  - Drawn after the world in its own pass, with a depth range of [0, 0.05], so it never clips into
+  - Drawn after the world in its own pass over a cleared depth buffer, so it never clips into
     walls. Lit by the same lights at the camera position.
   - One model for each weapon category: pistol, SMG, shotgun, rifle, sniper, heavy, melee blade,
     melee blunt, taser and unarmed. Each is a few boxes in the weapon's tint, held by two
@@ -226,15 +227,16 @@ already avoids.
   - With no weapon equipped, the hands appear only for interactions.
 - **Muzzle flash.**
   - A flash sprite at the muzzle.
-  - A point light with the weapon's colour for two frames, so walls and faces light up.
+  - A warm point light for about two frames, 1.5 m ahead of the muzzle, so the room lights up and
+    the hands do not blow out.
   - Shell sprites for weapons that eject.
 - **Camera.**
   - Head bob: vertical 3 cm and lateral 1.5 cm at walk, double at sprint, half in a crouch. It
     can be turned off.
   - Landing dip proportional to the fall speed, up to 8 cm.
   - Crouch eases over 0.15 s.
-  - Recoil pitch kick from the weapon stats, partly recovered. Smartlink and focus reduce it, as
-    they reduce spread today.
+  - Recoil pitch kick by weapon category, fully recovered within 0.4 s. The kick is in the view
+    only: the aim the game shoots from does not move.
   - Damage flinch: 1.5° away from the source, and a red edge on the side of the hit.
   - Shake for explosions and heavy landings, scaled by the camera-shake setting (off, low, full).
 - **Settings.** `head_bob` (default on) and `camera_shake` (default full), saved in the settings
@@ -279,8 +281,8 @@ already avoids.
 
 - **Doors.** Interior doors swing about the hinge over 0.3 s from `sr_site_door_open`. The
   renderer keeps the angle per door in the interior cache.
-- **Shutters.** Shopfront shutters roll up over 3 s in the half hour after opening and down before
-  closing (from `sr_poi_open`), at most two moving per frame near the camera.
+- **Shutters.** Shopfront shutters roll up at opening and down at closing over about three real
+  seconds (three seconds times the game's time rate), at most two moving per frame near the camera.
 - **Metro.** Trains brake into stations on the timetable, stop for 20 s with their doors slid
   open, and pull away. The train position function gains the dwell.
 - **Matrix.** ICE spins and pulses by type: watchers turn their eye toward the avatar, barriers
@@ -298,23 +300,24 @@ already avoids.
 
   | Distance | What shows |
   |---|---|
-  | ≤ 12 m | Accessories, hand props, look-at |
-  | ≤ 28 m | Full near skeleton |
+  | ≤ 4 m | Heads turn to look at the player |
+  | ≤ 15 m | Footfall splashes |
+  | ≤ 28 m | Full near skeleton with accessories and hand props |
   | Beyond 28 m | Instanced |
 
 - **Street detail scales the near distances.** At street detail 0, the near skeleton reaches only
-  16 m, and splashes and activities beyond 12 m are dropped. Sit, dance and crouch still show at
-  every distance.
+  16 m and footfall splashes are off; the near skeletons are capped at 24, 36 and 48 by detail
+  level. Sit, crouch and lying still show at every distance through the instanced clip codes.
 
 ### D14 — Budgets
 
 | Item | Low (phone) | High (desktop) |
 |---|---|---|
 | Near skeleton characters | 24 | 48 |
-| Triangles per near character | ≤ 220 | ≤ 300 |
+| Triangles per near character | ≤ 300 | ≤ 300 |
 | Pose evaluation per frame | ≤ 0.4 ms | ≤ 0.8 ms (reference desktop, measured by the benchmark route) |
 | Headlight cones | 8 | 16 |
-| Muzzle and tracer lights | 4 | 8 |
+| Muzzle and tracer lights | 4 | 8 (6 at medium) |
 | View model | ≤ 400 triangles | ≤ 400 triangles |
 
 The automated budget test from `improve-city-atmosphere` (D13 there) gains these rows.
@@ -337,7 +340,9 @@ The automated budget test from `improve-city-atmosphere` (D13 there) gains these
   - Joint angles stay in their limits (knees never bend forward, elbows never backward).
   - Foot sliding is within 10 % for every gait and body type.
   - Turns respect the turn rate.
-  - A pinned digest of sampled poses for all clips catches unintended changes.
+  - A pinned digest of sampled poses for all keyframe clips catches unintended changes. Gaits are
+    left out because they use libm functions whose last bit can differ between compilers; their
+    properties are tested instead.
   - The activity mix meets D5.
   - Car turns end in the cross lane.
   - Recoil recovers.
@@ -351,8 +356,8 @@ The automated budget test from `improve-city-atmosphere` (D13 there) gains these
   - `tools/anim_sheet.py` assembles contact sheets and animated GIFs into `docs/screenshots/anim/`.
     The after review looks at them.
 - **Image metrics:**
-  - Frame-to-frame motion energy on the people in the awning scene must exceed a threshold, so
-    nobody stays frozen.
+  - In the rain scene, every standing person within 20 m changes pose in at least half of the
+    frame pairs, read from the animation cache while the strip renders.
   - In the firefight scene, a guard's muzzle flash lights the wall behind it.
 - **Benchmark.** The atmosphere benchmark route gains the busy crossing and the firefight. It is
   run on high and low.

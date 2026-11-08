@@ -1518,6 +1518,141 @@ static void test_anim_shots(void) {
   }
 }
 
+/* Street filmstrips (always run for the metrics; frames written when SR_ANIM_SHOTS is set):
+ * a busy crossing, people under shelter in a downpour, a crowd fleeing gunfire, a junction with
+ * traffic, and a firefight inside a site. */
+typedef struct Mover {
+  uint64_t key;
+  SrPose last;
+  int pairs, moved;
+} Mover;
+
+static void anim_film(SrApp *a, const char *dir, const char *name, int frames, Mover *mv, int *nmv) {
+  SrGame *g = a->game;
+  for (int k = 0; k < frames; k++) {
+    if (k == 4 && strcmp(name, "flee") == 0) /* shots fired in the middle of the street */
+      sr_crowd_gunfire(&g->crowd, g->city, g->player.pos, 40.0f, NULL, sr_game_time(g));
+    int w, h;
+    uint8_t *rgb = render_internal(a, &w, &h);
+    if (!rgb) continue;
+    if (dir) {
+      char n[96];
+      snprintf(n, sizeof n, "street_%s_%d", name, k);
+      png_or_ppm(dir, n, rgb, w, h);
+    }
+    free(rgb);
+    if (!mv) continue;
+    for (int i = 0; i < g->crowd.count; i++) { /* standing people near the camera: does their pose change? */
+      const SrAgent *ag = &g->crowd.agents[i];
+      float dx = ag->pos.x - g->player.pos.x, dz = ag->pos.z - g->player.pos.z;
+      if (dx * dx + dz * dz > 20.0f * 20.0f || ag->vel > 0.0f) continue;
+      const SrAnimSlot *sl = sr_anim_cache_find(&a->scene.anim, ag->key);
+      if (!sl) continue;
+      int m = 0;
+      while (m < *nmv && mv[m].key != ag->key) m++;
+      if (m == *nmv) {
+        if (*nmv >= 64) continue;
+        mv[m].key = ag->key;
+        mv[m].pairs = mv[m].moved = 0;
+        mv[m].last = sl->out;
+        (*nmv)++;
+        continue;
+      }
+      float d = 0;
+      for (int j = 0; j < SR_J_COUNT; j++) d = fmaxf(d, fabsf(sl->out.j[j] - mv[m].last.j[j]));
+      mv[m].pairs++;
+      mv[m].moved += d > 0.002f;
+      mv[m].last = sl->out;
+    }
+  }
+}
+
+static void test_anim_street(void) {
+  SR_SPEC("retro-rendering", "Nobody stands frozen");
+  SR_SPEC("combat", "Enemy fire can be traced");
+  const char *dir = getenv("SR_ANIM_SHOTS");
+  atmos_setup(&g_app, 0x5EEDC0DEull);
+  SrGame *g = g_app.game;
+  g->crowd_enabled = true;
+  static const struct {
+    const char *name;
+    int district, weather;
+    float yaw_off;
+  } scenes[4] = {{"crossing", SR_D_COMMERCIAL, SR_WX_DRIZZLE, 0.0f},
+                 {"shelter", SR_D_RESIDENTIAL, SR_WX_DOWNPOUR, 0.0f},
+                 {"flee", SR_D_ENTERTAINMENT, SR_WX_DRIZZLE, 0.0f},
+                 {"junction", SR_D_COMMERCIAL, SR_WX_FOG, 0.35f}};
+  int frozen_checked = 0;
+  for (int sc = 0; sc < 4; sc++) {
+    AtmosView v = {scenes[sc].name, scenes[sc].district, AV_STREET, 22, 0, scenes[sc].weather, 0};
+    if (!atmos_place(g, &v)) continue;
+    g->player.yaw += scenes[sc].yaw_off;
+    g->player.pitch = 0.0f;
+    if (sc == 3) { /* on the corner of the intersection, looking across it */
+      g->player.pos.x -= 18.0f;
+      g->player.pos.z -= 1.0f;
+    }
+    g->force_weather = (int8_t)v.weather;
+    sr_clock_set_seconds(&g->clock, 2 * 86400 + 22 * 3600);
+    g->last_minute = sr_game_time(g) / 60;
+    sr_crowd_init(&g->crowd);
+    g_app.fixed_frame_dt = 0.125; /* eight frames a second of game time */
+    g_app.loop.acc = 0;
+    for (int i = 0; i < 40; i++) sr_app_iterate(&g_app); /* the crowd gathers, people stop and shelter */
+    Mover *mv = (Mover *)calloc(64, sizeof *mv);
+    int nmv = 0;
+    anim_film(&g_app, dir, scenes[sc].name, 32, sc == 1 ? mv : NULL, &nmv);
+    if (sc == 1) {
+      int still = 0;
+      for (int m = 0; m < nmv; m++) {
+        if (mv[m].pairs < 8) continue;
+        frozen_checked++;
+        still += mv[m].moved * 2 < mv[m].pairs;
+      }
+      printf("  shelter: %d people watched, %d frozen\n", frozen_checked, still);
+      SR_CHECK_EQ(still, 0);
+    }
+    free(mv);
+  }
+  SR_CHECK(frozen_checked > 0);
+  g->force_weather = -1;
+  g->crowd_enabled = false;
+  /* a firefight: a guard's shot lights the room behind it */
+  int site = -1;
+  for (int b = 0; b < g->city->building_count && site < 0; b++)
+    if (g->city->buildings[b].flags & SR_BF_MISSION) site = b;
+  sr_game_leave(g);
+  g_app.fixed_frame_dt = 0.0001;
+  if (site >= 0 && sr_game_enter(g, site, SR_ENTRY_FRONT) == SR_OK && g->site.guard_count > 0) {
+    SrGuard *gd = &g->site.guards[0];
+    g->player.pos = sr_v3(gd->e.pos.x, g->player.pos.y, gd->e.pos.z + 3.0f);
+    g->player.yaw = 0.0f;
+    g->player.pitch = 0.0f;
+    gd->e.yaw = SR_PI;
+    for (int i = 0; i < g->site.guard_count; i++) g->site.guards[i].e.alert = SR_ALERT_COMBAT;
+    g->site.lights_off = true; /* dark: the flash has to show */
+    int w, h;
+    gd->shot_time = 0;
+    uint8_t *dark = render_internal(&g_app, &w, &h);
+    gd->shot_time = g->site.time > 0 ? g->site.time : 0.001f;
+    g->site.time = gd->shot_time;
+    gd->shot_tracer = true;
+    uint8_t *lit = render_internal(&g_app, &w, &h);
+    if (dark && lit) {
+      double gain = image_mean(lit, w * h) - image_mean(dark, w * h);
+      printf("  firefight: the muzzle flash brightens the frame by %.2f levels\n", gain);
+      SR_CHECK(gain > 0.5);
+      if (dir) {
+        png_or_ppm(dir, "street_firefight_0", dark, w, h);
+        png_or_ppm(dir, "street_firefight_1", lit, w, h);
+      }
+    }
+    free(dark);
+    free(lit);
+    sr_game_leave(g);
+  }
+}
+
 void suite_platform(void) {
   snprintf(g_root, sizeof g_root, "%s/sr_platform_test_%d/", SDL_GetHint("TMPDIR") ? SDL_GetHint("TMPDIR") : "/tmp", 1);
   SDL_SetHint("SR_STORAGE_ROOT", g_root);
@@ -1543,6 +1678,7 @@ void suite_platform(void) {
   SR_RUN(test_atmosphere_gloom);
   SR_RUN(test_atmosphere_weather);
   SR_RUN(test_anim_shots);
+  SR_RUN(test_anim_street);
   SR_RUN(test_letterbox_window);
   SR_RUN(test_focus_and_autosave);
   SR_RUN(test_settings_persist);

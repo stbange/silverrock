@@ -1018,6 +1018,12 @@ static void build_site_frame(SrSceneCache *s, const SrGame *g, SrFrame *f, SrVie
   f->fog_end = 45.0f;
   f->wetness = 0;
   f->nlights = sr_site_collect_lights(site, f->lights, SR_MAX_FRAME_LIGHTS);
+  /* enemy muzzle flashes and the player's own, before the draws pick their lights */
+  sr_mesh_clear(&s->crowd_fx);
+  static const int k_flash[3] = {4, 6, 8}; /* muzzle lights a frame may add */
+  f->nlights =
+      sr_build_enemy_fire(site, (double)site->time, g->player.pos, g->player.pos, &s->crowd_fx, f->lights, f->nlights,
+                          SR_MIN(SR_MAX_FRAME_LIGHTS, f->nlights + k_flash[SR_CLAMP(s->street_detail, 0, 2)]));
   if (!g->dive.active) muzzle_light(s, g, vc, f);
   for (int r = 0; r < rooms; r++) add_draw(f, &s->rooms[r], SR_PASS_WORLD, sr_site_room_center(site, r));
   sr_build_site_dynamic(site, &g->deltas, (float)g->steps / 60.0f, &s->site_dyn);
@@ -1028,9 +1034,6 @@ static void build_site_frame(SrSceneCache *s, const SrGame *g, SrFrame *f, SrVie
   sr_anim_cache_begin(&s->anim, (double)site->time);
   sr_build_guards(site, &s->anim, (double)site->time, g->player.pos, &s->guards);
   sr_anim_cache_end(&s->anim);
-  sr_mesh_clear(&s->crowd_fx);
-  f->nlights = sr_build_enemy_fire(site, (double)site->time, g->player.pos, g->player.pos, &s->crowd_fx, f->lights,
-                                   f->nlights, SR_MAX_FRAME_LIGHTS);
   add_draw(f, &s->crowd_fx, SR_PASS_GLOW, g->player.pos);
   if (g->thermal) { /* warm bodies glow through smoke and darkness */
     sr_mesh_thermal(&s->guards, 0);

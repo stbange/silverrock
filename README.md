@@ -10,9 +10,10 @@ agenda.
 
 ![Night street in a generated city](docs/screenshots/street.png)
 
-**Status:** milestones M0–M5 implemented (2026-11-06), followed by a playability pass and a pass on the city's atmosphere (2026-11-07, see the
-[playtest notes](docs/reviews/playtest-2026-11-07-after.md) and the
-[visual review](docs/reviews/visuals-2026-11-07-after.md)). You wake up in your apartment, walk a generated city at night
+**Status:** milestones M0–M5 implemented (2026-11-06), followed by a playability pass, a pass on the city's atmosphere
+(2026-11-07) and a pass on animation (2026-11-08); see the [playtest notes](docs/reviews/playtest-2026-11-07-after.md),
+the [visual review](docs/reviews/visuals-2026-11-07-after.md) and the
+[animation review](docs/reviews/animation-2026-11-08-after.md). You wake up in your apartment, walk a generated city at night
 among citizens, traffic and aerodynes, eat, sleep, pay (or miss) rent, move to a better place, ride the metro, buy
 gadgets and cyberware, take jobs from fixers and play site jobs inside the building. With a cyberdeck you can jack in
 (home rig, public booth, a building's port, wireless or a data spike): fly the Matrix grid, breach hosts, dodge or
@@ -95,7 +96,7 @@ and spec deltas (22 capabilities, 206 requirements, 310 scenarios). Implemented 
 | M5 Corporate Chess | [`add-corporate-chess`](openspec/changes/add-corporate-chess) | faction-simulation, city-politics, corporate-market, news-media, story-campaign |
 | Playability pass | [`improve-playability`](openspec/changes/improve-playability) | job-system, faction-simulation, character-progression, player-life, law-and-heat, story-campaign, news-media |
 | City atmosphere | [`improve-city-atmosphere`](openspec/changes/improve-city-atmosphere) | retro-rendering, city-generation, world-environment, news-media, story-campaign |
-| Animation (proposed) | [`improve-animation`](openspec/changes/improve-animation) | retro-rendering, population-simulation, combat, player-life |
+| Animation | [`improve-animation`](openspec/changes/improve-animation) | retro-rendering, population-simulation, combat, player-life |
 
 Validate the specs:
 

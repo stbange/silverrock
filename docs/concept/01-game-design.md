@@ -849,6 +849,16 @@ procedural face textures. The generator combines:
 Rule: every faction and role must be recognisable at 30 m by **silhouette and dominant colour**, and every faction
 also has an icon for colour-blind players. With Netsight, a focused person shows name, affiliation and threat level.
 
+**How people move.** The rigid parts hang on a small skeleton: pelvis, chest, head, upper and lower arms and legs,
+hands and feet. Short keyframe tables written in code pose it, and the poses blend and are placed procedurally:
+feet stay planted, bodies lean into turns, heads look at what matters. Gait, posture and rhythm vary by body type,
+role and a per-person seed. Standing citizens are never frozen: they take up what the place offers (benches,
+stalls, vending machines, crossings, club queues, barrel fires), smoke, phone, lean, window-shop and talk in
+small groups. Rain changes how they move (umbrellas held into the wind, hoods, hunched hurrying, splashes), and
+so do fear (a panicked run, cowering), curiosity (pointing, filming) and authority (officers on a beat, weapons
+readied at high Heat). Guards show their alert state in their stance, flinch at hits and fall away from the shot.
+The player sees their own hands and weapon, with recoil, a muzzle flash that lights the room, reloads and reaches.
+
 ### 16.4 The Matrix look
 
 Black void, wireframe and flat-shaded geometry in the owner's colours, additive glow, particle data streams,
@@ -907,7 +917,7 @@ keyboard event switches back).
 ## 19. Accessibility and options
 
 Subtitles and caption size; colour-blind modes (faction icons and silhouettes do not rely on colour alone); full
-rebinding; aim assist; toggles for head bob, camera shake, vertex wobble, dithering, CRT effects; FOV slider; UI
+rebinding; aim assist; toggles for head bob, camera shake (off, low, full), vertex wobble, dithering, CRT effects; FOV slider; UI
 scale; a hold-to-toggle option for all held actions; difficulty sliders for combat, economy (rent pressure) and
 Matrix puzzles.
 

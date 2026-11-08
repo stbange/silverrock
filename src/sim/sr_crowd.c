@@ -188,6 +188,10 @@ static const SrStreetProp *block_props(const SrCity *c, int block, int *n) {
   static const SrCity *cc;
   static uint64_t seed;
   static int cblock = -1, cn;
+  if (!c) {       /* GCOVR_EXCL_LINE reason: callers always pass a city */
+    *n = 0;       /* GCOVR_EXCL_LINE */
+    return props; /* GCOVR_EXCL_LINE */
+  }
   if (cc != c || seed != c->seed || cblock != block) {
     cn = sr_dressing_block(c, block, props, SR_MAX_BLOCK_PROPS);
     cc = c;

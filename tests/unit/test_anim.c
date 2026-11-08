@@ -1,6 +1,7 @@
 /* improve-animation: skeleton and clips, gaits, the cache, street life, rain, reactions, vehicles,
  * combat, the player's body and world motion. */
 #include "core/sr_rng.h"
+#include "game/sr_save.h"
 #include "render/sr_render.h"
 #include "ui/sr_ui.h"
 #include "sr_test.h"
@@ -9,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 static SrGame *g_game;
 
@@ -1378,6 +1380,96 @@ static void test_world_motion(void) {
   sr_mesh_free(&m);
 }
 
+/* ---- budgets and saves ------------------------------------------------------------------- */
+
+static void test_budget_and_saves(void) {
+  SR_SPEC("retro-rendering", "Animation within budget");
+  SR_SPEC("retro-rendering", "Saves unchanged by animation");
+  /* the most a near character can carry: coat, backpack, hood or hair, optics, marker, umbrella */
+  int worst = 0;
+  for (int k = 0; k < 256; k++) {
+    SrAppearance a = sr_appearance_generate((uint64_t)k, (SrRole)(k % SR_ROLE_COUNT), k % 4);
+    a.cyber = (uint8_t)(k % 6);
+    SrAnimInput in = input_for(&a, SR_CLIP_IDLE);
+    in.prop_r = (uint8_t)(k % 2 ? SR_HP_UMBRELLA : SR_HP_RIFLE);
+    in.prop_l = SR_HP_BAG;
+    in.hood = k % 3 == 0;
+    SrMesh m;
+    sr_mesh_init(&m);
+    sr_anim_character(NULL, &in, &m);
+    worst = SR_MAX(worst, m.ni / 3);
+    sr_mesh_free(&m);
+  }
+  printf("  triangles per near character: at most %d\n", worst);
+  SR_CHECK(worst <= 300);
+  /* a peak crowd at every detail level: near skeletons, beams and lights within the budget */
+  SrGame *g = sr_game_create();
+  sr_game_new(g, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Budget");
+  sr_game_leave(g);
+  g->crowd_enabled = true;
+  g->force_weather = SR_WX_DOWNPOUR;
+  sr_clock_set_seconds(&g->clock, 2 * 86400 + 22 * 3600);
+  g->last_minute = sr_game_time(g) / 60;
+  SrActionState act;
+  memset(&act, 0, sizeof act);
+  for (int i = 0; i < 120; i++) sr_game_step(g, &act);
+  SrSceneCache *s = (SrSceneCache *)calloc(1, sizeof *s);
+  sr_scene_init(s, false);
+  SrFrame *f = (SrFrame *)malloc(sizeof *f);
+  static const int near_max[3] = {24, 36, 48}, beams_max[3] = {8, 12, 16};
+  for (int level = 0; level <= 2; level++) {
+    g->settings.street_detail = level;
+    double t0 = (double)clock();
+    for (int i = 0; i < 4; i++) sr_scene_build(s, g, 16.0f / 9.0f, f);
+    double ms = ((double)clock() - t0) / CLOCKS_PER_SEC * 1000.0 / 4.0;
+    SR_CHECK(s->near_drawn <= near_max[level]);
+    SR_CHECK(s->beams_drawn <= beams_max[level]);
+    SR_CHECK(s->anim.live <= SR_ANIM_SLOTS);
+    printf("  detail %d: %d near skeletons, %d beams, scene %.2f ms\n", level, s->near_drawn, s->beams_drawn, ms);
+  }
+  /* the view model stays under 400 triangles */
+  g->player.inv.count = 0;
+  sr_inv_add(&g->player.inv, sr_item_weapon(arch_of(SR_WC_HEAVY), 0, 1, 3));
+  g->player.equipped = 0;
+  sr_scene_build(s, g, 16.0f / 9.0f, f);
+  SR_CHECK(s->view_tris > 0 && s->view_tris <= 400);
+  /* pose evaluation: 48 characters well inside a frame (generous: debug build, shared CI) */
+  SrAppearance la = look_of(1, SR_ROLE_WORKER);
+  SrSkel sk;
+  sr_anim_skel(&la, &sk);
+  double t0 = (double)clock();
+  for (int i = 0; i < 48 * 20; i++) {
+    SrAnimInput in = input_for(&la, SR_CLIP_IDLE);
+    in.speed = 1.4f;
+    in.upper = SR_CLIP_UMBRELLA;
+    SrPose p;
+    sr_anim_pose(&in, &sk, (double)i * 0.01, (float)i * 0.03f, &p);
+  }
+  double per_frame = ((double)clock() - t0) / CLOCKS_PER_SEC * 1000.0 / 20.0;
+  printf("  pose evaluation: %.3f ms for 48 characters\n", per_frame);
+  SR_CHECK(per_frame < 8.0);
+  /* saves: the format is unchanged and nothing of the animation is stored */
+  SR_CHECK_EQ(SR_SAVE_VERSION, 5u);
+  g->fx.shot_t = 99.0;
+  g->fx.bob = 3.0f;
+  g->fx.eye_y = 1.2f;
+  uint64_t before = sr_game_checksum(g);
+  SrWriter w;
+  sr_writer_init(&w);
+  SR_CHECK_EQ(sr_save_write(g, &w, SR_SAVE_VERSION, 1), SR_OK);
+  SrGame *l = sr_game_create();
+  SR_CHECK_EQ(sr_save_read(l, w.data, w.len), SR_OK);
+  SR_CHECK(sr_game_checksum(l) == before);
+  SR_CHECK(l->fx.shot_t == 0 && l->fx.bob == 0);
+  SR_CHECK_EQ(sr_facade_digest(l->city), sr_facade_digest(g->city)); /* the city is the same */
+  sr_writer_free(&w);
+  sr_game_destroy(l);
+  sr_scene_free(s);
+  free(s);
+  free(f);
+  sr_game_destroy(g);
+}
+
 void suite_anim(void) {
   g_game = sr_game_create();
   sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Anim");
@@ -1394,5 +1486,6 @@ void suite_anim(void) {
   SR_RUN(test_view_model);
   SR_RUN(test_camera_motion);
   SR_RUN(test_world_motion);
+  SR_RUN(test_budget_and_saves);
   sr_game_destroy(g_game);
 }

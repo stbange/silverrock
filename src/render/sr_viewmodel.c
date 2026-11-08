@@ -33,7 +33,7 @@ SrViewCam sr_view_camera(const SrGame *g) {
   if (g->dive.active) return c;
   double now = sr_game_fx_now(g);
   const SrViewFx *fx = &g->fx;
-  if (fx->eye_y > 0 && g->on_ground) c.eye.y = fx->eye_y; /* eased crouch */
+  if (fx->eye_y > 0 && g->on_ground && fabsf(fx->eye_y - p->pos.y) < 1.0f) c.eye.y = fx->eye_y; /* eased crouch */
   /* head bob: up and down twice a stride, side to side once */
   float k = g->settings.head_bob ? bob_scale(g) : 0.0f;
   float ph = fx->bob / 0.75f * SR_PI;
@@ -144,7 +144,7 @@ static Pose view_pose(const SrGame *g, SrViewCam c, float sway_x, float sway_y, 
   memset(&p, 0, sizeof p);
   Frame cam = camera_frame(c.eye, c.yaw, c.pitch);
   bool long_gun = cat == SR_WC_LONG || cat == SR_WC_HEAVY;
-  SrVec3 grip = long_gun ? sr_v3(0.14f, -0.15f, 0.3f) : sr_v3(0.17f, -0.17f, 0.32f);
+  SrVec3 grip = long_gun ? sr_v3(0.14f, -0.15f, 0.3f) : sr_v3(0.18f, -0.19f, 0.38f);
   float yaw = 0, pitch = 0, roll = 0;
   /* sway lags the look; the weapon bobs with the steps */
   grip.x -= sway_x;
@@ -258,14 +258,14 @@ int sr_build_view_model(const SrGame *g, SrViewCam c, float sway_x, float sway_y
       }
     }
     /* the right hand on the grip, with a cuff of the sleeve */
-    vbox(out, f, sr_v3(-0.04f, -0.08f, -0.05f), sr_v3(0.04f, 0.0f, 0.05f), hand, hl, 0);
-    vbox(out, f, sr_v3(-0.045f, -0.12f, -0.22f), sr_v3(0.045f, -0.03f, -0.05f), sleeve, SR_LAYER_WHITE, 0);
+    vbox(out, f, sr_v3(-0.03f, -0.075f, -0.035f), sr_v3(0.03f, 0.0f, 0.04f), hand, hl, 0);
+    vbox(out, f, sr_v3(-0.04f, -0.11f, -0.22f), sr_v3(0.04f, -0.03f, -0.035f), sleeve, SR_LAYER_WHITE, 0);
   }
   /* the left hand: on the weapon, or reaching, throwing, swapping a magazine */
   if (cat >= 0 || busy) {
     Frame lf = cam;
     lf.o = fp(&cam, p.left);
-    vbox(out, &lf, sr_v3(-0.04f, -0.035f, -0.05f), sr_v3(0.04f, 0.035f, 0.05f), hand, hl, 0);
+    vbox(out, &lf, sr_v3(-0.03f, -0.03f, -0.04f), sr_v3(0.03f, 0.03f, 0.04f), hand, hl, 0);
     vbox(out, &lf, sr_v3(-0.045f, -0.05f, -0.24f), sr_v3(0.045f, 0.03f, -0.05f), sleeve, SR_LAYER_WHITE, 0);
     if (busy && g->fx.throw_t > 0 && now - g->fx.throw_t < 0.3) /* the gadget in the hand */
       vbox(out, &lf, sr_v3(-0.03f, 0.03f, -0.03f), sr_v3(0.03f, 0.09f, 0.03f), (SrColor){70, 90, 70, 255},

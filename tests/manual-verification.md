@@ -62,3 +62,20 @@ real hardware.
 | Linux or Windows desktop | benchmark route at street detail high: 60 FPS | not yet run | | |
 | Android phone | the same walk at the phone defaults (medium detail): 30 FPS on the 95th percentile | not yet run | | |
 | iPhone (home-screen app) | the same walk; brightness setting at +2 in a bright room | not yet run | | |
+
+## Animation (improve-animation 10.5)
+
+Automated proxy:
+- the clip and street filmstrips, the "nobody frozen" and muzzle-light metrics, and the view-model
+  frames in `tests/platform/test_platform.c` (`test_anim_shots`, `test_anim_street`);
+- the budget and save checks in `tests/unit/test_anim.c`;
+- the strips in `docs/screenshots/anim/`.
+
+The manual look judges timing and feel, and frame rate on real hardware.
+
+| Target | Check | Result | Date | Tester |
+|---|---|---|---|---|
+| Linux or Windows desktop | a busy crossing at night; rain under an awning; traffic at a junction; a landing aerodyne; a firefight in a site with flinches and falls; walk, sprint, crouch, jump, shoot, reload | not yet run | | |
+| Linux or Windows desktop | head bob and camera shake off: the view holds still | not yet run | | |
+| Android phone | the same at the phone defaults: 30 FPS on the 95th percentile with a full crowd | not yet run | | |
+| iPhone (home-screen app) | the same; the weapon does not cover the touch buttons | not yet run | | |
