@@ -237,9 +237,10 @@ static void test_crowd(void) {
   cam.pos = sr_v3(-5000, 0, -5000);
   sr_crowd_refresh(cr, c, g_pop, &cam, t + 7200, SR_MAX_AGENTS);
   SR_CHECK_EQ(cr->count, 0);
-  SrCrowd empty;
-  sr_crowd_init(&empty);
-  SR_CHECK_NEAR(sr_crowd_exposed_share(&empty), 0, 0);
+  SrCrowd *empty = (SrCrowd *)malloc(sizeof *empty); /* too big for the web stack */
+  sr_crowd_init(empty);
+  SR_CHECK_NEAR(sr_crowd_exposed_share(empty), 0, 0);
+  free(empty);
   free(cr);
 }
 

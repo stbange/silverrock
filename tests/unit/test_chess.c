@@ -376,16 +376,17 @@ static void test_policies(void) {
   g->cam.pos = g->player.pos;
   g->cam.forward = sr_v3(0, 0, -1);
   g->cam.cos_half_fov = 0.5f;
-  SrCrowd open;
-  sr_crowd_init(&open);
-  open.fresh = true;
-  sr_crowd_refresh(&open, g->city, g->pop, &g->cam, day + 23 * 3600, 400);
+  SrCrowd *open = (SrCrowd *)malloc(sizeof *open); /* too big for the web stack */
+  sr_crowd_init(open);
+  open->fresh = true;
+  sr_crowd_refresh(open, g->city, g->pop, &g->cam, day + 23 * 3600, 400);
   sr_skip_to(g, day + 86400 + 23 * 3600);
   SR_CHECK(g->crowd.curfew & (1u << d));
   sr_crowd_init(&g->crowd);
   g->crowd.curfew = (uint16_t)(1u << d);
   sr_crowd_refresh(&g->crowd, g->city, g->pop, &g->cam, day + 23 * 3600, 400);
-  SR_CHECK(g->crowd.count < open.count);
+  SR_CHECK(g->crowd.count < open->count);
+  free(open);
   /* an officer stops the player on the street */
   int64_t cash = g->player.cred;
   g->crowd.count = 1;
