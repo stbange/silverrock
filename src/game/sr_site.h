@@ -39,6 +39,7 @@ int sr_deltas_get(const SrDeltas *d, uint32_t id); /* -1 if unset */
 #define SR_GV_KO       1
 #define SR_GV_DEAD     2
 uint32_t sr_site_guard_id(int building, int k);
+#define SR_GUARD_PAUSE_MIN 2.0f /* seconds a patrolling guard looks around at each waypoint */
 uint32_t sr_site_objective_id(int32_t job);
 
 typedef enum SrEffectType {
@@ -71,6 +72,13 @@ typedef struct SrGuard {
   bool reported; /* this body was already found */
   bool tagged;   /* revealed by recon gadgets */
   float walk;    /* distance walked, for the walk cycle */
+  /* presentation (not saved): speed, patrol pause, and site times of the last hit, fall, waking
+   * and shot, read by the animation */
+  float speed, pause;
+  float hit_time, hit_dir; /* hit_dir: world yaw from the guard toward the shooter */
+  uint8_t hit_kind;        /* 0 none, 1 flinch, 2 stagger, 3 headshot */
+  float down_time, wake_time, shot_time;
+  bool shot_tracer;
 } SrGuard;
 
 typedef struct SrSite {

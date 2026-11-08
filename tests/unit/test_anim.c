@@ -1,0 +1,1025 @@
+/* improve-animation: skeleton and clips, gaits, the cache, street life, rain, reactions, vehicles,
+ * combat, the player's body and world motion. */
+#include "core/sr_rng.h"
+#include "render/sr_render.h"
+#include "sr_test.h"
+
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static SrGame *g_game;
+
+static SrAppearance look_of(int body, int role) {
+  SrAppearance a = sr_appearance_generate(40u + (uint64_t)body, (SrRole)role, 0);
+  a.body = (uint8_t)body;
+  return a;
+}
+
+static SrAnimInput input_for(const SrAppearance *a, int base) {
+  SrAnimInput in;
+  memset(&in, 0, sizeof in);
+  in.key = 77;
+  in.look = a;
+  in.role = (uint8_t)(a->outfit / 4);
+  in.dir = sr_v3(0, 0, 1);
+  in.base = (uint8_t)base;
+  in.once_t0 = -1;
+  return in;
+}
+
+/* ---- skeleton and clips --------------------------------------------------------------------- */
+
+static void test_clips(void) {
+  SR_SPEC("retro-rendering", "Clips loop without a jump");
+  SR_SPEC("retro-rendering", "Joints stay in their limits");
+  SR_SPEC("retro-rendering", "Poses are pinned");
+  for (int c = 1; c < SR_CLIP_COUNT; c++) {
+    SR_CHECK(sr_anim_clip_name(c)[0] != '\0');
+    SR_CHECK(sr_anim_clip_len(c) > 0.1f);
+    SrClipKind k = sr_anim_clip_kind(c);
+    if (k == SR_CK_LOOP || k == SR_CK_OVERLAY) { /* the step across the loop point is like any other */
+      float max_step[SR_J_COUNT] = {0}, wrap[SR_J_COUNT] = {0};
+      SrPose prev, cur, first;
+      sr_anim_sample(c, 0.0f, &first);
+      prev = first;
+      for (int i = 1; i <= 128; i++) {
+        sr_anim_sample(c, (float)i / 128.0f, &cur);
+        for (int j = 0; j < SR_J_COUNT; j++) {
+          float d = fabsf(cur.j[j] - prev.j[j]);
+          if (i < 128) max_step[j] = fmaxf(max_step[j], d);
+          if (i == 128) wrap[j] = d;
+        }
+        prev = cur;
+      }
+      for (int j = 0; j < SR_J_COUNT; j++) SR_CHECK(wrap[j] <= max_step[j] * 1.5f + 1e-3f);
+    }
+    if (k == SR_CK_ADD_ONCE) { /* additive one-shots start and end at rest */
+      SrPose a, b;
+      sr_anim_sample(c, 0.0f, &a);
+      sr_anim_sample(c, 1.0f, &b);
+      for (int j = 0; j < SR_J_COUNT; j++) SR_CHECK(fabsf(a.j[j]) < 1e-4f && fabsf(b.j[j]) < 1e-4f);
+    }
+    /* authored keys stay inside the joint limits (a small overshoot of the spline is allowed) */
+    for (int i = 0; i < 64; i++) {
+      SrPose p;
+      sr_anim_sample(c, (float)i / 64.0f, &p);
+      for (int j = 0; j < SR_J_FX; j++) {
+        float lo, hi;
+        sr_anim_limits(j, &lo, &hi);
+        SR_CHECK(p.j[j] >= lo - 0.08f && p.j[j] <= hi + 0.08f);
+      }
+    }
+  }
+  /* every clip, every body type: the full pose keeps knees and elbows bending the right way */
+  for (int body = 0; body < 4; body++) {
+    SrAppearance a = look_of(body, SR_ROLE_WORKER);
+    SrSkel s;
+    sr_anim_skel(&a, &s);
+    for (int c = 1; c < SR_CLIP_COUNT; c++)
+      for (int i = 0; i < 64; i++) {
+        SrAnimInput in = input_for(&a, SR_CLIP_IDLE);
+        SrClipKind k = sr_anim_clip_kind(c);
+        if (k == SR_CK_GAIT) {
+          in.base = (uint8_t)c;
+          in.speed = 1.0f + (float)(i % 4);
+        } else if (k == SR_CK_LOOP) {
+          in.base = (uint8_t)c;
+        } else if (k == SR_CK_OVERLAY) {
+          in.upper = (uint8_t)c;
+        } else {
+          in.once = (uint8_t)c;
+          in.once_t0 = 0;
+          if (k == SR_CK_BASE_ONCE) in.base = (uint8_t)c;
+        }
+        SrPose p;
+        sr_anim_pose(&in, &s, (double)i / 64.0 * sr_anim_clip_len(c), (float)i / 64.0f, &p);
+        for (int j = 0; j < SR_J_COUNT; j++) {
+          float lo, hi;
+          sr_anim_limits(j, &lo, &hi);
+          SR_CHECK(p.j[j] >= lo - 1e-5f && p.j[j] <= hi + 1e-5f);
+        }
+        SR_CHECK(p.j[SR_J_KNEE_L] >= 0 && p.j[SR_J_KNEE_R] >= 0);
+        SR_CHECK(p.j[SR_J_ELB_L] >= 0 && p.j[SR_J_ELB_R] >= 0);
+      }
+  }
+  SrPose p = {{0}};
+  p.j[SR_J_KNEE_L] = -1.0f;
+  p.j[SR_J_HIP_L] = 0.3f;
+  p.j[SR_J_ROOT_ROLL] = 0.2f;
+  sr_anim_clamp(&p);
+  SR_CHECK_NEAR(p.j[SR_J_KNEE_L], 0, 1e-6);
+  sr_anim_mirror(&p);
+  SR_CHECK_NEAR(p.j[SR_J_HIP_R], 0.3f, 1e-6);
+  SR_CHECK_NEAR(p.j[SR_J_ROOT_ROLL], -0.2f, 1e-6);
+  SR_CHECK(sr_anim_clip_kind(-5) == SR_CK_LOOP && sr_anim_clip_kind(999) == SR_CK_LOOP);
+  SR_CHECK(sr_anim_clip_keys_joint(SR_CLIP_UMBRELLA, SR_J_SHO_R));
+  SR_CHECK(!sr_anim_clip_keys_joint(SR_CLIP_UMBRELLA, SR_J_SHO_L));
+  uint64_t d = sr_anim_digest();
+  printf("  pose digest %016llx\n", (unsigned long long)d);
+  SR_CHECK_EQ(d, 0x4a18620e38cba210ull);
+}
+
+/* ---- locomotion ----------------------------------------------------------------------------- */
+
+static void test_gait(void) {
+  SR_SPEC("retro-rendering", "People walk with knees and elbows");
+  SR_SPEC("retro-rendering", "Feet do not slide");
+  SrAppearance a = look_of(1, SR_ROLE_WORKER);
+  SrSkel s;
+  sr_anim_skel(&a, &s);
+  /* one stride of the walk: knees and elbows bend, the pelvis rises and falls twice */
+  float kmax = 0, emin = 9, py[64];
+  for (int i = 0; i < 64; i++) {
+    SrPose p;
+    sr_anim_gait(&s, 1.4f, (float)i / 64.0f, SR_CLIP_WALK, 5, &p);
+    kmax = fmaxf(kmax, p.j[SR_J_KNEE_L]);
+    emin = fminf(emin, p.j[SR_J_ELB_R]);
+    py[i] = p.j[SR_J_PELVIS_Y];
+  }
+  SR_CHECK(kmax > 0.3f);
+  SR_CHECK(emin > 0.1f);
+  float lo = 1e9f, hi = -1e9f;
+  for (int i = 0; i < 64; i++) {
+    lo = fminf(lo, py[i]);
+    hi = fmaxf(hi, py[i]);
+  }
+  int rises = 0; /* upward crossings of the middle height */
+  float mid = 0.5f * (lo + hi);
+  for (int i = 0; i < 64; i++) rises += py[(i + 63) % 64] < mid && py[i] >= mid;
+  SR_CHECK_EQ(rises, 2);
+  SR_CHECK(hi - lo > 0.02f && hi - lo < 0.09f); /* a bob of a few centimetres */
+  /* every body type, gait and speed: the foot on the ground stays put in the world */
+  static const float speeds[] = {0.8f, 1.4f, 2.1f, 3.4f, 4.5f};
+  static const int gaits[] = {SR_CLIP_WALK, SR_CLIP_CROUCH_WALK, SR_CLIP_LIMP};
+  for (int body = 0; body < 4; body++) {
+    SrAppearance b = look_of(body, SR_ROLE_EXEC);
+    sr_anim_skel(&b, &s);
+    for (int gi = 0; gi < 3; gi++)
+      for (int si = 0; si < 5; si++) {
+        float v = speeds[si], stride = sr_anim_stride(&s, v, gaits[gi]);
+        float slip = 0, moved = 0;
+        SrPose prev;
+        sr_anim_gait(&s, v, 0, gaits[gi], 9, &prev);
+        for (int i = 1; i <= 200; i++) {
+          float d0 = (float)(i - 1) * 0.01f * stride, d1 = (float)i * 0.01f * stride;
+          SrPose cur;
+          sr_anim_gait(&s, v, d1 / stride, gaits[gi], 9, &cur);
+          for (int side = 0; side < 2; side++) {
+            SrVec3 f0 = sr_anim_point(&s, &prev, side), f1 = sr_anim_point(&s, &cur, side);
+            if (f0.y > s.ankle + 0.002f || f1.y > s.ankle + 0.002f) continue; /* swinging */
+            slip += fabsf((d1 + f1.z) - (d0 + f0.z));
+            moved += d1 - d0;
+          }
+          prev = cur;
+        }
+        SR_CHECK(moved > 0);
+        SR_CHECK(slip <= 0.1f * moved);
+      }
+  }
+}
+
+static void test_turns_and_blends(void) {
+  SR_SPEC("retro-rendering", "Turns are smooth");
+  SR_SPEC("retro-rendering", "Blends are continuous");
+  SrAnimCache *c = (SrAnimCache *)malloc(sizeof *c);
+  sr_anim_cache_init(c);
+  SrAppearance a = look_of(0, SR_ROLE_WORKER);
+  SrAnimInput in = input_for(&a, SR_CLIP_IDLE);
+  in.speed = 1.4f;
+  SrMesh m;
+  sr_mesh_init(&m);
+  double t = 1.0;
+  for (int i = 0; i < 10; i++, t += 1.0 / 60.0) {
+    sr_anim_cache_begin(c, t);
+    in.walk += 1.4f / 60.0f;
+    sr_mesh_clear(&m);
+    sr_anim_character(c, &in, &m);
+    sr_anim_cache_end(c);
+  }
+  in.dir = sr_v3(0, 0, -1); /* turn around in one step */
+  float prev = sr_anim_cache_find(c, in.key)->heading, max_rate = 0, max_lean = 0;
+  for (int i = 0; i < 60; i++, t += 1.0 / 60.0) {
+    sr_anim_cache_begin(c, t);
+    in.walk += 1.4f / 60.0f;
+    sr_mesh_clear(&m);
+    sr_anim_character(c, &in, &m);
+    sr_anim_cache_end(c);
+    const SrAnimSlot *sl = sr_anim_cache_find(c, in.key);
+    max_rate = fmaxf(max_rate, fabsf(sr_wrap_angle(sl->heading - prev)) * 60.0f);
+    max_lean = fmaxf(max_lean, fabsf(sl->lean));
+    prev = sl->heading;
+  }
+  SR_CHECK(max_rate <= 2.0f * SR_PI + 1e-3f); /* at most 360 degrees a second */
+  SR_CHECK(max_lean > 0.01f);
+  SR_CHECK(fabsf(sr_wrap_angle(prev - SR_PI)) < 0.05f);
+  /* stopping and sitting down blend over time: no joint jumps */
+  in.speed = 0;
+  in.base = SR_CLIP_SIT;
+  SrPose last = sr_anim_cache_find(c, in.key)->out;
+  float max_step = 0;
+  SrPose at_100ms = last;
+  for (int i = 0; i < 40; i++, t += 1.0 / 60.0) {
+    sr_anim_cache_begin(c, t);
+    sr_mesh_clear(&m);
+    sr_anim_character(c, &in, &m);
+    sr_anim_cache_end(c);
+    SrPose cur = sr_anim_cache_find(c, in.key)->out;
+    for (int j = 0; j < SR_J_COUNT; j++) max_step = fmaxf(max_step, fabsf(cur.j[j] - last.j[j]));
+    if (i == 6) at_100ms = cur;
+    last = cur;
+  }
+  SR_CHECK(max_step <= 0.2f);
+  SrSkel s;
+  sr_anim_skel(&a, &s);
+  SrPose sit;
+  sr_anim_pose(&in, &s, t, 0, &sit);
+  SR_CHECK(fabsf(at_100ms.j[SR_J_HIP_L] - sit.j[SR_J_HIP_L]) > 0.1f); /* not there yet after 0.1 s */
+  SR_CHECK(fabsf(last.j[SR_J_HIP_L] - sit.j[SR_J_HIP_L]) < 0.05f);
+  /* entries not seen for two seconds are dropped; a NULL cache draws the target pose */
+  sr_anim_cache_begin(c, t + 5.0);
+  sr_anim_cache_end(c);
+  SR_CHECK(sr_anim_cache_find(c, in.key) == NULL);
+  SR_CHECK_EQ(c->live, 0);
+  sr_mesh_clear(&m);
+  sr_anim_character(NULL, &in, &m);
+  SR_CHECK(m.nv > 0);
+  /* the cache never overflows: keys past the probe window draw without blending */
+  sr_anim_cache_begin(c, t + 6.0);
+  for (uint64_t k = 0; k < 700; k++) {
+    in.key = k * 7919u;
+    sr_mesh_clear(&m);
+    sr_anim_character(c, &in, &m);
+  }
+  SR_CHECK(c->live <= SR_ANIM_SLOTS);
+  sr_mesh_free(&m);
+  free(c);
+}
+
+/* ---- street life ---------------------------------------------------------------------------- */
+
+static SrAgent agent_at(SrVec3 pos, uint64_t key, int role) {
+  SrAgent a;
+  memset(&a, 0, sizeof a);
+  a.key = key;
+  a.look = sr_appearance_generate(key, (SrRole)role, 0);
+  a.role = (uint8_t)role;
+  a.pos = pos;
+  a.dir = sr_v3(0, 0, 1);
+  a.target = pos;
+  a.speed = 1.3f;
+  a.npc = -1;
+  return a;
+}
+
+static SrCrowdCtx ctx_at(SrVec3 eye) {
+  SrCrowdCtx x;
+  memset(&x, 0, sizeof x);
+  x.now = 100.0;
+  x.player = x.eye = eye;
+  x.max_near = 48;
+  x.max_splashes = 48;
+  return x;
+}
+
+static void test_street_life(void) {
+  SR_SPEC("population-simulation", "Walkers start and stop");
+  SR_SPEC("population-simulation", "Activities fit the place");
+  SR_SPEC("population-simulation", "The street is busy with small things");
+  SR_SPEC("retro-rendering", "Nobody stands frozen");
+  SR_SPEC("retro-rendering", "Far crowd keeps the gait");
+  const SrCity *c = g_game->city;
+  /* every prop that decides an activity gets one of its own */
+  int checked = 0;
+  for (int blk = 0; blk < c->grid * c->grid && checked < 400; blk++) {
+    SrStreetProp props[SR_MAX_BLOCK_PROPS];
+    int n = sr_dressing_block(c, blk, props, SR_MAX_BLOCK_PROPS);
+    for (int i = 0; i < n; i++) {
+      SrVec3 at = sr_v3(props[i].x + 0.5f, 0, props[i].z + 0.5f);
+      SrVec3 pp;
+      int kind = sr_activity_prop_near(c, blk, at, &pp, NULL);
+      if (kind < 0) continue;
+      SrVec3 face;
+      SrStreetAct act = sr_activity_pick(c, blk, at, (uint64_t)i * 31u + (uint64_t)blk, SR_ROLE_WORKER, &face);
+      SR_CHECK(sr_activity_fits_prop(kind, act));
+      SR_CHECK(sr_v3_len(face) > 0.5f);
+      checked++;
+    }
+  }
+  SR_CHECK(checked > 50);
+  SR_CHECK(sr_activity_fits_prop(SR_SP_BENCH, SR_SA_SIT) && !sr_activity_fits_prop(SR_SP_BENCH, SR_SA_DANCE));
+  SR_CHECK(sr_activity_fits_prop(SR_SP_LAMP, SR_SA_DANCE)); /* props without a list allow anything */
+  SR_CHECK_EQ(sr_activity_prop_near(c, -1, sr_v3(0, 0, 0), NULL, NULL), -1);
+  /* walkers accelerate and brake instead of jumping between speeds */
+  SrCrowd *cr = (SrCrowd *)calloc(1, sizeof *cr);
+  sr_crowd_init(cr);
+  int32_t hx, hy;
+  sr_building_center(&c->buildings[c->home_building], &hx, &hy);
+  SrVec3 home = sr_v3((float)hx / 100.0f, 0, (float)hy / 100.0f);
+  int hblk = sr_city_block_at(c, hx, hy);
+  cr->agents[0] = agent_at(home, 11, SR_ROLE_WORKER);
+  cr->agents[0].block = hblk;
+  cr->agents[0].target = sr_v3(home.x + 30.0f, 0, home.z);
+  cr->count = 1;
+  float t_full = -1;
+  for (int i = 0; i < 120; i++) {
+    sr_crowd_update(cr, c, 1.0f / 60.0f, 0.0f);
+    if (t_full < 0 && cr->agents[0].vel >= cr->agents[0].speed - 1e-4f) t_full = (float)(i + 1) / 60.0f;
+  }
+  SR_CHECK(t_full >= 0.25f);
+  cr->agents[0].state = SR_AG_IDLE;
+  cr->agents[0].timer = 30.0f;
+  float t_stop = -1;
+  for (int i = 0; i < 120; i++) {
+    sr_crowd_update(cr, c, 1.0f / 60.0f, 0.0f);
+    if (t_stop < 0 && cr->agents[0].vel <= 0.0f) t_stop = (float)(i + 1) / 60.0f;
+  }
+  SR_CHECK(t_stop >= 0.25f);
+  /* a night street over ten minutes: stopped citizens do something that fits the place */
+  sr_crowd_init(cr);
+  SrCamera cam = {sr_v3(home.x, 1.7f, home.z + 20.0f), sr_v3(0, 0, -1), 0.5f};
+  int64_t t = 2 * 86400 + 22 * 3600;
+  sr_crowd_refresh(cr, c, NULL, &cam, t, SR_MAX_AGENTS);
+  SR_CHECK(cr->count > 0);
+  cam.pos = sr_v3(cr->agents[0].pos.x, 1.7f, cr->agents[0].pos.z); /* on a pavement among the walkers */
+  int standing = 0, busy = 0, fits = 0, near_prop = 0;
+  for (int step = 0; step < 600 * 4; step++) {
+    sr_crowd_update(cr, c, 0.25f, 0.0f);
+    if (step % 40 != 39) continue;
+    for (int i = 0; i < cr->count; i++) {
+      const SrAgent *ag = &cr->agents[i];
+      if (ag->state != SR_AG_IDLE || ag->vel > 0.0f || ag->activity == SR_SA_NONE) continue;
+      standing++; /* the crowd lives within its radius around the camera */
+      busy += ag->activity != SR_SA_IDLE;
+      int kind = sr_activity_prop_near(c, ag->block, ag->pos, NULL, NULL);
+      if (kind >= 0 && ag->activity != SR_SA_TALK) {
+        near_prop++;
+        fits += sr_activity_fits_prop(kind, (SrStreetAct)ag->activity);
+      }
+    }
+  }
+  printf("  street: %d standing around the camera, %d busy; %d by props, %d fitting\n", standing, busy, near_prop,
+         fits);
+  SR_CHECK(standing > 10);
+  SR_CHECK(busy * 2 >= standing);
+  SR_CHECK_EQ(fits, near_prop);
+  /* standing people keep moving: breathing, weight shifts, gestures */
+  SrAppearance la = look_of(2, SR_ROLE_WORKER);
+  SrSkel sk;
+  sr_anim_skel(&la, &sk);
+  for (int clip = SR_CLIP_IDLE; clip <= SR_CLIP_LOOK_AROUND; clip++) {
+    if (clip == SR_CLIP_SLEEP) continue;
+    SrAnimInput in = input_for(&la, clip);
+    SrPose p0, p1;
+    sr_anim_pose(&in, &sk, 10.0, 0, &p0);
+    float d = 0;
+    for (int k = 1; k < 8; k++) {
+      sr_anim_pose(&in, &sk, 10.0 + sr_anim_clip_len(clip) * 0.11 * k, 0, &p1);
+      for (int j = 0; j < SR_J_COUNT; j++) d = fmaxf(d, fabsf(p1.j[j] - p0.j[j]));
+    }
+    SR_CHECK(d > 0.01f);
+  }
+  /* far citizens are instanced with their gait or pose */
+  sr_crowd_init(cr);
+  SrVec3 far = sr_v3(home.x + 60.0f, 0, home.z);
+  cr->agents[0] = agent_at(far, 1, SR_ROLE_WORKER);
+  cr->agents[0].vel = 1.4f;
+  cr->agents[0].walk = 3.0f;
+  cr->agents[1] = agent_at(sr_v3(far.x, 0, far.z + 3), 2, SR_ROLE_WORKER);
+  cr->agents[1].state = SR_AG_IDLE;
+  cr->agents[1].activity = SR_SA_SIT;
+  cr->agents[2] = agent_at(sr_v3(far.x, 0, far.z + 6), 3, SR_ROLE_WORKER);
+  cr->agents[2].state = SR_AG_COVER;
+  cr->agents[2].activity = SR_SA_COWER;
+  cr->agents[3] = agent_at(sr_v3(far.x, 0, far.z + 9), 4, SR_ROLE_DRIFTER);
+  cr->agents[3].state = SR_AG_IDLE;
+  cr->agents[3].activity = SR_SA_SLEEP;
+  cr->agents[4] = agent_at(sr_v3(far.x, 0, far.z + 12), 5, SR_ROLE_WORKER);
+  cr->count = 5;
+  SrCrowdCtx x = ctx_at(home);
+  SrMesh near;
+  sr_mesh_init(&near);
+  float *inst = (float *)calloc(SR_MAX_AGENTS * SR_INST_FLOATS, sizeof(float));
+  int n = sr_build_crowd_lod(cr, NULL, &x, home, 28.0f, 200.0f, &near, inst, SR_MAX_AGENTS);
+  SR_CHECK_EQ(n, 5);
+  SR_CHECK_NEAR(inst[0 * SR_INST_FLOATS + 7], 1, 0); /* walking */
+  SR_CHECK(inst[0 * SR_INST_FLOATS + 4] >= 0 && inst[0 * SR_INST_FLOATS + 4] < 1);
+  SR_CHECK_NEAR(inst[1 * SR_INST_FLOATS + 7], 2, 0); /* sitting */
+  SR_CHECK_NEAR(inst[2 * SR_INST_FLOATS + 7], 3, 0); /* cowering */
+  SR_CHECK_NEAR(inst[3 * SR_INST_FLOATS + 7], 4, 0); /* asleep */
+  SR_CHECK_NEAR(inst[4 * SR_INST_FLOATS + 7], 0, 0); /* standing */
+  /* the near budget: past max_near, close citizens are instanced too */
+  x.max_near = 0;
+  for (int i = 0; i < 5; i++) cr->agents[i].pos.x = home.x + 3.0f;
+  n = sr_build_crowd_lod(cr, NULL, &x, home, 28.0f, 200.0f, &near, inst, SR_MAX_AGENTS);
+  SR_CHECK_EQ(n, 5);
+  free(inst);
+  sr_mesh_free(&near);
+  free(cr);
+}
+
+static void test_groups(void) {
+  SR_SPEC("population-simulation", "People talk in groups");
+  const SrCity *c = g_game->city;
+  int32_t hx, hy;
+  sr_building_center(&c->buildings[c->home_building], &hx, &hy);
+  int blk = sr_city_block_at(c, hx, hy);
+  /* a spot on the pavement with no prop that decides an activity */
+  int32_t ox, oy;
+  sr_city_block_origin(blk, c->grid, &ox, &oy);
+  SrVec3 spot = sr_v3(0, 0, 0);
+  bool found = false;
+  for (int k = 0; k < 200 && !found; k++) {
+    spot = sr_v3((float)ox / 100.0f + 20.0f + (float)k * 0.37f, 0, (float)oy / 100.0f + 17.5f);
+    found = sr_activity_prop_near(c, blk, spot, NULL, NULL) < 0;
+  }
+  SR_CHECK(found);
+  SrCrowd *cr = (SrCrowd *)calloc(1, sizeof *cr);
+  sr_crowd_init(cr);
+  /* the first stands chatting on the phone; the second arrives and joins */
+  uint64_t key_b = 0;
+  for (uint64_t k = 100; k < 1000 && !key_b; k++)
+    if (k % 10u < 6u) key_b = k;
+  cr->agents[0] = agent_at(spot, 99, SR_ROLE_WORKER);
+  cr->agents[0].state = SR_AG_IDLE;
+  cr->agents[0].activity = SR_SA_PHONE;
+  cr->agents[0].timer = 30.0f;
+  cr->agents[0].block = blk;
+  cr->agents[1] = agent_at(sr_v3(spot.x + 1.6f, 0, spot.z), key_b, SR_ROLE_WORKER);
+  cr->agents[1].block = blk;
+  cr->agents[1].target = sr_v3(spot.x + 1.2f, 0, spot.z);
+  cr->agents[1].pending = SR_SA_IDLE;
+  cr->agents[1].vel = 1.3f;
+  cr->count = 2;
+  for (int i = 0; i < 30; i++) sr_crowd_update(cr, c, 1.0f / 30.0f, 0.0f);
+  const SrAgent *a = &cr->agents[0], *b = &cr->agents[1];
+  if (b->activity != SR_SA_TALK) /* the arrival picked a non-free activity: nothing to check */
+    printf("  group: second citizen chose %d\n", b->activity);
+  SR_CHECK_EQ(b->activity, SR_SA_TALK);
+  SR_CHECK_EQ(a->activity, SR_SA_TALK);
+  SR_CHECK(a->group && a->group == b->group);
+  SR_CHECK_EQ(a->group_n, 2);
+  SR_CHECK(sr_v3_dot(a->dir, b->dir) < -0.9f); /* face each other */
+  /* one speaks at a time */
+  SrCrowdCtx x = ctx_at(spot);
+  for (int k = 0; k < 20; k++) {
+    x.now = 100.0 + k * 1.1;
+    SrAnimInput ia, ib;
+    sr_agent_anim(a, &x, &ia);
+    sr_agent_anim(b, &x, &ib);
+    SR_CHECK_EQ((ia.base == SR_CLIP_TALK) + (ib.base == SR_CLIP_TALK), 1);
+  }
+  SR_CHECK_EQ(sr_group_speaker(5, 0, 1.0), -1);
+  free(cr);
+}
+
+static void test_rain_and_props(void) {
+  SR_SPEC("population-simulation", "Rain changes the walk");
+  SR_SPEC("retro-rendering", "Umbrellas are held");
+  SR_SPEC("retro-rendering", "Footsteps splash");
+  SR_SPEC("retro-rendering", "Accessories show");
+  const SrCity *c = g_game->city;
+  int32_t hx, hy;
+  sr_building_center(&c->buildings[c->home_building], &hx, &hy);
+  SrVec3 home = sr_v3((float)hx / 100.0f, 0, (float)hy / 100.0f);
+  SrCrowd *cr = (SrCrowd *)calloc(1, sizeof *cr);
+  sr_crowd_init(cr);
+  cr->agents[0] = agent_at(home, 12, SR_ROLE_WORKER);
+  cr->agents[0].target = sr_v3(home.x + 40.0f, 0, home.z);
+  cr->agents[0].block = sr_city_block_at(c, hx, hy);
+  cr->count = 1;
+  for (int i = 0; i < 120; i++) sr_crowd_update(cr, c, 1.0f / 60.0f, 0.35f); /* drizzle */
+  SR_CHECK(cr->agents[0].vel > cr->agents[0].speed * 1.2f);
+  SrCrowdCtx x = ctx_at(home);
+  x.rain = 0.35f;
+  SrAnimInput in;
+  sr_agent_anim(&cr->agents[0], &x, &in);
+  SR_CHECK(in.hunch > 0.3f);
+  /* the four ways to walk in the rain without an umbrella */
+  int hoods = 0, covers = 0;
+  for (uint64_t k = 0; k < 8; k++) {
+    cr->agents[0].key = k;
+    sr_agent_anim(&cr->agents[0], &x, &in);
+    hoods += in.hood;
+    covers += in.upper == SR_CLIP_COVER_HEAD;
+  }
+  SR_CHECK(hoods > 0 && covers > 0);
+  /* umbrella: open in a raised hand, the canopy tilted into the wind */
+  cr->agents[0].umbrella = true;
+  cr->agents[0].look.accessory = 1;
+  x.wind = sr_v3(3.0f, 0, 0);
+  sr_agent_anim(&cr->agents[0], &x, &in);
+  SR_CHECK_EQ(in.prop_r, SR_HP_UMBRELLA);
+  SR_CHECK_EQ(in.upper, SR_CLIP_UMBRELLA);
+  SrSkel sk;
+  sr_anim_skel(&cr->agents[0].look, &sk);
+  SrPose p;
+  sr_anim_pose(&in, &sk, 1.0, 0.2f, &p);
+  SrVec3 hand = sr_anim_point(&sk, &p, 3);
+  SR_CHECK(hand.y > sk.hip + sk.sho_y - 0.05f); /* the hand is up at the shoulder or higher */
+  SrMesh calm, windy;
+  sr_mesh_init(&calm);
+  sr_mesh_init(&windy);
+  sr_anim_mesh(&windy, &in, &sk, &p, 0);
+  in.wind_x = 0;
+  sr_anim_mesh(&calm, &in, &sk, &p, 0);
+  float xw = 0, xc = 0, cut = sk.tall + 0.35f;
+  int nw = 0, nc = 0;
+  for (int v = 0; v < windy.nv; v++)
+    if (windy.v[v].y > cut) {
+      xw += windy.v[v].x;
+      nw++;
+    }
+  for (int v = 0; v < calm.nv; v++)
+    if (calm.v[v].y > cut) {
+      xc += calm.v[v].x;
+      nc++;
+    }
+  SR_CHECK(nw > 0 && nc > 0);
+  if (nw && nc) SR_CHECK(xw / (float)nw < xc / (float)nc - 0.03f); /* the canopy tilts toward the wind */
+  x.rain = 0;
+  sr_agent_anim(&cr->agents[0], &x, &in);
+  SR_CHECK(in.prop_r == SR_HP_BRIEFCASE || in.prop_r == SR_HP_BAG || in.prop_r == SR_HP_UMBRELLA_CLOSED);
+  /* accessories in the hand; cigarettes and phones glow */
+  for (int acc = 0; acc < 8; acc++) {
+    SrAppearance la = look_of(1, SR_ROLE_EXEC);
+    la.accessory = (uint8_t)acc;
+    int prop = sr_anim_accessory(&la);
+    SrAnimInput ai = input_for(&la, prop == SR_HP_CIGARETTE ? SR_CLIP_SMOKE : SR_CLIP_IDLE);
+    ai.prop_r = (uint8_t)prop;
+    SrSkel s2;
+    sr_anim_skel(&la, &s2);
+    SrPose p2;
+    sr_anim_pose(&ai, &s2, 2.0, 0, &p2);
+    SrMesh with, without;
+    sr_mesh_init(&with);
+    sr_mesh_init(&without);
+    sr_anim_mesh(&with, &ai, &s2, &p2, 0);
+    ai.prop_r = SR_HP_NONE;
+    sr_anim_mesh(&without, &ai, &s2, &p2, 0);
+    if (prop) SR_CHECK(with.nv > without.nv);
+    if (prop == SR_HP_CIGARETTE || prop == SR_HP_PHONE) {
+      int glow = 0;
+      for (int v = without.nv; v < with.nv; v++) glow += with.v[v].emissive > 50;
+      SR_CHECK(glow > 0);
+    }
+    sr_mesh_free(&with);
+    sr_mesh_free(&without);
+  }
+  SrAppearance cop = look_of(0, SR_ROLE_COP);
+  SR_CHECK_EQ(sr_anim_accessory(&cop), SR_HP_NONE);
+  SrAppearance coat = look_of(0, SR_ROLE_EXEC);
+  coat.outfit = (uint8_t)(SR_ROLE_EXEC * 4 + 2);
+  SR_CHECK(sr_anim_has_coat(&coat));
+  coat.accessory = 6;
+  coat.outfit = (uint8_t)(SR_ROLE_WORKER * 4);
+  SR_CHECK(sr_anim_has_backpack(&coat));
+  /* footfalls on wet ground splash, within the cap */
+  sr_crowd_init(cr);
+  for (int i = 0; i < 6; i++) {
+    cr->agents[i] = agent_at(sr_v3(home.x + (float)i, 0, home.z + 3.0f), 30u + (uint64_t)i, SR_ROLE_WORKER);
+    cr->agents[i].vel = 1.4f;
+  }
+  cr->count = 6;
+  SrAnimCache *anim = (SrAnimCache *)malloc(sizeof *anim);
+  sr_anim_cache_init(anim);
+  SrMesh near, fx;
+  sr_mesh_init(&near);
+  sr_mesh_init(&fx);
+  float *inst = (float *)calloc(SR_MAX_AGENTS * SR_INST_FLOATS, sizeof(float));
+  x = ctx_at(home);
+  x.wet = 0.8f;
+  x.fx = &fx;
+  x.max_splashes = 4;
+  int max_seen = 0;
+  for (int f = 0; f < 90; f++) {
+    x.now = 10.0 + f / 30.0;
+    x.splashes = 0;
+    for (int i = 0; i < 6; i++) cr->agents[i].walk += 1.4f / 30.0f;
+    sr_anim_cache_begin(anim, x.now);
+    sr_build_crowd_lod(cr, anim, &x, home, 28.0f, 200.0f, &near, inst, SR_MAX_AGENTS);
+    sr_anim_cache_end(anim);
+    max_seen = SR_MAX(max_seen, x.splashes);
+  }
+  SR_CHECK(fx.nv > 0);
+  SR_CHECK(max_seen <= 4);
+  x.wet = 0.1f; /* dry enough: no splashes */
+  sr_mesh_clear(&fx);
+  x.splashes = 0;
+  for (int i = 0; i < 6; i++) cr->agents[i].walk += 0.7f;
+  sr_anim_cache_begin(anim, x.now + 0.5);
+  sr_build_crowd_lod(cr, anim, &x, home, 28.0f, 200.0f, &near, inst, SR_MAX_AGENTS);
+  SR_CHECK_EQ(fx.nv, 0);
+  free(inst);
+  free(anim);
+  sr_mesh_free(&near);
+  sr_mesh_free(&fx);
+  sr_mesh_free(&calm);
+  sr_mesh_free(&windy);
+  free(cr);
+}
+
+static void test_reactions(void) {
+  SR_SPEC("population-simulation", "Panic reads as panic");
+  SR_SPEC("population-simulation", "Police show their intent");
+  const SrCity *c = g_game->city;
+  int32_t hx, hy;
+  sr_building_center(&c->buildings[c->home_building], &hx, &hy);
+  SrVec3 home = sr_v3((float)hx / 100.0f, 0, (float)hy / 100.0f);
+  SrCrowd *cr = (SrCrowd *)calloc(1, sizeof *cr);
+  sr_crowd_init(cr);
+  for (int i = 0; i < 40; i++) {
+    cr->agents[i] =
+        agent_at(sr_v3(home.x + (float)(i % 8), 0, home.z + (float)(i / 8)), 500u + (uint64_t)i, SR_ROLE_WORKER);
+    cr->agents[i].block = sr_city_block_at(c, hx, hy);
+    cr->agents[i].bravery = (uint8_t)(i * 6);
+  }
+  cr->count = 40;
+  sr_crowd_gunfire(cr, c, home, 30.0f, NULL, 0);
+  for (int i = 0; i < 120; i++) sr_crowd_update(cr, c, 1.0f / 60.0f, 0.0f);
+  SrCrowdCtx x = ctx_at(home);
+  int flee = 0, cower = 0, gawk = 0;
+  for (int i = 0; i < cr->count; i++) {
+    const SrAgent *a = &cr->agents[i];
+    SrAnimInput in;
+    sr_agent_anim(a, &x, &in);
+    if (a->state == SR_AG_FLEE) {
+      flee++;
+      SR_CHECK_NEAR(a->vel, SR_FLEE_SPEED, 1e-3);
+      SR_CHECK_EQ(in.upper, SR_CLIP_FLEE_ARMS);
+      SR_CHECK_EQ(in.once, SR_CLIP_RECOIL);
+      /* the run gait, an arm over the head, and a look back */
+      SrSkel s;
+      sr_anim_skel(&a->look, &s);
+      float look_back = 0;
+      for (int k = 0; k < 12; k++) {
+        SrPose p;
+        sr_anim_pose(&in, &s, x.now + k * 0.25, 0.3f, &p);
+        look_back = fmaxf(look_back, fabsf(p.j[SR_J_HEAD_YAW]));
+        SR_CHECK(p.j[SR_J_SHO_L] > 2.0f);
+        SR_CHECK(p.j[SR_J_ELB_R] > 1.0f); /* running arms */
+      }
+      SR_CHECK(look_back > 0.9f);
+    }
+    if (a->state == SR_AG_COVER) {
+      cower++;
+      SR_CHECK_EQ(in.base, SR_CLIP_COWER);
+    }
+    if (a->state == SR_AG_GAWK) {
+      gawk++;
+      SR_CHECK(in.base == SR_CLIP_FILM || in.base == SR_CLIP_POINT || in.base == SR_CLIP_CALL ||
+               in.base == SR_CLIP_IDLE);
+    }
+  }
+  SR_CHECK(flee > 0);
+  printf("  gunfire: %d flee, %d cower, %d gawk\n", flee, cower, gawk);
+  /* officers: a beat walk, the weapon ready at Heat 3, aimed at Heat 4 */
+  SrAgent cop = agent_at(sr_v3(home.x + 5, 0, home.z), 900, SR_ROLE_COP);
+  SrAnimInput in;
+  sr_agent_anim(&cop, &x, &in);
+  SR_CHECK_EQ(in.upper, SR_CLIP_BEAT);
+  x.heat = 3;
+  sr_agent_anim(&cop, &x, &in);
+  SR_CHECK_EQ(in.upper, SR_CLIP_READY);
+  SR_CHECK_EQ(in.prop_r, SR_HP_PISTOL);
+  x.heat = 4;
+  sr_agent_anim(&cop, &x, &in);
+  SR_CHECK_EQ(in.upper, SR_CLIP_AIM_PISTOL);
+  SR_CHECK(in.look_at);
+  x.heat = 0;
+  cop.activity = SR_SA_WAIT;
+  sr_agent_anim(&cop, &x, &in);
+  SR_CHECK(in.upper == SR_CLIP_WAVE || in.upper == SR_CLIP_STOP);
+  /* shaking off the rain on reaching shelter */
+  SrAgent wet = agent_at(home, 901, SR_ROLE_WORKER);
+  wet.state = SR_AG_SHELTER;
+  wet.covered = true;
+  wet.state_time = 0.3f;
+  sr_agent_anim(&wet, &x, &in);
+  SR_CHECK_EQ(in.once, SR_CLIP_SHAKE);
+  free(cr);
+}
+
+/* ---- vehicles --------------------------------------------------------------------------- */
+
+static void test_vehicles(void) {
+  SR_SPEC("population-simulation", "Cars brake and pull away");
+  SR_SPEC("population-simulation", "Cars turn at junctions");
+  SR_SPEC("retro-rendering", "Headlights cut through the rain");
+  SR_SPEC("retro-rendering", "Wheels turn");
+  const SrCity *c = g_game->city;
+  float B = (float)SR_BLOCK_CM / 100.0f;
+  /* a car that will turn: find one heading +x whose next junction is a turn onto land */
+  int32_t hx, hy;
+  sr_building_center(&c->buildings[c->home_building], &hx, &hy);
+  int bx = hx / SR_BLOCK_CM, by = hy / SR_BLOCK_CM;
+  int turned = 0, signalled = 0, braked = 0;
+  for (uint64_t key = 1; key < 60; key++) {
+    SrVehicle v;
+    memset(&v, 0, sizeof v);
+    v.key = key;
+    v.dir = sr_v3(1, 0, 0);
+    v.pos = sr_v3((float)bx * B - 30.0f, 0, (float)by * B + 4.0f);
+    v.speed = v.vel = 10.0f;
+    bool was_signalling = false;
+    for (int i = 0; i < 300 && !v.turning; i++) {
+      sr_vehicle_drive(&v, c, NULL, 0, 1.0f / 30.0f);
+      was_signalling |= v.indicator != 0;
+    }
+    if (!v.turning) continue;
+    signalled += was_signalling;
+    SrVec3 d1 = v.turn_d1;
+    for (int i = 0; i < 300 && v.turning; i++) sr_vehicle_drive(&v, c, NULL, 0, 1.0f / 30.0f);
+    SR_CHECK(!v.turning);
+    SR_CHECK(fabsf(v.dir.x - d1.x) < 1e-4f && fabsf(v.dir.z - d1.z) < 1e-4f);
+    /* it ends on the cross lane's offset, on the road */
+    float lane = fmodf(v.pos.x, B);
+    SR_CHECK(fabsf(lane - (d1.z > 0 ? 4.0f : 12.0f)) < 0.02f);
+    int blk = sr_city_block_at(c, (int32_t)(v.pos.x * 100.0f), (int32_t)(v.pos.z * 100.0f));
+    SR_CHECK(blk >= 0 && !c->blocks[blk].water);
+    turned++;
+    if (turned >= 6) break;
+  }
+  SR_CHECK(turned > 0);
+  SR_CHECK_EQ(signalled, turned);
+  /* braking for a pedestrian: no faster than the brake limit, stops short, then pulls away */
+  SrVehicle v;
+  memset(&v, 0, sizeof v);
+  v.key = 999;
+  v.dir = sr_v3(0, 0, 1);
+  v.pos = sr_v3(12.0f, 0, 20.0f); /* mid-block: no junction to turn at */
+  v.speed = v.vel = 12.0f;
+  SrVec3 ped = sr_v3(12.0f, 0, 42.0f);
+  float max_decel = 0;
+  for (int i = 0; i < 180; i++) {
+    float before = v.vel;
+    v.turning = false;
+    sr_vehicle_drive(&v, c, &ped, 1, 1.0f / 60.0f);
+    max_decel = fmaxf(max_decel, (before - v.vel) * 60.0f);
+    braked += v.stopped;
+  }
+  SR_CHECK(braked > 0);
+  SR_CHECK(max_decel <= SR_CAR_BRAKE + 1e-3f);
+  SR_CHECK_NEAR(v.vel, 0, 1e-4);
+  SR_CHECK(v.pos.z < ped.z - 0.5f);
+  for (int i = 0; i < 10; i++) sr_vehicle_drive(&v, c, NULL, 0, 1.0f / 60.0f);
+  SR_CHECK(v.vel > 0 && v.vel < 1.0f); /* accelerating, not jumping to speed */
+  SR_CHECK(v.accel > 0);
+  SR_CHECK(sr_vehicle_turn_at(&v, 3) >= -1 && sr_vehicle_turn_at(&v, 3) <= 1);
+  /* wheels turn with the distance driven */
+  SrVehicle w;
+  memset(&w, 0, sizeof w);
+  w.odo = 1.0f;
+  SR_CHECK_NEAR(sr_wheel_angle(&w), 1.0f / 0.34f, 1e-4);
+  /* headlights: two beams per car within 60 m, capped */
+  SrCrowd *cr = (SrCrowd *)calloc(1, sizeof *cr);
+  sr_crowd_init(cr);
+  for (int i = 0; i < 6; i++) {
+    cr->vehicles[i].key = (uint64_t)i + 1;
+    cr->vehicles[i].pos = sr_v3((float)i * 8.0f, 0, 0);
+    cr->vehicles[i].dir = sr_v3(0, 0, 1);
+    cr->vehicles[i].vel = 8.0f;
+  }
+  cr->vehicles[5].pos.x = 500.0f; /* too far */
+  cr->vehicle_count = 6;
+  SrMesh fx, mesh;
+  sr_mesh_init(&fx);
+  sr_mesh_init(&mesh);
+  SR_CHECK_EQ(sr_build_headlights(cr, sr_v3(0, 1.7f, 0), 0.9f, 10, 16, &fx), 10);
+  SR_CHECK_EQ(sr_build_headlights(cr, sr_v3(0, 1.7f, 0), 0.9f, 10, 4, &fx), 4);
+  /* bodies: wheels, lights, indicators, wipers, braking */
+  SrCrowdCtx x = ctx_at(sr_v3(0, 1.7f, 0));
+  x.rain = 0.5f;
+  x.now = 0.1;
+  cr->vehicles[0].indicator = 1;
+  cr->vehicles[0].turning = true;
+  cr->vehicles[1].accel = -3.0f;
+  sr_build_vehicles(cr, &x, sr_v3(0, 1.7f, 0), 100.0f, &mesh);
+  SR_CHECK(mesh.nv > 5 * 100);
+  sr_build_vehicles(cr, NULL, sr_v3(0, 1.7f, 0), 100.0f, &mesh);
+  sr_mesh_free(&fx);
+  sr_mesh_free(&mesh);
+  free(cr);
+}
+
+static void test_aerodynes(void) {
+  SR_SPEC("population-simulation", "Aerodynes land on roofs");
+  const SrCity *c = g_game->city;
+  /* lane traffic banks into its weave and bobs */
+  float max_roll = 0;
+  for (int k = 0; k < 60; k++) {
+    SrAerodyne v = sr_air_vehicle(&g_game->air, 0, k % SR_AIR_PER_LANE, (double)k * 1.3);
+    max_roll = fmaxf(max_roll, fabsf(v.roll));
+    SR_CHECK(fabsf(v.roll) <= 0.44f + 1e-5f);
+    SR_CHECK_EQ(v.mode, SR_AIR_CRUISE);
+  }
+  SR_CHECK(max_roll > 0.05f);
+  /* a helipad near the player: descend, stand, lift off, at the same times in every game */
+  int pad = -1;
+  for (int b = 0; b < c->building_count && pad < 0; b++) {
+    SrAerodyne a;
+    for (int t = 0; t < 300 && pad < 0; t += 5)
+      if (sr_air_lander(c, b, (double)t, &a)) pad = b;
+  }
+  SR_CHECK(pad >= 0);
+  if (pad < 0) return;
+  int seen[4] = {0};
+  float landed_y = -1, min_y = 1e9f, max_y = -1e9f;
+  for (int t = 0; t < 400; t++) {
+    SrAerodyne a, b;
+    if (!sr_air_lander(c, pad, (double)t, &a)) continue;
+    SR_CHECK(sr_air_lander(c, pad, (double)t, &b));
+    SR_CHECK(a.pos.x == b.pos.x && a.pos.y == b.pos.y && a.pos.z == b.pos.z);
+    seen[a.mode]++;
+    if (a.mode == SR_AIR_LANDED) landed_y = a.pos.y;
+    min_y = fminf(min_y, a.pos.y);
+    max_y = fmaxf(max_y, a.pos.y);
+  }
+  SR_CHECK(seen[SR_AIR_DESCEND] > 0 && seen[SR_AIR_LANDED] >= 20 && seen[SR_AIR_LIFT] > 0);
+  SR_CHECK_NEAR(landed_y, min_y, 1e-3);
+  SR_CHECK(max_y > landed_y + 20.0f); /* it comes down from the sky lanes */
+  /* within 200 m of the camera it is drawn; buildings without a helipad never get one */
+  int32_t cx, cy;
+  sr_building_center(&c->buildings[pad], &cx, &cy);
+  SrAerodyne out[16];
+  int found = 0;
+  for (int t = 0; t < 400 && !found; t += 3)
+    found = sr_air_landers(c, (double)t, sr_v3((float)cx / 100.0f, 0, (float)cy / 100.0f), 200.0f, out, 16);
+  SR_CHECK(found > 0);
+  SR_CHECK_EQ(sr_air_landers(c, 0.0, sr_v3(-9000, 0, -9000), 200.0f, out, 16), 0);
+  SrMesh m, fx;
+  sr_mesh_init(&m);
+  sr_mesh_init(&fx);
+  sr_build_aerodynes(&g_game->air, c, 10.0, sr_v3((float)cx / 100.0f, 50, (float)cy / 100.0f), 600.0f, &m, &fx);
+  SR_CHECK(m.nv > 0 && fx.nv > 0);
+  sr_build_aerodynes(&g_game->air, NULL, 10.5, sr_v3(0, 50, 0), 600.0f, &m, NULL);
+  sr_mesh_free(&m);
+  sr_mesh_free(&fx);
+}
+
+/* ---- combat ----------------------------------------------------------------------------- */
+
+static void test_guards(void) {
+  SR_SPEC("combat", "Alert state shows in the stance");
+  SR_SPEC("combat", "Hits show");
+  SR_SPEC("combat", "The dead fall");
+  SR_SPEC("combat", "Bodies stay down after a load");
+  SR_SPEC("combat", "Surrender shows");
+  SR_SPEC("combat", "Enemy fire can be traced");
+  SrSite *site = (SrSite *)calloc(1, sizeof *site);
+  site->guard_count = 2;
+  SrGuard *g = &site->guards[0];
+  g->id = 3; /* a pistol */
+  g->e.pos = sr_v3(5, 0, 5);
+  g->e.yaw = 0;           /* faces -z */
+  site->guards[1].id = 4; /* a rifle */
+  site->guards[1].e.pos = sr_v3(8, 0, 5);
+  SrAppearance a = sr_appearance_generate(g->id, SR_ROLE_GUARD, 0);
+  SrVec3 player = sr_v3(5, 1.6f, -3);
+  SrAnimInput in;
+  site->guards[1].e.alert = SR_ALERT_UNAWARE;
+  sr_guard_anim(site, &site->guards[1], &a, 1.0, player, &in);
+  SR_CHECK_EQ(in.upper, SR_CLIP_SLUNG);
+  SR_CHECK_EQ(in.prop_r, SR_HP_RIFLE);
+  site->guards[1].pause = 1.0f;
+  sr_guard_anim(site, &site->guards[1], &a, 1.0, player, &in);
+  SR_CHECK_EQ(in.base, SR_CLIP_LOOK_AROUND);
+  g->e.alert = SR_ALERT_UNAWARE;
+  sr_guard_anim(site, g, &a, 1.0, player, &in);
+  SR_CHECK_EQ(in.prop_r, SR_HP_NONE); /* pistol holstered */
+  g->e.alert = SR_ALERT_SUSPICIOUS;
+  g->e.investigate = sr_v3(9, 0, 5);
+  sr_guard_anim(site, g, &a, 1.0, player, &in);
+  SR_CHECK(in.look_at && in.upper == SR_CLIP_READY);
+  g->e.alert = SR_ALERT_SEARCHING;
+  g->speed = 1.0f;
+  sr_guard_anim(site, g, &a, 1.0, player, &in);
+  SR_CHECK_EQ(in.upper, SR_CLIP_READY);
+  g->e.alert = SR_ALERT_COMBAT;
+  sr_guard_anim(site, g, &a, 1.0, player, &in);
+  SR_CHECK_EQ(in.upper, SR_CLIP_AIM_PISTOL);
+  SR_CHECK(in.look_at);
+  site->guards[1].e.alert = SR_ALERT_COMBAT;
+  site->guards[1].speed = 0;
+  sr_guard_anim(site, &site->guards[1], &a, 1.0, player, &in);
+  SR_CHECK_EQ(in.base, SR_CLIP_PEEK);
+  /* hits: a flinch away from the shot, a stagger on heavy hits, a snap on headshots */
+  SrSkel s;
+  sr_anim_skel(&a, &s);
+  g->speed = 0;
+  g->hit_time = 2.0f;
+  g->hit_dir = 0.0f; /* from +z: behind the guard */
+  for (int kind = 1; kind <= 3; kind++) {
+    g->hit_kind = (uint8_t)kind;
+    sr_guard_anim(site, g, &a, 2.1, player, &in);
+    static const int clips[4] = {0, SR_CLIP_FLINCH, SR_CLIP_STAGGER, SR_CLIP_HEADSHOT};
+    SR_CHECK_EQ(in.once, clips[kind]);
+    SrPose hit, calm;
+    sr_anim_pose(&in, &s, 2.0 + sr_anim_clip_len(clips[kind]) * 0.25, 0, &hit);
+    in.once = 0;
+    sr_anim_pose(&in, &s, 2.0 + sr_anim_clip_len(clips[kind]) * 0.25, 0, &calm);
+    float d = 0;
+    for (int j = 0; j < SR_J_COUNT; j++) d = fmaxf(d, fabsf(hit.j[j] - calm.j[j]));
+    SR_CHECK(d > 0.15f);
+  }
+  sr_guard_anim(site, g, &a, 4.0, player, &in);
+  SR_CHECK_EQ(in.once, 0); /* the flinch is over */
+  /* falls: away from the hit, ending on the floor within 0.6-0.9 s */
+  g->hit_kind = 0;
+  g->e.dead = true;
+  g->down_time = 10.0f;
+  static const float dirs[3] = {SR_PI, 0.0f, SR_PI * 0.5f}; /* shot from the front, behind, the side */
+  static const int falls[3] = {SR_CLIP_DIE_BACK, SR_CLIP_DIE_FRONT, SR_CLIP_DIE_SIDE};
+  for (int k = 0; k < 3; k++) {
+    g->hit_dir = dirs[k];
+    sr_guard_anim(site, g, &a, 10.0, player, &in);
+    SR_CHECK_EQ(in.once, falls[k]);
+    float len = sr_anim_clip_len(in.once);
+    SR_CHECK(len >= 0.6f && len <= 0.9f);
+    SrPose p0, p1;
+    sr_anim_pose(&in, &s, 10.05, 0, &p0);
+    sr_anim_pose(&in, &s, 10.0 + len + 0.5, 0, &p1);
+    SR_CHECK(sr_anim_point(&s, &p0, 4).y > 1.3f);
+    SR_CHECK(sr_anim_point(&s, &p1, 4).y < 0.6f);
+  }
+  g->hit_dir = SR_PI; /* fell back: away from a shot from the front (forward is -z) */
+  sr_guard_anim(site, g, &a, 12.0, player, &in);
+  SrPose lying;
+  sr_anim_pose(&in, &s, 12.0, 0, &lying);
+  SR_CHECK(sr_anim_point(&s, &lying, 4).z < -0.8f); /* the head lies behind the feet */
+  g->e.dead = false;
+  g->e.ko = true;
+  sr_guard_anim(site, g, &a, 10.2, player, &in);
+  SR_CHECK_EQ(in.once, SR_CLIP_SLUMP);
+  /* a body from an earlier visit lies still */
+  g->down_time = -1.0f;
+  sr_guard_anim(site, g, &a, 0.01, player, &in);
+  SR_CHECK(in.once_t0 < 0);
+  SrPose still;
+  sr_anim_pose(&in, &s, 0.01, 0, &still);
+  SR_CHECK(sr_anim_point(&s, &still, 4).y < 0.6f);
+  /* status poses */
+  g->e.restrained = true;
+  sr_guard_anim(site, g, &a, 1.0, player, &in);
+  SR_CHECK_EQ(in.base, SR_CLIP_RESTRAINED);
+  g->e.ko = g->e.restrained = false;
+  g->e.surrendered = true;
+  sr_guard_anim(site, g, &a, 1.0, player, &in);
+  SR_CHECK_EQ(in.base, SR_CLIP_SURRENDER);
+  SR_CHECK_EQ(in.prop_r, SR_HP_NONE); /* the weapon is dropped */
+  SrPose up;
+  sr_anim_pose(&in, &s, 1.0, 0, &up);
+  SR_CHECK(sr_anim_point(&s, &up, 2).y > sr_anim_point(&s, &up, 4).y - 0.1f); /* hands up by the head */
+  g->e.surrendered = false;
+  g->stun = 2.0f;
+  sr_guard_anim(site, g, &a, 1.0, player, &in);
+  SR_CHECK_EQ(in.base, SR_CLIP_STUNNED);
+  g->stun = 0;
+  /* guards draw with the cache; the blood pool spreads */
+  SrMesh m, fx;
+  sr_mesh_init(&m);
+  sr_mesh_init(&fx);
+  SrAnimCache *anim = (SrAnimCache *)malloc(sizeof *anim);
+  sr_anim_cache_init(anim);
+  g->e.dead = true;
+  g->down_time = 1.0f;
+  site->guards[1].e.drone = true;
+  sr_anim_cache_begin(anim, 1.5);
+  sr_build_guards(site, anim, 1.5, player, &m);
+  int early = m.nv;
+  SR_CHECK(early > 0);
+  sr_anim_cache_end(anim);
+  /* enemy fire: a flash, a light and (every third round) a tracer */
+  g->e.dead = false;
+  g->shot_time = 3.0f;
+  g->shot_tracer = true;
+  SrLight lights[8];
+  int nl = sr_build_enemy_fire(site, 3.05, player, player, &fx, lights, 0, 8);
+  SR_CHECK_EQ(nl, 1);
+  SR_CHECK(fx.nv >= 4 * 8);
+  SR_CHECK(lights[0].radius > 3.0f);
+  sr_mesh_clear(&fx);
+  SR_CHECK_EQ(sr_build_enemy_fire(site, 3.5, player, player, &fx, lights, 0, 8), 0); /* the flash is over */
+  SR_CHECK_EQ(fx.nv, 0);
+  free(anim);
+  sr_mesh_free(&m);
+  sr_mesh_free(&fx);
+  free(site);
+}
+
+void suite_anim(void) {
+  g_game = sr_game_create();
+  sr_game_new(g_game, 0x5EEDC0DEull, NULL, SR_BG_STREET_KID, "Anim");
+  SR_RUN(test_clips);
+  SR_RUN(test_gait);
+  SR_RUN(test_turns_and_blends);
+  SR_RUN(test_street_life);
+  SR_RUN(test_groups);
+  SR_RUN(test_rain_and_props);
+  SR_RUN(test_reactions);
+  SR_RUN(test_vehicles);
+  SR_RUN(test_aerodynes);
+  SR_RUN(test_guards);
+  sr_game_destroy(g_game);
+}

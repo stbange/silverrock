@@ -314,6 +314,7 @@ void sr_site_open(SrSite *s, const SrInterior *in, int building, float ox, float
     int v = sr_deltas_get(d, g->id);
     if (v == SR_GV_DEAD) g->e.dead = true;
     if (v == SR_GV_KO) g->e.ko = true;
+    g->down_time = -1.0f;          /* down since an earlier visit: lies still */
     if (v > 0) g->reported = true; /* found and dealt with after the last visit */
     s->guard_count++;
   }
@@ -374,6 +375,7 @@ int sr_site_guard_ahead(const SrSite *s, SrVec3 eye, float yaw, float pitch, flo
 }
 
 static void guard_down(SrSite *s, SrDeltas *d, SrGuard *g, bool lethal) {
+  g->down_time = s->time;
   if (lethal) {
     g->e.dead = true;
     s->kills++;
@@ -392,6 +394,7 @@ bool sr_site_takedown(SrSite *s, SrDeltas *d, SrVec3 eye, float yaw, bool lethal
     float noise = 0;
     if (!sr_takedown(&g->e, at, lethal, &noise)) continue;
     g->e.dead = g->e.ko = false; /* booked by guard_down */
+    g->hit_dir = atan2f(eye.x - g->e.pos.x, eye.z - g->e.pos.z);
     guard_down(s, d, g, lethal);
     sr_site_noise(s, g->e.pos, noise);
     return true;
@@ -411,7 +414,12 @@ bool sr_site_shoot(SrSite *s, SrDeltas *d, SrVec3 eye, float yaw, float pitch, c
   SrGuard *g = &s->guards[gi];
   SrVec3 to = sr_v3_norm(sr_v3_sub(g->e.pos, eye));
   bool head = sr_v3_dot(to, sr_dir_from_yaw_pitch(yaw, pitch)) > 0.9995f;
-  if (sr_enemy_hit(&g->e, w, head ? SR_ZONE_HEAD : SR_ZONE_TORSO)) {
+  float before = g->e.health;
+  g->hit_time = s->time;
+  g->hit_dir = atan2f(eye.x - g->e.pos.x, eye.z - g->e.pos.z);
+  bool hit = sr_enemy_hit(&g->e, w, head ? SR_ZONE_HEAD : SR_ZONE_TORSO);
+  g->hit_kind = head ? 3 : (before - g->e.health) >= 0.35f * g->e.max_health ? 2 : 1;
+  if (hit) {
     bool lethal = g->e.dead;
     g->e.dead = g->e.ko = false;
     guard_down(s, d, g, lethal);
@@ -639,6 +647,8 @@ static void update_guard(SrSite *s, SrSiteCtx *ctx, SrGuard *g, float dt) {
     if (g->fire_cd <= 0) {
       g->fire_cd = FIRE_CD;
       s->shots_fired++;
+      g->shot_time = s->time;
+      g->shot_tracer = s->shots_fired % 3 == 0;
     }
     navigate(s, g, e->pos, CHASE_SPD, dt);
     return;
@@ -672,6 +682,8 @@ static void update_guard(SrSite *s, SrSiteCtx *ctx, SrGuard *g, float dt) {
       if (visible && g->fire_cd <= 0) {
         g->fire_cd = FIRE_CD;
         s->shots_fired++;
+        g->shot_time = s->time;
+        g->shot_tracer = s->shots_fired % 3 == 0;
         uint64_t key = sr_hash_combine(ctx->key, g->id * 977u + (uint64_t)s->shots_fired);
         if (sr_enemy_fire(&g->e, d, ctx->difficulty, key))
           ctx->player_damage += GUARD_DMG * sr_difficulty(ctx->difficulty)->enemy_damage;
@@ -683,7 +695,15 @@ static void update_guard(SrSite *s, SrSiteCtx *ctx, SrGuard *g, float dt) {
     case SR_ALERT_SUSPICIOUS: navigate(s, g, g->e.investigate, SEARCH_SPD, dt); break;
     default: {
       SrVec3 goal = sr_site_room_center(s, g->route[g->route_i]);
-      if (flat_dist(goal, g->e.pos) < 0.3f) g->route_i = (g->route_i + 1) % g->route_n;
+      if (g->pause > 0) { /* looking around at the waypoint */
+        g->pause -= dt;
+        break;
+      }
+      if (flat_dist(goal, g->e.pos) < 0.3f) {
+        g->route_i = (g->route_i + 1) % g->route_n;
+        g->pause = SR_GUARD_PAUSE_MIN + (float)(g->id % 3u);
+        break;
+      }
       navigate(s, g, goal, PATROL_SPD, dt);
       break;
     }
@@ -830,7 +850,11 @@ void sr_site_update(SrSite *s, SrSiteCtx *ctx, float dt) {
   s->awareness = 0;
   for (int i = 0; i < s->guard_count; i++) {
     SrGuard *g = &s->guards[i];
+    float walk0 = g->walk;
+    bool was_ko = g->e.ko;
     update_guard(s, ctx, g, dt);
+    g->speed = dt > 0 ? (g->walk - walk0) / dt : 0.0f;
+    if (was_ko && !g->e.ko && !g->e.dead) g->wake_time = s->time;
     if (guard_up(g)) s->awareness = SR_MAX(s->awareness, SR_MIN(g->e.awareness, 1.0f));
   }
   update_cameras(s, ctx, dt);

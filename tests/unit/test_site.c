@@ -1071,7 +1071,7 @@ static void test_interior_render_and_ui(void) {
   SR_CHECK(m.ni > 0);
   g->site.guards[0].e.dead = true;
   g->site.guards[1 % g->site.guard_count].e.alert = SR_ALERT_COMBAT;
-  sr_build_guards(&g->site, &m);
+  sr_build_guards(&g->site, NULL, 1.0, g->player.pos, &m);
   SR_CHECK(m.ni > 0);
   SrLight lights[64];
   SR_CHECK(sr_site_collect_lights(&g->site, lights, 64) > 0);
@@ -1154,18 +1154,21 @@ static void test_crowd_lod(void) {
   sr_mesh_init(&body);
   sr_mesh_init(&near);
   sr_build_instance_body(&body);
-  int parts[6] = {0};
+  int parts[10] = {0};
   for (int v = 0; v < body.nv; v++) parts[body.v[v].pad]++;
-  for (int k = 0; k < 6; k++) SR_CHECK(parts[k] > 0);
+  for (int k = 0; k < 10; k++) SR_CHECK(parts[k] > 0);
   float *inst = (float *)malloc(sizeof(float) * SR_MAX_AGENTS * SR_INST_FLOATS);
-  int n = sr_build_crowd_lod(&g->crowd, g->player.pos, SR_CROWD_NEAR_M, 200.0f, &near, inst, SR_MAX_AGENTS);
+  SrCrowdCtx cx;
+  memset(&cx, 0, sizeof cx);
+  cx.max_near = SR_MAX_AGENTS;
+  int n = sr_build_crowd_lod(&g->crowd, NULL, &cx, g->player.pos, SR_CROWD_NEAR_M, 200.0f, &near, inst, SR_MAX_AGENTS);
   SR_CHECK(n > 0);
   for (int i = 0; i < n; i++) {
     float dx = inst[i * SR_INST_FLOATS] - g->player.pos.x, dz = inst[i * SR_INST_FLOATS + 2] - g->player.pos.z;
     SR_CHECK(dx * dx + dz * dz > SR_CROWD_NEAR_M * SR_CROWD_NEAR_M); /* only far citizens are instanced */
     SR_CHECK(inst[i * SR_INST_FLOATS + 6] > 1.5f);                   /* height scale */
   }
-  int cap = sr_build_crowd_lod(&g->crowd, g->player.pos, 0.0f, 200.0f, &near, inst, 3);
+  int cap = sr_build_crowd_lod(&g->crowd, NULL, &cx, g->player.pos, 0.0f, 200.0f, &near, inst, 3);
   SR_CHECK_EQ(cap, 3); /* past the budget, the rest are drawn detailed */
   SR_CHECK(near.nv > 0);
   free(inst);

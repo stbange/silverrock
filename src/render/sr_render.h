@@ -6,6 +6,7 @@
 
 #include "core/sr_math.h"
 #include "game/sr_game.h"
+#include "render/sr_anim.h"
 #include "world/sr_dressing.h"
 
 #define SR_TEX_SIZE            128
@@ -187,22 +188,48 @@ void sr_mesh_part(SrMesh *m, SrVec3 origin, float yaw, SrVec3 pivot, float swing
                   int layer, int em);
 
 /* Instanced crowd (far level of detail): a unit body whose vertices carry a part id (pad byte:
- * 0/1 legs, 2 torso, 3/4 arms, 5 head) and per-instance data of SR_INST_FLOATS floats:
- * x y z yaw | swing width height 0 | outfit rgb 0 | skin rgb 0. */
+ * 0/1 thighs, 2 torso, 3/4 upper arms, 5 head, 6/7 shins, 8/9 forearms) and per-instance data of
+ * SR_INST_FLOATS floats: x y z yaw | phase width height clip | outfit rgb speed | skin rgb hunch.
+ * Clip codes: 0 stand, 1 walk or run (by speed), 2 sit, 3 crouch, 4 lying. The hunch slot adds 2
+ * when a phone or cigarette glows in the hand. */
 #define SR_INST_FLOATS  16
 #define SR_CROWD_NEAR_M 28.0f
 void sr_build_instance_body(SrMesh *out);
-/* Near citizens as detailed meshes into `near`, far ones as instances; returns the instance count. */
-int sr_build_crowd_lod(const SrCrowd *cr, SrVec3 cam, float near_m, float far_m, SrMesh *near, float *inst, int max);
+
+/* What the crowd builders need from the frame. */
+typedef struct SrCrowdCtx {
+  double now; /* game seconds */
+  float rain, wet;
+  SrVec3 wind; /* m/s */
+  int heat;    /* highest Heat */
+  SrVec3 player, eye;
+  int max_near; /* near skeletons this frame (budget) */
+  SrMesh *fx;   /* glow-pass mesh for footfall splashes (may be NULL) */
+  int splashes, max_splashes;
+} SrCrowdCtx;
+/* Animation input of a citizen: clip from the state and activity, props, rain, police stance. */
+void sr_agent_anim(const SrAgent *a, const SrCrowdCtx *x, SrAnimInput *out);
+/* Index of the member of a talking group who speaks at `now` (one at a time). */
+int sr_group_speaker(uint64_t group, int n, double now);
+/* Near citizens as animated meshes into `near`, far ones as instances; returns the instance count. */
+int sr_build_crowd_lod(const SrCrowd *cr, SrAnimCache *anim, const SrCrowdCtx *x, SrVec3 cam, float near_m, float far_m,
+                       SrMesh *near, float *inst, int max);
 
 /* Characters, rain, skyline, landmarks */
-void sr_build_characters(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *out);
-/* Aerodynes on their sky lanes near the camera (time in real seconds). */
-void sr_build_aerodynes(const SrAirTraffic *air, double t, SrVec3 cam, float radius, SrMesh *out);
-/* Appends the vehicles within range to a mesh. */
-void sr_build_vehicles(const SrCrowd *cr, SrVec3 cam, float max_dist, SrMesh *out);
+void sr_build_characters(const SrCrowd *cr, SrAnimCache *anim, const SrCrowdCtx *x, SrVec3 cam, float max_dist,
+                         SrMesh *out);
+/* Aerodynes on their sky lanes near the camera, banking and bobbing, and those landing on helipads
+ * within 200 m (time in seconds); thruster glows go into fx (may be NULL). */
+void sr_build_aerodynes(const SrAirTraffic *air, const SrCity *c, double t, SrVec3 cam, float radius, SrMesh *out,
+                        SrMesh *fx);
+/* Appends the vehicles within range to a mesh: body, cabin, turning wheels, suspension, lights. */
+void sr_build_vehicles(const SrCrowd *cr, const SrCrowdCtx *x, SrVec3 cam, float max_dist, SrMesh *out);
+/* Wheel rotation (radians) from the distance driven. */
+float sr_wheel_angle(const SrVehicle *v);
+/* Headlight beams of cars within 60 m (at most `max`) and spray behind fast wheels; returns beams. */
+int sr_build_headlights(const SrCrowd *cr, SrVec3 eye, float wet, uint64_t steps, int max, SrMesh *fx);
 void sr_build_character(const SrAppearance *a, SrVec3 pos, SrVec3 dir, bool umbrella, SrMesh *out);
-/* Character facing `dir`; walk >= 0 is the distance walked and swings legs and arms (walk cycle). */
+/* Character facing `dir`; walk >= 0 is the distance walked and drives the walk cycle. */
 void sr_build_character_walk(const SrAppearance *a, SrVec3 pos, SrVec3 dir, float walk, bool umbrella, SrMesh *out);
 /* Leg swing angle for a walked distance (radians). */
 float sr_walk_swing(float walk);
@@ -216,7 +243,14 @@ void sr_build_host(const SrGame *g, float time_s, SrMesh *out);
 void sr_build_interior_room(const SrSite *s, int room, SrMesh *out);
 uint64_t sr_site_mesh_key(const SrSite *s, const SrDeltas *d);
 void sr_build_site_dynamic(const SrSite *s, const SrDeltas *d, float time_s, SrMesh *out);
-void sr_build_guards(const SrSite *s, SrMesh *out);
+/* Guards posed by their alert state, hits and falls (time in game seconds; the cache may be NULL). */
+void sr_build_guards(const SrSite *s, SrAnimCache *anim, double now, SrVec3 player, SrMesh *out);
+/* Animation input of one guard (now in site seconds). */
+void sr_guard_anim(const SrSite *s, const SrGuard *g, const SrAppearance *a, double now, SrVec3 player,
+                   SrAnimInput *in);
+/* Muzzle flashes, tracers and flash lights of guards that just fired; returns the light count. */
+int sr_build_enemy_fire(const SrSite *s, double now, SrVec3 player, SrVec3 eye, SrMesh *fx, SrLight *lights, int nl,
+                        int max_lights);
 int sr_site_collect_lights(const SrSite *s, SrLight *out, int max);
 /* Thermal vision: recolours vertices from `from` as glowing heat signatures. */
 void sr_mesh_thermal(SrMesh *m, int from_vertex);
@@ -360,8 +394,11 @@ typedef struct SrSceneCache {
   /* the gloom (sr_sky_mesh.c) */
   SrMesh sky, deck, deck_glow, halos, near_glow, silhouettes, sun;
   SrMesh beams, blimps, blimp_glow, distant, skyline_glow;
-  SrMesh vertical, trains; /* skyways and metro tracks (built once), trains (every frame) */
-  SrMesh pools;            /* light pools and wall splashes (every frame) */
+  SrMesh vertical, trains;     /* skyways and metro tracks (built once), trains (every frame) */
+  SrMesh pools;                /* light pools and wall splashes (every frame) */
+  SrMesh crowd_fx;             /* footfall splashes, headlight beams, car spray, muzzle flashes (glow pass) */
+  SrAnimCache anim;            /* poses of citizens and guards (presentation only) */
+  int near_drawn, beams_drawn; /* diagnostics for the budget test */
   struct {
     int block;
     uint64_t used;
@@ -422,6 +459,9 @@ void sr_build_holo_ads(const SrCity *c, const SrAdContext *ads, SrVec3 eye, floa
 int sr_build_tickers(const SrCity *c, const char *headline, SrVec3 eye, float time_s, SrMesh *out);
 int sr_build_wanted(const SrCity *c, int district, int heat, SrColor outfit, SrVec3 eye, SrMesh *out);
 SrColor sr_outfit_color(const SrAppearance *a);
+/* Clothing and skin colours of a character. */
+SrColor sr_anim_cloth(const SrAppearance *a);
+SrColor sr_anim_skin(const SrAppearance *a);
 
 /* The street of a block (sr_street_mesh.c): kerbs, markings, props, overhead lines and billboards
  * (when ads is given). detail 0..2. */

@@ -27,16 +27,27 @@ typedef struct SrAirTraffic {
   SrAirLane lanes[SR_AIR_MAX_LANES];
 } SrAirTraffic;
 
+enum { SR_AIR_CRUISE, SR_AIR_DESCEND, SR_AIR_LANDED, SR_AIR_LIFT };
+
 typedef struct SrAerodyne {
   SrVec3 pos, dir;
-  int lane;
+  int lane; /* -1 for an aerodyne landing on a roof */
   uint8_t color;
+  uint8_t mode;      /* SR_AIR_* */
+  float roll, pitch; /* bank into the weave, nose up when settling */
 } SrAerodyne;
+
+#define SR_AIR_LAND_TIME 8.0f /* seconds to descend onto (or lift off) a helipad */
 
 void sr_air_build(SrAirTraffic *a, const SrCity *c);
 /* Aerodyne k of a lane at time t (seconds). */
 SrAerodyne sr_air_vehicle(const SrAirTraffic *a, int lane, int k, double t);
 /* Aerodynes within radius of the camera; returns how many were written. */
 int sr_air_near(const SrAirTraffic *a, double t, SrVec3 cam, float radius, SrAerodyne *out, int max);
+/* The landing cycle of the helipad on building b at time t: descend, wait, lift off, away. Returns
+ * false while the pad is empty. */
+bool sr_air_lander(const SrCity *c, int building, double t, SrAerodyne *out);
+/* Aerodynes landing on, standing on or leaving helipads within radius; returns how many. */
+int sr_air_landers(const SrCity *c, double t, SrVec3 cam, float radius, SrAerodyne *out, int max);
 
 #endif

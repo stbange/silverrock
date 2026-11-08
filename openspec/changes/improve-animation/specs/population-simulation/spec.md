@@ -20,7 +20,7 @@ nearby, alone or in small groups, and walk on when it ends.
 
 #### Scenario: The street is busy with small things
 - **WHEN** a busy street at night is simulated for 10 minutes
-- **THEN** at least half of the standing citizens within 20 m of the camera are doing something other than plain idling
+- **THEN** at least half of the standing citizens around the camera are doing something other than plain idling
 
 #### Scenario: Rain changes the walk
 - **WHEN** a citizen without an umbrella walks in rain at least as strong as drizzle

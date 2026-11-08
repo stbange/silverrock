@@ -1294,12 +1294,20 @@ static void test_traffic_and_memory(void) {
   SR_CHECK(cr->vehicle_count > 0);
   SrVehicle *first = &cr->vehicles[0];
   SrVec3 in_front = sr_v3_add(first->pos, sr_v3_scale(first->dir, 4.0f));
-  SrVec3 before = first->pos;
-  sr_crowd_traffic(cr, c, &cam, in_front, 0.5f);
-  SR_CHECK(cr->vehicles[0].stopped);
-  SR_CHECK_NEAR(cr->vehicles[0].pos.x, before.x, 1e-4);
-  sr_crowd_traffic(cr, c, &cam, sr_v3(-999, 0, -999), 0.5f);
-  if (!cr->vehicles[0].stopped) SR_CHECK(cr->vehicles[0].pos.x != before.x || cr->vehicles[0].pos.z != before.z);
+  in_front = sr_v3_add(first->pos, sr_v3_scale(first->dir, 30.0f)); /* far enough to brake in time */
+  uint64_t key0 = first->key;
+  for (int k = 0; k < 60; k++) sr_crowd_traffic(cr, c, &cam, in_front, 0.1f);
+  SrVehicle *car = &cr->vehicles[0];
+  if (car->key == key0 && !car->turning) {
+    SR_CHECK(car->stopped);
+    SR_CHECK_NEAR(car->vel, 0, 1e-4);
+    float gap = sr_v3_dot(sr_v3_sub(in_front, car->pos), car->dir);
+    SR_CHECK(gap > 0.5f); /* stopped short of the pedestrian */
+    SrVec3 before = car->pos;
+    sr_crowd_traffic(cr, c, &cam, sr_v3(-999, 0, -999), 0.1f);
+    SR_CHECK(car->vel > 0 && car->vel < car->speed); /* pulls away, not at full speed at once */
+    SR_CHECK(car->pos.x != before.x || car->pos.z != before.z);
+  }
   cam.pos = sr_v3(-5000, 0, -5000);
   for (int i = 0; i < 5; i++) sr_crowd_traffic(cr, c, &cam, cam.pos, 0.1f);
   SR_CHECK_EQ(cr->vehicle_count, 0); /* far away: despawned, none spawn off the map */

@@ -13,6 +13,36 @@
 
 typedef enum SrAgentState { SR_AG_WALK, SR_AG_FLEE, SR_AG_COVER, SR_AG_GAWK, SR_AG_SHELTER, SR_AG_IDLE } SrAgentState;
 
+/* What a citizen does while standing (chosen from the place, the district and the key). */
+typedef enum SrStreetAct {
+  SR_SA_NONE,
+  SR_SA_IDLE,
+  SR_SA_SIT,
+  SR_SA_SLEEP,
+  SR_SA_EAT,
+  SR_SA_BUY,
+  SR_SA_LEAN,
+  SR_SA_SMOKE,
+  SR_SA_PHONE,
+  SR_SA_CALL,
+  SR_SA_WINDOW,
+  SR_SA_WAIT,
+  SR_SA_QUEUE,
+  SR_SA_DANCE,
+  SR_SA_WATCH,
+  SR_SA_POINT,
+  SR_SA_WARM,
+  SR_SA_BEG,
+  SR_SA_TALK,
+  SR_SA_FILM,
+  SR_SA_COWER,
+  SR_SA_COUNT
+} SrStreetAct;
+
+#define SR_AGENT_ACCEL 3.0f /* m/s^2 when starting */
+#define SR_AGENT_BRAKE 4.5f /* m/s^2 when stopping */
+#define SR_FLEE_SPEED  4.5f
+
 typedef struct SrAgent {
   uint64_t key;
   int32_t npc; /* notable index or -1 for ambient */
@@ -26,7 +56,14 @@ typedef struct SrAgent {
   SrVec3 pos, dir, target;
   float speed;
   int block;
-  float walk; /* metres walked, drives the walk cycle */
+  float walk;               /* metres walked, drives the walk cycle */
+  float vel;                /* current speed m/s: agents accelerate and brake */
+  float state_time;         /* seconds since the state (or shelter) began */
+  uint8_t activity;         /* SrStreetAct while standing */
+  uint8_t pending;          /* activity to start on reaching the target */
+  uint8_t group_n, group_i; /* talking group size and this member's index */
+  uint64_t group;           /* key of the group's first member, 0 none */
+  SrVec3 face;              /* direction to face while standing */
 } SrAgent;
 
 typedef struct SrCamera {
@@ -37,13 +74,22 @@ typedef struct SrCamera {
 
 #define SR_MAX_VEHICLES 16
 
+#define SR_CAR_ACCEL 3.0f /* m/s^2 */
+#define SR_CAR_BRAKE 6.0f /* m/s^2 */
+
 typedef struct SrVehicle {
   uint64_t key;
   SrVec3 pos;
-  SrVec3 dir;  /* unit vector along the lane */
-  float speed; /* cruise speed m/s */
-  bool stopped;
+  SrVec3 dir;   /* unit vector of travel (along the lane, or along the arc while turning) */
+  float speed;  /* cruise speed m/s */
+  bool stopped; /* braking for a pedestrian ahead */
   uint8_t color;
+  float vel, accel; /* current speed and acceleration */
+  float odo;        /* metres driven: turns the wheels */
+  int8_t indicator; /* -1 left, 1 right, 0 off */
+  bool turning;
+  float turn_r, turn_a; /* arc radius and angle travelled 0..pi/2 */
+  SrVec3 turn_c, turn_d0, turn_d1;
 } SrVehicle;
 
 typedef struct SrCrowd {
@@ -78,6 +124,18 @@ float sr_crowd_exposed_share(const SrCrowd *cr); /* outdoor, no cover, no umbrel
 int sr_crowd_visible(const SrCrowd *cr, const SrCamera *cam, float max_dist);
 /* True when a pedestrian is on the crossing in front of the vehicle. */
 bool sr_vehicle_should_stop(const SrVehicle *v, const SrVec3 *peds, int n);
+/* The same within a look-ahead of `range` metres (the braking distance plus a margin). */
+bool sr_vehicle_should_stop_within(const SrVehicle *v, const SrVec3 *peds, int n, float range);
+/* One driving step: brake for pedestrians, accelerate, follow turns at junctions. */
+void sr_vehicle_drive(SrVehicle *v, const SrCity *c, const SrVec3 *peds, int np, float dt);
+/* The turn a vehicle takes at the junction with grid line `k` across its axis: -1, 0 or 1. */
+int sr_vehicle_turn_at(const SrVehicle *v, int k);
+/* Activity for a citizen stopping at pos (props within 3 m decide first); faces the prop. */
+SrStreetAct sr_activity_pick(const SrCity *c, int block, SrVec3 pos, uint64_t key, int role, SrVec3 *face);
+/* True when the activity is one listed for that street prop kind. */
+bool sr_activity_fits_prop(int prop_kind, SrStreetAct a);
+/* The street prop kind within 3 m of pos that decides the activity there, or -1. */
+int sr_activity_prop_near(const SrCity *c, int block, SrVec3 pos, SrVec3 *prop_pos, float *prop_yaw);
 /* Spawns, moves and despawns traffic around the camera; the player counts as a pedestrian. */
 void sr_crowd_traffic(SrCrowd *cr, const SrCity *c, const SrCamera *cam, SrVec3 player, float dt);
 

@@ -13,8 +13,6 @@
 
 static SrColor rgb(int r, int g, int b) { return (SrColor){(uint8_t)r, (uint8_t)g, (uint8_t)b, 255}; }
 
-static SrColor dark(SrColor c) { return (SrColor){(uint8_t)(c.r / 2), (uint8_t)(c.g / 2), (uint8_t)(c.b / 2), 255}; }
-
 static SrColor deco(int i) {
   static const SrColor k[8] = {{255, 60, 140, 255}, {60, 220, 255, 255}, {255, 200, 60, 255},  {140, 90, 255, 255},
                                {80, 255, 140, 255}, {255, 110, 40, 255}, {230, 230, 240, 255}, {255, 40, 60, 255}};
@@ -264,27 +262,157 @@ void sr_build_site_dynamic(const SrSite *s, const SrDeltas *d, float t, SrMesh *
   }
 }
 
-void sr_build_guards(const SrSite *s, SrMesh *m) {
+/* The animation input of a guard: weapon, stance by alert state, hits, falls and status poses. */
+void sr_guard_anim(const SrSite *s, const SrGuard *g, const SrAppearance *a, double now, SrVec3 player,
+                   SrAnimInput *in) {
+  memset(in, 0, sizeof *in);
+  in->key = 0x6A4Du ^ ((uint64_t)g->id << 8);
+  in->look = a;
+  in->role = SR_ROLE_GUARD;
+  in->pos = sr_v3(g->e.pos.x, Y0, g->e.pos.z);
+  in->dir = sr_dir_from_yaw_pitch(g->e.yaw, 0);
+  in->speed = g->speed;
+  in->walk = g->walk;
+  in->once_t0 = -1;
+  bool rifle = g->id % 3u != 0;
+  in->prop_r = (uint8_t)(rifle ? SR_HP_RIFLE : SR_HP_PISTOL);
+  float yaw = atan2f(in->dir.x, in->dir.z), rel = sr_wrap_angle(g->hit_dir - yaw);
+  if (g->e.dead || g->e.ko) {
+    if (g->e.restrained) {
+      in->base = SR_CLIP_RESTRAINED;
+      in->prop_r = SR_HP_NONE;
+      return;
+    }
+    /* topple away from the hit: shot from the front falls back, from behind forward */
+    in->once = (uint8_t)(g->e.ko             ? SR_CLIP_SLUMP
+                         : fabsf(rel) < 0.8f ? SR_CLIP_DIE_BACK
+                         : fabsf(rel) > 2.3f ? SR_CLIP_DIE_FRONT
+                                             : SR_CLIP_DIE_SIDE);
+    in->mirror = rel < 0;
+    in->base = in->once;
+    in->once_t0 = g->down_time > 0 ? (double)g->down_time : -1.0;
+    in->prop_r = SR_HP_NONE;
+    return;
+  }
+  if (g->e.surrendered) {
+    in->base = SR_CLIP_SURRENDER;
+    in->prop_r = SR_HP_NONE;
+    return;
+  }
+  if (g->stun > 0) {
+    in->base = SR_CLIP_STUNNED;
+    in->prop_r = SR_HP_NONE;
+    return;
+  }
+  in->base = SR_CLIP_IDLE;
+  switch (g->e.alert) {
+    case SR_ALERT_UNAWARE:
+      in->upper = rifle ? SR_CLIP_SLUNG : SR_CLIP_NONE;
+      if (!rifle) in->prop_r = SR_HP_NONE; /* holstered */
+      if (g->pause > 0) in->base = SR_CLIP_LOOK_AROUND;
+      break;
+    case SR_ALERT_SUSPICIOUS:
+      in->upper = SR_CLIP_READY;
+      in->look_at = true;
+      in->target = g->e.investigate;
+      break;
+    case SR_ALERT_SEARCHING:
+      in->upper = SR_CLIP_READY;
+      if (g->speed < 0.3f) in->base = SR_CLIP_LOOK_AROUND;
+      break;
+    default: /* combat: aim, strafe, or crouch and peek out from behind cover */
+      in->upper = rifle ? SR_CLIP_AIM : SR_CLIP_AIM_PISTOL;
+      in->look_at = true;
+      in->target = player;
+      if (g->speed < 0.3f && g->id % 2u == 0) {
+        in->base = rifle ? SR_CLIP_PEEK : SR_CLIP_CROUCH_AIM;
+        in->upper = SR_CLIP_NONE;
+      }
+      break;
+  }
+  if (g->hit_kind && now - g->hit_time < 1.0) { /* flinch away from the shot */
+    in->once = g->hit_kind == 3 ? SR_CLIP_HEADSHOT : g->hit_kind == 2 ? SR_CLIP_STAGGER : SR_CLIP_FLINCH;
+    in->once_t0 = g->hit_time;
+    in->mirror = rel > 0;
+  }
+  (void)s;
+}
+
+static void drone_mesh(SrMesh *m, const SrGuard *g, double now) {
+  /* a hovering drone: bobs, tilts toward its travel, spinning rotor discs */
+  float bob = 0.1f * sinf((float)now * 3.1f + (float)g->id);
+  float tilt = SR_MIN(0.35f, g->speed * 0.12f);
+  SrVec3 p = sr_v3(g->e.pos.x, Y0 + 1.9f + bob, g->e.pos.z);
+  float yaw = g->e.yaw + SR_PI;
+  sr_mesh_part(m, p, yaw, sr_v3(0, 0, 0), tilt, sr_v3(-0.25f, -0.1f, -0.25f), sr_v3(0.25f, 0.1f, 0.25f),
+               rgb(60, 62, 70), SR_LAYER_METAL, 0);
+  for (int k = 0; k < 4; k++) {
+    float spin = (float)now * 40.0f + (float)k;
+    float rx = k & 1 ? 0.32f : -0.32f, rz = k & 2 ? 0.32f : -0.32f;
+    SrVec3 c = sr_v3(p.x + rx * cosf(yaw) + rz * sinf(yaw), p.y + 0.12f, p.z - rx * sinf(yaw) + rz * cosf(yaw));
+    sr_mesh_part(m, c, spin, sr_v3(0, 0, 0), 0, sr_v3(-0.16f, 0, -0.02f), sr_v3(0.16f, 0.01f, 0.02f),
+                 rgb(150, 150, 160), SR_LAYER_WHITE, 40);
+  }
+  sr_mesh_part(m, p, yaw, sr_v3(0, 0, 0), 0, sr_v3(-0.05f, -0.14f, 0.2f), sr_v3(0.05f, -0.08f, 0.26f),
+               g->e.alert == SR_ALERT_COMBAT ? rgb(255, 40, 40) : rgb(40, 220, 255), SR_LAYER_WHITE, 255);
+}
+
+void sr_build_guards(const SrSite *s, SrAnimCache *anim, double now, SrVec3 player, SrMesh *m) {
   sr_mesh_clear(m);
   for (int i = 0; i < s->guard_count; i++) {
     const SrGuard *g = &s->guards[i];
-    SrAppearance a = sr_appearance_generate(g->id, SR_ROLE_GUARD, 0);
-    SrVec3 foot = sr_v3(g->e.pos.x, Y0, g->e.pos.z);
-    if (g->e.dead || g->e.ko) { /* lying on the floor */
-      box(m, foot.x - 0.9f, Y0, foot.z - 0.25f, foot.x + 0.9f, Y0 + 0.3f, foot.z + 0.25f,
-          dark(sr_corp_color(a.outfit_color)), SR_LAYER_WHITE, 0);
-      if (g->e.dead)
-        box(m, foot.x - 0.6f, Y0 + 0.005f, foot.z - 0.6f, foot.x + 0.6f, Y0 + 0.01f, foot.z + 0.6f, rgb(90, 10, 15),
-            SR_LAYER_WHITE, 0);
+    if (g->e.drone) {
+      if (!g->e.dead) drone_mesh(m, g, now);
       continue;
     }
-    sr_build_character_walk(&a, foot, sr_dir_from_yaw_pitch(g->e.yaw, 0), g->walk, false, m);
-    if (g->tagged || g->e.alert == SR_ALERT_COMBAT) { /* marker above the head */
+    SrAppearance a = sr_appearance_generate(g->id, SR_ROLE_GUARD, 0);
+    SrAnimInput in;
+    sr_guard_anim(s, g, &a, now, player, &in);
+    sr_anim_character(anim, &in, m);
+    SrVec3 foot = in.pos;
+    if (g->e.dead && g->down_time != 0) { /* the blood pool spreads over two seconds */
+      float grow = g->down_time > 0 ? sr_clampf((float)(now - g->down_time) / 2.0f, 0.15f, 1.0f) : 1.0f;
+      float r = 0.6f * grow;
+      SrVec3 back = sr_v3_scale(in.dir, -0.9f);
+      box(m, foot.x + back.x - r, Y0 + 0.005f, foot.z + back.z - r, foot.x + back.x + r, Y0 + 0.01f,
+          foot.z + back.z + r, rgb(90, 10, 15), SR_LAYER_WHITE, 0);
+    }
+    if (!(g->e.dead || g->e.ko) && (g->tagged || g->e.alert == SR_ALERT_COMBAT)) { /* marker above the head */
       SrColor c = g->e.alert == SR_ALERT_COMBAT ? rgb(255, 40, 40) : rgb(255, 200, 40);
       box(m, foot.x - 0.08f, Y0 + 2.2f, foot.z - 0.08f, foot.x + 0.08f, Y0 + 2.4f, foot.z + 0.08f, c, SR_LAYER_WHITE,
           255);
     }
   }
+}
+
+/* Enemy fire: a flash at the muzzle for a tenth of a second and a tracer every third round. */
+int sr_build_enemy_fire(const SrSite *s, double now, SrVec3 player, SrVec3 eye, SrMesh *fx, SrLight *lights, int nl,
+                        int max_lights) {
+  SrBillboard bb = sr_billboard(eye, 0, 0);
+  for (int i = 0; i < s->guard_count; i++) {
+    const SrGuard *g = &s->guards[i];
+    if (g->shot_time <= 0 || now - g->shot_time > 0.1 || g->e.dead || g->e.ko) continue;
+    SrVec3 fwd = sr_dir_from_yaw_pitch(g->e.yaw, 0);
+    SrVec3 muzzle = sr_v3(g->e.pos.x + fwd.x * 0.75f, Y0 + 1.35f, g->e.pos.z + fwd.z * 0.75f);
+    sr_mesh_sprite(fx, &bb, muzzle, 0.6f, 0.6f, SR_SPR_FLARE, SR_SPRITE_FACING, 0, rgb(255, 210, 120), 255);
+    if (g->shot_tracer) {
+      SrVec3 d = sr_v3_sub(player, muzzle);
+      float len = sr_v3_len(d);
+      for (int k = 1; k < 8 && len > 0.5f; k++) {
+        SrVec3 p = sr_v3_add(muzzle, sr_v3_scale(d, (float)k / 8.0f));
+        sr_mesh_sprite(fx, &bb, p, 0.12f, 0.12f, SR_SPR_GLOW, SR_SPRITE_FACING, 0, rgb(255, 190, 90), 255);
+      }
+    }
+    if (nl < max_lights) { /* the flash lights the room for a moment */
+      SrLight *l = &lights[nl++];
+      l->pos = muzzle;
+      l->radius = 7.0f;
+      l->r = 1.6f;
+      l->g = 1.2f;
+      l->b = 0.6f;
+    }
+  }
+  return nl;
 }
 
 int sr_site_collect_lights(const SrSite *s, SrLight *out, int max) {

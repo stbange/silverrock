@@ -1362,6 +1362,131 @@ static void test_atmosphere_weather(void) {
   g_app.game->force_weather = -1;
 }
 
+/* ---- animation filmstrips ------------------------------------------------------------------- */
+
+typedef struct AnimStage {
+  SrMesh ground, people;
+  SrFrame frame;
+} AnimStage;
+
+/* Renders a hand-built frame: a dark floor, the given meshes and two lights, at the internal
+ * resolution of the running game. */
+static uint8_t *anim_render(SrApp *a, AnimStage *st, SrVec3 eye, float yaw, float pitch, int *w, int *h) {
+  SrFrame *f = &st->frame;
+  *f = a->frame;
+  f->view = sr_m4_fps_view(eye, yaw, pitch);
+  f->eye = eye;
+  f->fog_start = 30.0f;
+  f->fog[0] = f->fog[1] = 0.05f;
+  f->fog[2] = 0.08f;
+  f->fog_end = 80.0f;
+  f->ambient[0] = f->ambient[1] = 0.45f;
+  f->ambient[2] = 0.55f;
+  f->nlights = 2;
+  f->lights[0] = (SrLight){sr_v3(eye.x - 2.0f, 3.0f, eye.z - 1.0f), 12.0f, 1.2f, 0.4f, 0.9f};
+  f->lights[1] = (SrLight){sr_v3(eye.x + 3.0f, 3.5f, eye.z - 4.0f), 12.0f, 0.3f, 0.9f, 1.2f};
+  f->ndraws = 0;
+  f->inst_count = 0;
+  f->inset = NULL;
+  SrMesh *ms[2] = {&st->ground, &st->people};
+  for (int i = 0; i < 2; i++) {
+    SrDraw *d = &f->draws[f->ndraws++];
+    d->mesh = ms[i];
+    d->pass = SR_PASS_WORLD;
+    d->nlights = sr_select_lights(f->lights, f->nlights, eye, d->lights);
+  }
+  sr_ui_begin(&a->ui, a->win_w, a->win_h, 1);
+  sr_glb_render(&a->gfx, f, &a->ui, a->win_w, a->win_h, false);
+  *w = f->internal_w;
+  *h = f->internal_h;
+  uint8_t *rgb = (uint8_t *)malloc((size_t)*w * *h * 3);
+  if (!sr_glb_read_internal(&a->gfx, rgb, *w, *h)) {
+    free(rgb);
+    return NULL;
+  }
+  return rgb;
+}
+
+/* SR_ANIM_SHOTS=dir: every clip on three body types, 8 frames each, three-quarter view. */
+static void test_anim_shots(void) {
+  const char *dir = getenv("SR_ANIM_SHOTS");
+  if (!dir) return;
+  atmos_setup(&g_app, 0x5EEDC0DEull);
+  sr_app_iterate(&g_app);
+  AnimStage *st = (AnimStage *)calloc(1, sizeof *st);
+  sr_mesh_init(&st->ground);
+  sr_mesh_init(&st->people);
+  sr_mesh_box(&st->ground, sr_v3(-6, -0.05f, -6), sr_v3(6, 0, 6), (SrColor){60, 62, 70, 255}, SR_LAYER_SIDEWALK, 1.0f,
+              0);
+  SrAppearance looks[3];
+  static const int roles[3] = {SR_ROLE_WORKER, SR_ROLE_EXEC, SR_ROLE_GANG};
+  for (int b = 0; b < 3; b++) {
+    looks[b] = sr_appearance_generate(100u + (uint64_t)b, (SrRole)roles[b], 0);
+    looks[b].body = (uint8_t)b;
+  }
+  for (int clip = 1; clip < SR_CLIP_COUNT; clip++) {
+    for (int k = 0; k < 8; k++) {
+      sr_mesh_clear(&st->people);
+      for (int b = 0; b < 3; b++) {
+        SrAnimInput in;
+        memset(&in, 0, sizeof in);
+        in.key = 1000u + (uint64_t)b;
+        in.look = &looks[b];
+        in.role = (uint8_t)roles[b];
+        in.pos = sr_v3(-1.3f + 1.3f * (float)b, 0, 0);
+        in.dir = sr_v3(0.94f, 0, 0.34f);
+        in.once_t0 = -1;
+        SrClipKind kind = sr_anim_clip_kind(clip);
+        float len = sr_anim_clip_len(clip);
+        double now = (double)k / 8.0 * len;
+        if (kind == SR_CK_GAIT) {
+          SrSkel sk;
+          sr_anim_skel(&looks[b], &sk);
+          in.base = (uint8_t)clip;
+          in.speed = b == 2 ? 3.4f : 1.4f;
+          in.walk = (float)k / 8.0f * sr_anim_stride(&sk, in.speed, clip);
+          now = 0;
+        } else if (kind == SR_CK_OVERLAY) {
+          in.base = SR_CLIP_IDLE;
+          in.upper = (uint8_t)clip;
+        } else if (kind == SR_CK_LOOP) {
+          in.base = (uint8_t)clip;
+        } else {
+          in.base = SR_CLIP_IDLE;
+          in.once = (uint8_t)clip;
+          in.once_t0 = 0;
+          now = (double)k / 7.0 * len;
+          if (kind == SR_CK_BASE_ONCE) in.base = (uint8_t)clip;
+        }
+        if (clip == SR_CLIP_UMBRELLA) in.prop_r = SR_HP_UMBRELLA;
+        if (clip == SR_CLIP_AIM || clip == SR_CLIP_READY || clip == SR_CLIP_SLUNG || clip == SR_CLIP_CROUCH_AIM ||
+            clip == SR_CLIP_PEEK)
+          in.prop_r = SR_HP_RIFLE;
+        if (clip == SR_CLIP_AIM_PISTOL) in.prop_r = SR_HP_PISTOL;
+        if (clip == SR_CLIP_SMOKE) in.prop_r = SR_HP_CIGARETTE;
+        if (clip == SR_CLIP_PHONE || clip == SR_CLIP_CALL || clip == SR_CLIP_FILM) in.prop_r = SR_HP_PHONE;
+        if (clip == SR_CLIP_EAT) in.prop_l = SR_HP_BOX;
+        SrSkel sk;
+        sr_anim_skel(&looks[b], &sk);
+        SrPose p;
+        float stride = sr_anim_stride(&sk, in.speed, in.base);
+        sr_anim_pose(&in, &sk, now, in.walk / stride, &p);
+        sr_anim_mesh(&st->people, &in, &sk, &p, atan2f(in.dir.x, in.dir.z));
+      }
+      int w, h;
+      uint8_t *rgb = anim_render(&g_app, st, sr_v3(0, 0.95f, 3.1f), 0.0f, -0.05f, &w, &h);
+      if (!rgb) continue;
+      char name[96];
+      snprintf(name, sizeof name, "clip_%02d_%s_%d", clip, sr_anim_clip_name(clip), k);
+      png_or_ppm(dir, name, rgb, w, h);
+      free(rgb);
+    }
+  }
+  sr_mesh_free(&st->ground);
+  sr_mesh_free(&st->people);
+  free(st);
+}
+
 void suite_platform(void) {
   snprintf(g_root, sizeof g_root, "%s/sr_platform_test_%d/", SDL_GetHint("TMPDIR") ? SDL_GetHint("TMPDIR") : "/tmp", 1);
   SDL_SetHint("SR_STORAGE_ROOT", g_root);
@@ -1386,6 +1511,7 @@ void suite_platform(void) {
   SR_RUN(test_atmosphere_metrics);
   SR_RUN(test_atmosphere_gloom);
   SR_RUN(test_atmosphere_weather);
+  SR_RUN(test_anim_shots);
   SR_RUN(test_letterbox_window);
   SR_RUN(test_focus_and_autosave);
   SR_RUN(test_settings_persist);
