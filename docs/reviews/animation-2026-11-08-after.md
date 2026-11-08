@@ -43,7 +43,7 @@ phases of `improve-animation`. The strips are in `docs/screenshots/anim/`:
   the change.
   - The pose digest of the keyframe clips is pinned. Gaits are left out because they use libm
     functions whose last bit can differ between compilers; their properties are tested instead.
-- **Platform tests:** 28 pass under Xvfb.
+- **Platform tests:** 27 pass under Xvfb.
   - `test_anim_street` renders the street strips. Every standing person within 20 m of the camera
     in the downpour changes pose in at least half of the frame pairs.
   - In the firefight, a guard's flash brightens the dark room by about 29 levels.
