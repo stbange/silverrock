@@ -336,6 +336,7 @@ typedef struct SrFrame {
   SrMat4 view, proj;
   SrVec3 eye;
   float fog_start, fog_end;
+  bool fog_haze; /* the street haze curve (thick early); the Matrix keeps linear fog */
   float fog[3];
   float ambient[3];
   float sky[3];

@@ -40,7 +40,7 @@ typedef struct SrGlBackend {
   char error[256];
   /* uniform locations */
   int u_mvp, u_view, u_lpos, u_lcol, u_nl, u_amb, u_wet, u_snap, u_affine, u_tex, u_fog, u_fogr, u_inst, u_share,
-      u_time, u_glow, u_debug, u_band, u_band_dir, u_eye, u_mist, u_pixel;
+      u_time, u_glow, u_debug, u_band, u_band_dir, u_eye, u_mist, u_pixel, u_haze;
   unsigned inst_vao, inst_vbo, inst_ibo, inst_data;
   int inst_count_idx;
   int p_tex, p_dither, p_quant, p_crt, p_res, p_bloom, p_bloom_k, p_lift, p_gain, p_bright, p_vig;

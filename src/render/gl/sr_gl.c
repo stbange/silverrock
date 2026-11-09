@@ -227,8 +227,9 @@ static const char *k_world_fs =
     "uniform vec3 u_band;\n" /* dawn or dusk glow on the fog toward u_band_dir (+1 east, -1 west) */
     "uniform float u_band_dir;\n"
     "uniform vec3 u_eye;\n"
-    "uniform float u_mist;\n" /* extra fog below 3 m */
-    "uniform int u_pixel;\n"  /* per-pixel light for the ground and the lower walls */
+    "uniform float u_mist;\n"
+    "uniform int u_haze;\n"  /* extra fog below 3 m */
+    "uniform int u_pixel;\n" /* per-pixel light for the ground and the lower walls */
     "uniform vec3 u_lpos[8];\n"
     "uniform vec4 u_lcol[8];\n"
     "uniform int u_nl;\n"
@@ -254,7 +255,7 @@ static const char *k_world_fs =
     "}\n"
     "void main() {\n"
     "  float f = clamp((v_fogz - u_fogr.x) / (u_fogr.y - u_fogr.x), 0.0, 1.0);\n"
-    "  f = min((1.0 - exp(-3.0 * f)) * 1.0524, 1.0);\n" /* thick early, then slowly to full: sr_fog_factor */
+    "  if (u_haze == 1) f = min((1.0 - exp(-3.0 * f)) * 1.0524, 1.0);\n" /* thick early: sr_fog_factor */
     "  vec3 fogc = fog_color();\n"
     "  f = clamp(f + u_mist * clamp((3.0 - v_wpos.y) / 3.0, 0.0, 1.0) * clamp(v_fogz / 25.0, 0.0, 1.0), 0.0, 1.0);\n"
     "  if (u_fogr.y < 1e5) f = max(f, smoothstep(190.0, 255.0, v_wpos.y) * 0.85);\n" /* towers fade into the clouds */
@@ -288,7 +289,7 @@ static const char *k_world_fs =
     "              : vec3(1.0, 0.45, 0.8);\n"
     "      c = vec4(lc * (0.5 + 0.3 * t.g), 1.0);\n" /* peaks at 0.8: windows never clip to white */
     "      em = 0.6;\n"
-    "      fog_em = 0.2;\n" /* windows sink into the fog sooner than neon */
+    "      fog_em = u_haze == 1 ? 0.2 : 0.35;\n" /* windows sink into the fog sooner than neon */
     "    } else {\n"
     "      c = vec4(vec3(0.03, 0.035, 0.05) + u_fog * 0.12 + v_color.rgb * 0.04, 1.0);\n"
     "      em = 0.0;\n"
@@ -601,6 +602,7 @@ bool sr_glb_init(SrGlBackend *b, bool gles) {
   b->u_band_dir = pGetUniformLocation(p, "u_band_dir");
   b->u_eye = pGetUniformLocation(p, "u_eye");
   b->u_mist = pGetUniformLocation(p, "u_mist");
+  b->u_haze = pGetUniformLocation(p, "u_haze");
   b->u_pixel = pGetUniformLocation(p, "u_pixel");
   p = b->prog_post;
   b->p_tex = pGetUniformLocation(p, "u_tex");
@@ -792,6 +794,7 @@ static void scene_pass(SrGlBackend *b, const SrFrame *f, unsigned fbo, int iw, i
   pUniform1f(b->u_band_dir, f->band_dir_x);
   pUniform3f(b->u_eye, f->eye.x, f->eye.y, f->eye.z);
   pUniform1f(b->u_mist, f->mist);
+  pUniform1i(b->u_haze, f->fog_haze ? 1 : 0);
   pUniform1i(b->u_pixel, f->pixel_lighting ? 1 : 0);
   /* the sky dome first, fully fogged and behind everything */
   pDepthMask(GL_FALSE);
@@ -978,6 +981,7 @@ void sr_glb_render(SrGlBackend *b, const SrFrame *f, SrUi *ui, int ww, int wh, b
     pUniform1i(b->u_debug, 0);
     pUniform3f(b->u_band, 0, 0, 0);
     pUniform1f(b->u_mist, 0);
+    pUniform1i(b->u_haze, 0);
     pUniform1i(b->u_pixel, 0);
     draw_mesh(b, &ui->mesh);
   }

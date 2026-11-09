@@ -949,6 +949,7 @@ static void build_matrix_frame(SrSceneCache *s, const SrGame *g, float aspect, S
   f->eye = d->pos;
   f->view = sr_m4_fps_view(d->pos, d->yaw, d->pitch);
   f->proj = sr_m4_perspective(80.0f * SR_PI / 180.0f, aspect > 0 ? aspect : 16.0f / 9.0f, 0.05f, 600.0f);
+  f->fog_haze = false; /* the Matrix is a clear void: plain linear fog */
   f->fog[0] = 0.0f;
   f->fog[1] = 0.01f;
   f->fog[2] = 0.04f;
@@ -1017,6 +1018,7 @@ static void build_site_frame(SrSceneCache *s, const SrGame *g, SrFrame *f, SrVie
   f->sky[0] = f->sky[1] = f->sky[2] = 0.0f;
   f->fog_start = 12.0f;
   f->fog_end = 45.0f;
+  f->fog_haze = false; /* indoors: no street haze */
   f->wetness = 0;
   f->nlights = sr_site_collect_lights(site, f->lights, SR_MAX_FRAME_LIGHTS);
   /* enemy muzzle flashes and the player's own, before the draws pick their lights */
@@ -1110,6 +1112,7 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   float vis = w.visibility + SR_MAX(0.0f, vc.eye.y - 20.0f) * 4.0f;
   f->fog_end = SR_MIN(vis, (float)(s->view_chunks + 1) * SR_CHUNK_BLOCKS * SR_BLOCK_CM / 100.0f);
   f->fog_start = f->fog_end * 0.03f; /* the haze starts a few steps away */
+  f->fog_haze = true;
   f->wetness = w.wetness;
   f->dither = g->settings.dither;
   f->quantize = g->settings.quantize;
