@@ -1036,6 +1036,7 @@ static void build_site_frame(SrSceneCache *s, const SrGame *g, SrFrame *f, SrVie
   add_draw(f, &s->site_dyn, SR_PASS_WORLD, g->player.pos);
   sr_anim_cache_begin(&s->anim, (double)site->time);
   sr_build_guards(site, &s->anim, (double)site->time, g->player.pos, &s->guards);
+  s->occupants_drawn = sr_build_occupants(site, &s->anim, (double)site->time, g->player.pos, &s->guards);
   sr_anim_cache_end(&s->anim);
   add_draw(f, &s->crowd_fx, SR_PASS_GLOW, g->player.pos);
   if (g->thermal) { /* warm bodies glow through smoke and darkness */

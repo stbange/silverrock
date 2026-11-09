@@ -85,6 +85,8 @@ const char *sr_ui_context_label(SrContextKind k) {
     case SR_CTX_ENTER: return "GO INSIDE";
     case SR_CTX_ROOF_HATCH: return "DROP IN";
     case SR_CTX_CLIMB_DOWN: return "CLIMB DOWN";
+    case SR_CTX_INFO: return "LOOK";
+    case SR_CTX_TALK: return "TALK";
     case SR_CTX_NODE: return "ACCESS NODE";
     case SR_CTX_HOST: return "ENTER HOST";
     case SR_CTX_QUICK: return "QUICK HACK";

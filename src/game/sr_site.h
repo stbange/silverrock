@@ -108,6 +108,7 @@ typedef struct SrSite {
   float damage; /* taken inside */
   int64_t entered_at;
   int shots_fired; /* by guards and turrets, for tests */
+  float panic_at;  /* site time the people inside took cover (shots, an alarm), 0 calm */
 } SrSite;
 
 /* What the site needs from the rest of the game during an update. */
@@ -137,6 +138,12 @@ int sr_site_room_at(const SrSite *s, float x, float z);
 SrVec3 sr_site_room_center(const SrSite *s, int room);
 bool sr_site_door_open(const SrSite *s, int room, int dir);
 bool sr_site_blocked(const SrSite *s, float x, float z, float radius, bool crouched);
+/* Half extents of a solid prop in metres along x and z; false for props you walk through. */
+bool sr_site_prop_extent(const SrProp *p, float *hx, float *hz);
+/* World position (feet) and facing yaw of an occupant of a civilian floor. */
+SrVec3 sr_site_occupant_pos(const SrSite *s, int i, float *yaw);
+/* True while the people inside are taking cover. */
+bool sr_site_panicked(const SrSite *s);
 /* Line of sight: walls, closed doors and smoke block it. */
 bool sr_site_los(const SrSite *s, SrVec3 a, SrVec3 b);
 float sr_site_light(const SrSite *s, int room);

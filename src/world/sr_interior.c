@@ -183,6 +183,7 @@ void sr_interior_apartment(const SrCity *c, int building, int tier, SrInterior *
   tier = SR_CLAMP(tier, 0, 4);
   in->building = (uint32_t)building;
   in->apartment = true;
+  in->kind = SR_FLOOR_HOME;
   in->tier = (uint8_t)tier;
   in->w = k_w[tier];
   in->h = k_h[tier];
@@ -268,7 +269,7 @@ static bool door_between(const SrInterior *in, int a, int b, bool through_locked
     const SrDevice *dev = &in->devices[d];
     if (dev->type == SR_DEV_DOOR && dev->room == lo && dev->door_dir == dir) return !dev->locked;
   }
-  return true; /* GCOVR_EXCL_LINE reason: every door connection has a device */
+  return true; /* open floor: no door at all */
 }
 
 static bool vent_between(const SrInterior *in, int a, int b) {

@@ -759,6 +759,55 @@ static void test_navigation_screens(void) {
   sr_app_save_settings(&g_app);
 }
 
+/* Every kind of civilian floor rendered from just inside the front door, looking in: furniture,
+ * light and the people there (SR_INTERIOR_SHOTS=dir writes floor_<kind>.ppm and a panic shot). */
+static void test_civilian_interiors(void) {
+  SR_SPEC("retro-rendering", "Civilian floors are furnished and lived in");
+  const char *dir = getenv("SR_INTERIOR_SHOTS");
+  sr_app_start_game(&g_app, 0x5EEDC0DEull);
+  SrGame *g = g_app.game;
+  g->settings.dynamic_res = false;
+  g_app.fixed_frame_dt = 1.0 / 60.0;
+  sr_game_leave(g);
+  bool seen[SR_FLOOR_COUNT] = {false};
+  int kinds = 0;
+  for (int b = 0; b < g->city->building_count; b++) {
+    if (b == g->player.home || (g->city->buildings[b].flags & SR_BF_MISSION)) continue;
+    SrInteriorKind k = sr_interior_kind(g->city, b);
+    if (seen[k]) continue;
+    seen[k] = true;
+    if (g->site.active) sr_game_leave(g);
+    if (sr_game_enter(g, b, SR_ENTRY_FRONT) != SR_OK) continue;
+    g->player.pitch = -0.08f;
+    for (int i = 0; i < 4; i++) sr_app_iterate(&g_app);
+    int w, h;
+    uint8_t *rgb = render_internal(&g_app, &w, &h);
+    SR_CHECK(rgb && image_mean(rgb, w * h) > 8.0);
+    SR_CHECK(g_app.scene.occupants_drawn == g->site.in.occ_count);
+    kinds++;
+    if (rgb && dir) {
+      char path[512];
+      snprintf(path, sizeof path, "%s/floor_%s.ppm", dir, sr_interior_kind_name(k));
+      write_ppm(path, rgb, w, h);
+    }
+    if (k == SR_FLOOR_BAR && dir) { /* shots fired: everyone ducks */
+      g->site.panic_at = 1.0f;
+      for (int i = 0; i < 20; i++) sr_app_iterate(&g_app);
+      uint8_t *p2 = render_internal(&g_app, &w, &h);
+      if (p2) {
+        char path[512];
+        snprintf(path, sizeof path, "%s/floor_bar_panic.ppm", dir);
+        write_ppm(path, p2, w, h);
+      }
+      free(p2);
+    }
+    free(rgb);
+  }
+  printf("  civilian floor kinds rendered: %d\n", kinds);
+  SR_CHECK(kinds >= 8);
+  if (g->site.active) sr_game_leave(g);
+}
+
 static void test_shop_taps(void) {
   sr_app_start_game(&g_app, 0x5EEDC0DEull);
   SrGame *g = g_app.game;
@@ -1965,6 +2014,7 @@ void suite_platform(void) {
   SR_RUN(test_render_city);
   SR_RUN(test_retro_toggles);
   SR_RUN(test_render_interiors);
+  SR_RUN(test_civilian_interiors);
   SR_RUN(test_shop_taps);
   SR_RUN(test_navigation_screens);
   SR_RUN(test_bloom);

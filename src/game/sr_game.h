@@ -54,6 +54,8 @@ typedef enum SrContextKind {
   SR_CTX_ENTER, /* a site that can be entered without a job */
   SR_CTX_ROOF_HATCH,
   SR_CTX_CLIMB_DOWN,
+  SR_CTX_INFO, /* something to look at inside: a flat door, the lift, the mailboxes */
+  SR_CTX_TALK, /* someone behind a desk with nothing to sell */
   /* the Matrix */
   SR_CTX_NODE,  /* a host node within reach (prop = node index) */
   SR_CTX_HOST,  /* a host construct on the grid (building) */
@@ -259,6 +261,10 @@ void sr_game_flatline(SrGame *g);
 
 /* Interiors, rooftops, gadgets, cyberware, shops (sr_game_site.c). */
 bool sr_game_enterable(const SrGame *g, int building);
+/* Inside a civilian floor: what the counter does (eat, shop, clinic, capsule, fixer, or talk). */
+SrContextKind sr_game_counter_context(const SrGame *g);
+/* The line shown for SR_CTX_INFO (a prop) or SR_CTX_TALK (the person behind the desk). */
+void sr_game_info_text(const SrGame *g, SrContextKind kind, int prop, char *out, size_t cap);
 /* Enters a building's interior through an entry type (front, service, roof...). */
 SrResult sr_game_enter(SrGame *g, int building, SrEntryType via);
 void sr_game_leave(SrGame *g);

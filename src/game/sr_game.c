@@ -503,25 +503,15 @@ SrContext sr_game_context(SrGame *g) {
             job = jb->id;
           }
         }
-        if (k == SR_CTX_NONE) {
-          switch (g->city->buildings[bi].poi) {
-            case SR_POI_FOOD:
-            case SR_POI_BAR:
-            case SR_POI_GROCERY: k = SR_CTX_FOOD; break;
-            case SR_POI_FIXER: k = SR_CTX_FIXER; break;
-            case SR_POI_HOME: k = bi == g->player.home ? SR_CTX_HOME : SR_CTX_NONE; break;
-            case SR_POI_CAPSULE: k = SR_CTX_CAPSULE; break;
-            case SR_POI_CLINIC: k = SR_CTX_CLINIC; break;
-            case SR_POI_GUNSHOP:
-            case SR_POI_ELECTRONICS:
-            case SR_POI_CLOTHING:
-            case SR_POI_RIPPERDOC:
-            case SR_POI_FENCE: k = SR_CTX_SHOP; break;
-            default: break;
-          }
-          if (bi == g->player.home) k = SR_CTX_HOME;
-          if (k != SR_CTX_NONE && k != SR_CTX_HOME && !sr_poi_open(g->city, bi, t)) k = SR_CTX_CLOSED;
-          if (k == SR_CTX_NONE && (g->city->buildings[bi].flags & SR_BF_MISSION)) k = SR_CTX_ENTER;
+        if (k == SR_CTX_NONE) { /* every door leads inside; shops keep their hours */
+          int poi = g->city->buildings[bi].poi;
+          bool hours = poi != SR_POI_NONE && poi < SR_POI_FIRST_SPECIAL && poi != SR_POI_POLICE;
+          if (bi == g->player.home)
+            k = SR_CTX_HOME;
+          else if (hours && !sr_poi_open(g->city, bi, t))
+            k = SR_CTX_CLOSED;
+          else
+            k = SR_CTX_ENTER;
         }
         if (k != SR_CTX_NONE) ctx = (SrContext){k, bi, -1, job, d, -1};
       }

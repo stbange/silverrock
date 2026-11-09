@@ -26,8 +26,49 @@ static SrColor room_floor(SrRoomType t) {
     case SR_ROOM_TARGET:
     case SR_ROOM_SERVER: return rgb(60, 70, 95);
     case SR_ROOM_HOME: return rgb(115, 90, 75);
+    case SR_ROOM_SHOP: return rgb(130, 128, 120);
+    case SR_ROOM_DINER: return rgb(105, 60, 55);
+    case SR_ROOM_WARD: return rgb(170, 180, 180);
+    case SR_ROOM_CORRIDOR: return rgb(85, 80, 72);
+    case SR_ROOM_WAREHOUSE: return rgb(80, 82, 78);
+    case SR_ROOM_BACK: return rgb(60, 50, 48);
     default: return rgb(95, 95, 105);
   }
+}
+
+/* Walls and the ceiling light by what the floor is: grimy lobbies, white clinics, dark bars. */
+static SrColor kind_wall(const SrInterior *in) {
+  switch ((SrInteriorKind)in->kind) {
+    case SR_FLOOR_HOME: return rgb(175, 165, 160);
+    case SR_FLOOR_SHOP:
+    case SR_FLOOR_BOOTH: return rgb(150, 150, 155);
+    case SR_FLOOR_FOOD: return rgb(160, 120, 90);
+    case SR_FLOOR_BAR:
+    case SR_FLOOR_FIXER: return rgb(70, 55, 70);
+    case SR_FLOOR_CLINIC: return rgb(200, 210, 210);
+    case SR_FLOOR_CAPSULE: return rgb(110, 115, 130);
+    case SR_FLOOR_RESIDENTIAL: return rgb(120, 112, 95);
+    case SR_FLOOR_OFFICE: return rgb(165, 165, 170);
+    case SR_FLOOR_WAREHOUSE: return rgb(100, 98, 92);
+    case SR_FLOOR_CIVIC: return rgb(145, 140, 130);
+    default: return in->apartment ? rgb(175, 165, 160) : rgb(125, 128, 135);
+  }
+}
+
+static SrColor kind_light(const SrInterior *in) {
+  switch ((SrInteriorKind)in->kind) {
+    case SR_FLOOR_BAR: return rgb(255, 90, 200);
+    case SR_FLOOR_FIXER: return rgb(255, 170, 90);
+    case SR_FLOOR_CLINIC:
+    case SR_FLOOR_OFFICE: return rgb(230, 245, 255);
+    case SR_FLOOR_BOOTH: return rgb(90, 220, 255);
+    case SR_FLOOR_RESIDENTIAL: return rgb(255, 225, 160);
+    default: return rgb(255, 240, 210);
+  }
+}
+
+static SrColor shade_c(SrColor c, int pct) {
+  return rgb(SR_MIN(255, c.r * pct / 100), SR_MIN(255, c.g * pct / 100), SR_MIN(255, c.b * pct / 100));
 }
 
 static void box(SrMesh *m, float x0, float y0, float z0, float x1, float y1, float z1, SrColor c, int layer, int em) {
@@ -165,6 +206,76 @@ static void prop_mesh(const SrSite *s, const SrProp *p, SrMesh *m) {
         box(m, x - 0.3f, Y0 + 0.3f + 0.3f * (float)k, z - 0.41f, x - 0.2f, Y0 + 0.34f + 0.3f * (float)k, z + 0.41f,
             k % 2 ? rgb(60, 255, 120) : rgb(255, 80, 60), SR_LAYER_WHITE, 255);
       break;
+    case SR_PROP_COUNTER: {
+      bool along_x = p->facing == 0 || p->facing == 2;
+      float hw = p->variant == SR_COUNTER_TABLE ? 0.6f : 1.2f, hd = 0.35f;
+      float ax = along_x ? hw : hd, az = along_x ? hd : hw;
+      SrColor body = p->variant == SR_COUNTER_BAR     ? rgb(70, 40, 35)
+                     : p->variant == SR_COUNTER_DESK  ? rgb(150, 150, 155)
+                     : p->variant == SR_COUNTER_TABLE ? rgb(60, 45, 40)
+                                                      : rgb(90, 95, 105);
+      float top = p->variant == SR_COUNTER_TABLE ? 0.75f : 1.05f;
+      box(m, x - ax, Y0, z - az, x + ax, Y0 + top - 0.05f, z + az, body, SR_LAYER_WHITE, 0);
+      box(m, x - ax - 0.04f, Y0 + top - 0.05f, z - az - 0.04f, x + ax + 0.04f, Y0 + top, z + az + 0.04f,
+          shade_c(body, 140), SR_LAYER_WHITE, 0);
+      if (p->variant != SR_COUNTER_TABLE) /* a neon strip along the front */
+        box(m, x - ax, Y0 + 0.15f, z + az, x + ax, Y0 + 0.2f, z + az + 0.02f, c, SR_LAYER_WHITE, 255);
+      if (p->variant == SR_COUNTER_SHOP || p->variant == SR_COUNTER_DESK) /* a till or a screen */
+        box(m, x + 0.3f, Y0 + top, z - 0.12f, x + 0.6f, Y0 + top + 0.3f, z - 0.08f, rgb(60, 200, 255), SR_LAYER_WHITE,
+            220);
+      if (p->variant == SR_COUNTER_BAR) /* bottles on the back shelf */
+        for (int k = 0; k < 5; k++)
+          box(m, x - 0.9f + 0.4f * (float)k, Y0 + 1.25f, z - az - 0.75f, x - 0.82f + 0.4f * (float)k, Y0 + 1.55f,
+              z - az - 0.67f, deco(p->color + k), SR_LAYER_WHITE, 160);
+      break;
+    }
+    case SR_PROP_TABLE:
+      box(m, x - 0.4f, Y0 + 0.7f, z - 0.4f, x + 0.4f, Y0 + 0.75f, z + 0.4f, rgb(110, 85, 70), SR_LAYER_WHITE, 0);
+      box(m, x - 0.05f, Y0, z - 0.05f, x + 0.05f, Y0 + 0.7f, z + 0.05f, rgb(50, 50, 55), SR_LAYER_METAL, 0);
+      break;
+    case SR_PROP_SEAT: {
+      float h = p->variant == 1 ? 0.55f : 0.45f; /* stools stand a little taller than chairs */
+      box(m, x - 0.2f, Y0 + h - 0.06f, z - 0.2f, x + 0.2f, Y0 + h, z + 0.2f, c, SR_LAYER_WHITE, 0);
+      box(m, x - 0.03f, Y0, z - 0.03f, x + 0.03f, Y0 + h - 0.06f, z + 0.03f, rgb(50, 50, 55), SR_LAYER_METAL, 0);
+      break;
+    }
+    case SR_PROP_FLAT_DOOR: {
+      bool along_x = p->facing == 0 || p->facing == 2;
+      float ax = along_x ? 0.5f : 0.05f, az = along_x ? 0.05f : 0.5f;
+      box(m, x - ax, Y0, z - az, x + ax, Y0 + 2.1f, z + az, shade_c(c, 60), SR_LAYER_METAL, 0);
+      box(m, x - ax * 0.2f, Y0 + 2.15f, z - az * 0.2f, x + ax * 0.2f, Y0 + 2.3f, z + az * 0.2f, rgb(255, 210, 120),
+          SR_LAYER_WHITE, 200); /* the number plate */
+      break;
+    }
+    case SR_PROP_MAILBOX:
+      box(m, x - 0.06f, Y0 + 0.9f, z - 0.5f, x + 0.12f, Y0 + 1.6f, z + 0.5f, rgb(120, 125, 130), SR_LAYER_METAL, 0);
+      for (int k = 0; k < 4; k++)
+        box(m, x + 0.12f, Y0 + 0.95f + 0.16f * (float)k, z - 0.45f, x + 0.13f, Y0 + 1.05f + 0.16f * (float)k, z + 0.45f,
+            rgb(70, 72, 78), SR_LAYER_METAL, 0);
+      break;
+    case SR_PROP_LIFT: {
+      bool along_x = p->facing == 0 || p->facing == 2;
+      float ax = along_x ? 0.6f : 0.08f, az = along_x ? 0.08f : 0.6f;
+      box(m, x - ax, Y0, z - az, x + ax, Y0 + 2.2f, z + az, rgb(150, 155, 160), SR_LAYER_METAL, 0);
+      box(m, x - ax * 0.05f - 0.01f, Y0, z - az * 0.05f - 0.01f, x + ax * 0.05f + 0.01f, Y0 + 2.2f,
+          z + az * 0.05f + 0.01f, rgb(60, 60, 65), SR_LAYER_METAL, 0); /* the seam between the doors */
+      box(m, x - 0.06f, Y0 + 2.3f, z - 0.06f, x + 0.06f, Y0 + 2.45f, z + 0.06f, rgb(255, 80, 60), SR_LAYER_WHITE, 255);
+      break;
+    }
+    case SR_PROP_POD:
+      box(m, x - 1.0f, Y0, z - 0.55f, x + 1.0f, Y0 + 1.1f, z + 0.55f, rgb(200, 200, 205), SR_LAYER_WHITE, 0);
+      box(m, x - 1.0f, Y0 + 1.15f, z - 0.55f, x + 1.0f, Y0 + 2.25f, z + 0.55f, rgb(190, 190, 198), SR_LAYER_WHITE, 0);
+      for (int k = 0; k < 2; k++) /* the hatches glow from the reading lights inside */
+        box(m, x - 0.35f, Y0 + 0.2f + 1.15f * (float)k, z + 0.55f, x + 0.35f, Y0 + 0.9f + 1.15f * (float)k, z + 0.57f,
+            deco(p->color + k), SR_LAYER_WHITE, 150);
+      break;
+    case SR_PROP_BOOTH:
+      box(m, x - 0.55f, Y0, z - 0.45f, x + 0.55f, Y0 + 2.0f, z - 0.35f, rgb(40, 45, 60), SR_LAYER_METAL, 0);
+      box(m, x - 0.55f, Y0, z - 0.45f, x - 0.47f, Y0 + 2.0f, z + 0.45f, rgb(40, 45, 60), SR_LAYER_METAL, 0);
+      box(m, x + 0.47f, Y0, z - 0.45f, x + 0.55f, Y0 + 2.0f, z + 0.45f, rgb(40, 45, 60), SR_LAYER_METAL, 0);
+      box(m, x - 0.3f, Y0 + 1.1f, z - 0.34f, x + 0.3f, Y0 + 1.5f, z - 0.32f, c, SR_LAYER_WHITE, 255); /* the screen */
+      box(m, x - 0.25f, Y0 + 0.4f, z - 0.1f, x + 0.25f, Y0 + 0.46f, z + 0.25f, rgb(60, 60, 70), SR_LAYER_WHITE, 0);
+      break;
     default: break; /* GCOVR_EXCL_LINE reason: every prop type is handled above */
   }
 }
@@ -174,7 +285,7 @@ void sr_build_interior_room(const SrSite *s, int room, SrMesh *m) {
   const SrInterior *in = &s->in;
   int rx = room % in->w, ry = room / in->w;
   float x0 = s->ox + (float)rx * CELL, z0 = s->oz + (float)ry * CELL, x1 = x0 + CELL, z1 = z0 + CELL;
-  SrColor wall = in->apartment ? rgb(175, 165, 160) : rgb(125, 128, 135);
+  SrColor wall = kind_wall(in);
   const int k = 4; /* floor and ceiling tiles for vertex lighting */
   float t = CELL / (float)k;
   for (int i = 0; i < k; i++)
@@ -187,14 +298,21 @@ void sr_build_interior_room(const SrSite *s, int room, SrMesh *m) {
     }
   /* ceiling light panel */
   box(m, x0 + CELL / 2 - 0.6f, Y0 + H - 0.05f, z0 + CELL / 2 - 0.3f, x0 + CELL / 2 + 0.6f, Y0 + H, z0 + CELL / 2 + 0.3f,
-      s->lights_off ? rgb(40, 40, 45) : rgb(255, 240, 210), SR_LAYER_WHITE, s->lights_off ? 0 : 255);
+      s->lights_off ? rgb(40, 40, 45) : kind_light(in), SR_LAYER_WHITE, s->lights_off ? 0 : 255);
   /* walls this room owns: east and south always, west and north on the outer edge */
   if (rx == 0) wall_z(m, z0, z1, x0, false, 0, false, wall);
   if (ry == 0) wall_x(m, x0, x1, z0, false, 0, false, wall);
   bool e_door = rx + 1 < in->w && (in->doors[room] & 1);
-  wall_z(m, z0, z1, x1, e_door, z0 + CELL / 2, false, wall); /* door leaves swing in sr_build_doors */
   bool s_door = ry + 1 < in->h && (in->doors[room] & 2);
-  wall_x(m, x0, x1, z1, s_door, x0 + CELL / 2, false, wall);
+  bool e_open = e_door && (in->doors[room] & SR_INT_OPEN_E), s_open = s_door && (in->doors[room] & SR_INT_OPEN_S);
+  if (!e_open) wall_z(m, z0, z1, x1, e_door, z0 + CELL / 2, false, wall); /* door leaves swing in sr_build_doors */
+  if (!s_open) wall_x(m, x0, x1, z1, s_door, x0 + CELL / 2, false, wall);
+  if (rx + 1 == in->w && in->kind != SR_FLOOR_SITE && in->kind != SR_FLOOR_HOME) {
+    /* the street wall on civilian floors: a shop window glowing with the street outside */
+    if (ry + 1 == in->h)
+      box(m, x0 + 0.4f, Y0 + 0.9f, z1 - WT / 2 - 0.02f, x1 - 0.4f, Y0 + 2.3f, z1 - WT / 2, rgb(40, 60, 90),
+          SR_LAYER_WHITE, 120);
+  }
   /* vent grilles */
   if (in->vents[room] & 1)
     box(m, x1 - 0.12f, Y0 + 0.05f, z0 + CELL / 2 + SR_SITE_VENT_OFFSET - 0.4f, x1 + 0.12f, Y0 + 0.65f,
@@ -271,7 +389,7 @@ void sr_build_doors(const SrSite *s, float *angle, float dt, bool snap, SrMesh *
     float x0 = s->ox + (float)rx * CELL, z0 = s->oz + (float)ry * CELL, x1 = x0 + CELL, z1 = z0 + CELL;
     for (int dir = 0; dir < 2; dir++) {
       bool has = dir == 0 ? rx + 1 < in->w && (in->doors[room] & 1) : ry + 1 < in->h && (in->doors[room] & 2);
-      if (!has) continue;
+      if (!has || (in->doors[room] & (dir == 0 ? SR_INT_OPEN_E : SR_INT_OPEN_S))) continue; /* open floor */
       float want = sr_site_door_open(s, room, dir) ? 1.0f : 0.0f, *a = &angle[room * 2 + dir];
       *a = snap ? want : *a + sr_clampf(want - *a, -step, step);
       float sw = *a * SR_PI * 0.5f;
@@ -409,6 +527,59 @@ void sr_build_guards(const SrSite *s, SrAnimCache *anim, double now, SrVec3 play
   }
 }
 
+SrAppearance sr_occupant_look(const SrSite *s, int i) {
+  const SrOccupant *o = &s->in.occ[i];
+  uint64_t key = sr_hash_combine((uint64_t)s->building * 977u + 0x0cc0u, (uint64_t)i);
+  SrRole role = SR_ROLE_WORKER;
+  switch ((SrOccRole)o->role) {
+    case SR_OCC_KEEPER: role = s->in.kind == SR_FLOOR_FIXER ? SR_ROLE_FIXER : SR_ROLE_VENDOR; break;
+    case SR_OCC_OFFICER: role = s->in.kind == SR_FLOOR_FIXER ? SR_ROLE_GANG : SR_ROLE_COP; break;
+    case SR_OCC_PATRON: {
+      static const SrRole mix[5] = {SR_ROLE_WORKER, SR_ROLE_WORKER, SR_ROLE_DRIFTER, SR_ROLE_EXEC, SR_ROLE_GANG};
+      role = mix[sr_mix64(key) % 5];
+      break;
+    }
+    default: role = SR_ROLE_WORKER; break;
+  }
+  return sr_appearance_generate(key, role, 0);
+}
+
+int sr_build_occupants(const SrSite *s, SrAnimCache *anim, double now, SrVec3 player, SrMesh *m) {
+  bool panic = sr_site_panicked(s);
+  int drawn = 0;
+  for (int i = 0; i < s->in.occ_count; i++) {
+    const SrOccupant *o = &s->in.occ[i];
+    float yaw;
+    SrVec3 pos = sr_site_occupant_pos(s, i, &yaw);
+    SrAppearance a = sr_occupant_look(s, i);
+    SrAnimInput in;
+    memset(&in, 0, sizeof in);
+    in.key = sr_hash_combine((uint64_t)s->building * 131u + 0x5eaull, (uint64_t)i);
+    in.look = &a;
+    in.role = (uint8_t)(o->role == SR_OCC_OFFICER ? SR_ROLE_COP : SR_ROLE_WORKER);
+    in.pos = pos;
+    in.dir = sr_dir_from_yaw_pitch(yaw, 0);
+    in.once_t0 = -1;
+    in.expr = SR_EXPR_AUTO;
+    static const uint8_t k_clip[6] = {SR_CLIP_IDLE, SR_CLIP_SIT,  SR_CLIP_LEAN,
+                                      SR_CLIP_EAT,  SR_CLIP_TALK, SR_CLIP_PHONE};
+    in.base = k_clip[o->pose % 6];
+    if (panic) /* shots inside: the seated duck where they are, the rest cover their heads */
+      in.base = o->pose == SR_POSE_SIT || o->pose == SR_POSE_EAT ? SR_CLIP_COWER : SR_CLIP_COVER_HEAD;
+    else if (o->role == SR_OCC_KEEPER || o->role == SR_OCC_OFFICER) { /* staff watch whoever comes close */
+      float dx = player.x - pos.x, dz = player.z - pos.z;
+      if (dx * dx + dz * dz < 16.0f) {
+        in.look_at = true;
+        in.target = sr_v3(player.x, pos.y + 1.6f, player.z);
+      }
+    }
+    sr_anim_character(anim, &in, m);
+    drawn++;
+  }
+  (void)now;
+  return drawn;
+}
+
 /* Enemy fire: a flash at the muzzle for a tenth of a second and a tracer every third round. */
 int sr_build_enemy_fire(const SrSite *s, double now, SrVec3 player, SrVec3 eye, SrMesh *fx, SrLight *lights, int nl,
                         int max_lights) {
@@ -451,11 +622,19 @@ int sr_site_collect_lights(const SrSite *s, SrLight *out, int max) {
     l->r = t == SR_ROOM_TARGET || t == SR_ROOM_SERVER ? 0.5f : 1.0f;
     l->g = t == SR_ROOM_SECURITY ? 1.0f : 0.85f;
     l->b = t == SR_ROOM_TARGET || t == SR_ROOM_SERVER ? 1.0f : 0.65f;
+    if (s->in.kind != SR_FLOOR_SITE && s->in.kind != SR_FLOOR_HOME) { /* the light of the place */
+      SrColor k = kind_light(&s->in);
+      float dim = s->in.kind == SR_FLOOR_BAR || s->in.kind == SR_FLOOR_FIXER ? 0.55f : 0.9f;
+      l->r = (float)k.r / 255.0f * dim;
+      l->g = (float)k.g / 255.0f * dim;
+      l->b = (float)k.b / 255.0f * dim;
+    }
   }
   /* lamps, screens and posters add coloured light */
   for (int i = 0; i < s->in.prop_count && n < max; i++) {
     const SrProp *p = &s->in.props[i];
-    if (p->type != SR_PROP_LAMP && p->type != SR_PROP_TERMINAL && p->type != SR_PROP_POSTER) continue;
+    if (p->type != SR_PROP_LAMP && p->type != SR_PROP_TERMINAL && p->type != SR_PROP_POSTER && p->type != SR_PROP_BOOTH)
+      continue;
     SrColor c = p->type == SR_PROP_TERMINAL ? rgb(60, 200, 255) : deco(p->color);
     SrLight *l = &out[n++];
     l->pos = sr_v3(s->ox + (float)p->x / 100.0f, Y0 + 1.6f, s->oz + (float)p->z / 100.0f);

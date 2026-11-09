@@ -290,6 +290,11 @@ static SrAccess pick_access(SrGame *g, int *building) {
         return SR_ACCESS_SPIKE;
       }
     int pr = sr_site_prop_near(&g->site, g->player.pos, g->player.yaw, 2.0f);
+    if (pr >= 0 && g->site.in.props[pr].type == SR_PROP_BOOTH &&
+        g->city->buildings[g->site.building].poi == SR_POI_MATRIX_BOOTH) {
+      *building = g->site.building;
+      return SR_ACCESS_BOOTH;
+    }
     if (pr >= 0 && (g->site.in.props[pr].type == SR_PROP_CONSOLE || g->site.in.props[pr].type == SR_PROP_TERMINAL)) {
       *building = g->site.building;
       return SR_ACCESS_PORT;

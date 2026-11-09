@@ -971,6 +971,9 @@ static void test_shops(void) {
   SrPlayer *p = &g->player;
   p->cred = 100000;
   int b = open_poi(g, SR_POI_ELECTRONICS);
+  SR_CHECK_EQ(sr_game_context(g).kind, SR_CTX_ENTER);
+  SR_CHECK_EQ(sr_game_interact(g), SR_OK); /* in through the shop door, up to the counter */
+  face_prop(g, SR_PROP_COUNTER);
   SR_CHECK_EQ(sr_game_context(g).kind, SR_CTX_SHOP);
   SR_CHECK_EQ(sr_game_interact(g), SR_OK);
   SR_CHECK_EQ(g->screen, SR_SCREEN_SHOP);
@@ -1267,6 +1270,233 @@ static void test_site_script_commands(void) {
   sr_game_destroy(g);
 }
 
+/* ---- civilian floors ------------------------------------------------------------------------ */
+
+static void test_civilian_floors(void) {
+  SR_SPEC("city-generation", "Floors fit the building");
+  SR_SPEC("player-life", "Service at the counter");
+  SrGame *g = game(41);
+  const SrCity *c = g->city;
+  int count[SR_FLOOR_COUNT] = {0};
+  int civil = 0;
+  SrInterior *in = (SrInterior *)malloc(sizeof *in), *again = (SrInterior *)malloc(sizeof *again);
+  for (int b = 0; b < c->building_count; b++) {
+    if (c->buildings[b].flags & SR_BF_MISSION) continue;
+    SrInteriorKind k = sr_interior_kind(c, b);
+    SR_CHECK(k > SR_FLOOR_HOME && k < SR_FLOOR_COUNT);
+    count[k]++;
+    civil++;
+    sr_interior_civilian(c, b, in);
+    SR_CHECK_EQ(in->kind, k);
+    SR_CHECK(in->w >= 2 && in->w <= SR_INT_MAX_W && in->h >= 2 && in->h <= SR_INT_MAX_H);
+    SR_CHECK(in->guards == 0 && in->target_room < 0);
+    SR_CHECK_EQ(in->entries[0].type, SR_ENTRY_FRONT);
+    SR_CHECK_EQ(in->entries[0].room, (in->h - 1) * in->w + in->w / 2);
+    SR_CHECK(in->prop_count < SR_INT_MAX_PROPS && in->occ_count <= SR_INT_MAX_OCC);
+    /* every room is reachable from the front door (staff doors may be locked) */
+    for (int r = 0; r < in->w * in->h; r++) SR_CHECK(sr_interior_reachable(in, in->entries[0].room, r, false, true));
+    /* a place that serves has a counter with someone behind it */
+    bool serves = k != SR_FLOOR_RESIDENTIAL && k != SR_FLOOR_WAREHOUSE;
+    int counter = sr_interior_find_prop(in, SR_PROP_COUNTER);
+    SR_CHECK(!serves || counter >= 0);
+    /* the same floor every time */
+    sr_interior_civilian(c, b, again);
+    SR_CHECK_EQ(sr_interior_digest(in), sr_interior_digest(again));
+    SR_CHECK_EQ(in->occ_count, again->occ_count);
+    /* nobody stands in a wall or a piece of furniture; the counter is solid; the door is clear */
+    if (b % 7 == 0 || k != SR_FLOOR_RESIDENTIAL) {
+      sr_site_open(&g->site, in, b, 100.0f, 100.0f, &g->deltas, 0, -1);
+      int occ = g->site.in.occ_count;
+      g->site.in.occ_count = 0;
+      for (int i = 0; i < occ; i++) {
+        SrVec3 o = sr_site_occupant_pos(&g->site, i, NULL);
+        SR_CHECK(!sr_site_blocked(&g->site, o.x, o.z, 0.1f, false));
+      }
+      float yaw;
+      SrVec3 door = sr_site_entry_pos(&g->site, 0, &yaw);
+      SR_CHECK(!sr_site_blocked(&g->site, door.x, door.z, 0.35f, false));
+      if (counter >= 0) {
+        SrVec3 at = sr_site_prop_pos(&g->site, counter);
+        SR_CHECK(sr_site_blocked(&g->site, at.x, at.z, 0.1f, false));
+        SR_CHECK(!sr_site_blocked(&g->site, at.x, at.z + 1.0f, 0.3f, false)); /* room to stand at it */
+      }
+      g->site.in.occ_count = occ;
+      sr_site_close(&g->site);
+    }
+  }
+  /* every kind appears; most of the city is homes, and the shops are shops */
+  for (int k = SR_FLOOR_SHOP; k < SR_FLOOR_COUNT; k++) {
+    if (count[k] == 0) printf("  no %s floor in this city\n", sr_interior_kind_name((SrInteriorKind)k));
+    SR_CHECK(count[k] > 0 || k == SR_FLOOR_BOOTH);
+  }
+  SR_CHECK(count[SR_FLOOR_RESIDENTIAL] > civil / 4);
+  printf("  floors: %d residential, %d office, %d warehouse, %d shop, %d food, %d bar\n", count[SR_FLOOR_RESIDENTIAL],
+         count[SR_FLOOR_OFFICE], count[SR_FLOOR_WAREHOUSE], count[SR_FLOOR_SHOP], count[SR_FLOOR_FOOD],
+         count[SR_FLOOR_BAR]);
+  SR_CHECK(strcmp(sr_interior_kind_name(SR_FLOOR_COUNT), "?") == 0);
+  free(in);
+  free(again);
+  /* every building can be entered from its door, and left again */
+  int64_t t = sr_game_time(g);
+  int entered = 0;
+  sr_game_leave(g);
+  for (int b = 0; b < c->building_count; b += 3) {
+    if (b == g->player.home) continue;
+    SR_CHECK_EQ(sr_game_enter(g, b, SR_ENTRY_FRONT), SR_OK);
+    SR_CHECK(sr_game_inside(g));
+    sr_game_leave(g);
+    entered++;
+  }
+  SR_CHECK(entered > 50);
+  SR_CHECK_EQ(sr_game_time(g), t);
+  sr_game_destroy(g);
+}
+
+/* Walk into a building of a kind and stand at its counter. */
+static int enter_kind(SrGame *g, SrInteriorKind k, int poi) {
+  for (int b = 0; b < g->city->building_count; b++) {
+    if ((g->city->buildings[b].flags & SR_BF_MISSION) || b == g->player.home) continue;
+    if (sr_interior_kind(g->city, b) != k || (poi >= 0 && g->city->buildings[b].poi != poi)) continue;
+    if (g->site.active) sr_game_leave(g);
+    if (sr_game_enter(g, b, SR_ENTRY_FRONT) != SR_OK) continue;
+    return b;
+  }
+  return -1;
+}
+
+static void test_counters_and_people(void) {
+  SR_SPEC("player-life", "Service at the counter");
+  SrGame *g = game(43);
+  g->player.cred = 100000;
+  sr_game_leave(g);
+  static const struct {
+    SrInteriorKind k;
+    int poi;
+    SrContextKind want;
+  } cases[] = {{SR_FLOOR_SHOP, SR_POI_GUNSHOP, SR_CTX_SHOP},
+               {SR_FLOOR_SHOP, SR_POI_GROCERY, SR_CTX_FOOD},
+               {SR_FLOOR_FOOD, -1, SR_CTX_FOOD},
+               {SR_FLOOR_BAR, -1, SR_CTX_FOOD},
+               {SR_FLOOR_CLINIC, -1, SR_CTX_CLINIC},
+               {SR_FLOOR_CAPSULE, -1, SR_CTX_CAPSULE},
+               {SR_FLOOR_FIXER, -1, SR_CTX_FIXER},
+               {SR_FLOOR_OFFICE, -1, SR_CTX_TALK},
+               {SR_FLOOR_CIVIC, SR_POI_POLICE, SR_CTX_TALK},
+               {SR_FLOOR_CIVIC, -1, SR_CTX_TALK},
+               {SR_FLOOR_BOOTH, -1, SR_CTX_TALK}};
+  for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+    int b = enter_kind(g, cases[i].k, cases[i].poi);
+    if (b < 0) continue;
+    face_prop(g, SR_PROP_COUNTER);
+    SrContext ctx = sr_game_context(g);
+    SR_CHECK_EQ(ctx.kind, cases[i].want);
+    SR_CHECK_EQ(ctx.building, b);
+    if (cases[i].want == SR_CTX_TALK) {
+      g->toast_time = 0;
+      SR_CHECK_EQ(sr_game_interact(g), SR_OK);
+      SR_CHECK(g->toast_time > 0 && g->toast[0] == '"');
+    }
+    if (cases[i].want == SR_CTX_FOOD) {
+      float sat = g->player.satiety = 20;
+      SR_CHECK_EQ(sr_game_interact(g), SR_OK);
+      SR_CHECK(g->player.satiety > sat);
+    }
+    /* the keeper is behind the counter */
+    int pr = sr_interior_find_prop(&g->site.in, SR_PROP_COUNTER);
+    SrVec3 at = sr_site_prop_pos(&g->site, pr);
+    bool keeper = false;
+    for (int o = 0; o < g->site.in.occ_count; o++) {
+      SrVec3 p = sr_site_occupant_pos(&g->site, o, NULL);
+      float reach_x = cases[i].k == SR_FLOOR_BAR ? 20.0f : 1.3f; /* one bartender works the whole bar */
+      keeper |=
+          g->site.in.occ[o].role != SR_OCC_PATRON && fabsf(p.x - at.x) < reach_x && p.z < at.z && at.z - p.z < 1.2f;
+    }
+    if (!keeper) printf("  no keeper at the %s counter\n", sr_interior_kind_name(cases[i].k));
+    SR_CHECK(keeper);
+  }
+  /* a residential lobby: mailboxes, the lift and flat doors say something; clinic beds do not sleep */
+  SR_CHECK(enter_kind(g, SR_FLOOR_RESIDENTIAL, -1) >= 0);
+  static const SrPropType looks[3] = {SR_PROP_MAILBOX, SR_PROP_LIFT, SR_PROP_FLAT_DOOR};
+  for (int k = 0; k < 3; k++) {
+    face_prop(g, looks[k]);
+    SrContext ctx = sr_game_context(g);
+    SR_CHECK_EQ(ctx.kind, SR_CTX_INFO);
+    g->toast_time = 0;
+    SR_CHECK_EQ(sr_game_interact(g), SR_OK);
+    SR_CHECK(g->toast_time > 0);
+  }
+  SR_CHECK(strncmp(g->toast, "Flat ", 5) == 0);
+  char buf[128];
+  sr_game_info_text(g, SR_CTX_INFO, -1, buf, sizeof buf);
+  SR_CHECK(strcmp(buf, "Nothing to see.") == 0);
+  SR_CHECK(enter_kind(g, SR_FLOOR_CLINIC, -1) >= 0);
+  face_prop(g, SR_PROP_BED);
+  SR_CHECK(sr_game_context(g).kind != SR_CTX_BED);
+  /* a Matrix booth: sit at a deck and jack in */
+  int booth = enter_kind(g, SR_FLOOR_BOOTH, SR_POI_MATRIX_BOOTH);
+  if (booth >= 0) {
+    sr_inv_add(&g->player.inv, sr_item_simple(SR_IK_DECK, 2, 1));
+    face_prop(g, SR_PROP_BOOTH);
+    SR_CHECK_EQ(sr_game_context(g).kind, SR_CTX_INFO);
+    SR_CHECK_EQ(sr_game_jack_in(g), SR_OK);
+    SR_CHECK(g->dive.active);
+    sr_game_jack_out(g, false);
+  }
+  /* shots inside: everyone takes cover */
+  SR_SPEC("population-simulation", "People inside take cover");
+  SR_CHECK(enter_kind(g, SR_FLOOR_BAR, -1) >= 0);
+  SR_CHECK(!sr_site_panicked(&g->site));
+  SrWeaponStats w;
+  memset(&w, 0, sizeof w);
+  w.range = 30;
+  w.noise = 10;
+  sr_site_shoot(&g->site, &g->deltas, g->player.pos, g->player.yaw, 0, &w);
+  SR_CHECK(sr_site_panicked(&g->site));
+  /* the people are drawn in their poses; panicking changes them */
+  SrAnimCache *anim = (SrAnimCache *)calloc(1, sizeof *anim);
+  SrMesh m;
+  sr_mesh_init(&m);
+  sr_anim_cache_begin(anim, 1.0);
+  int n = sr_build_occupants(&g->site, anim, 1.0, g->player.pos, &m);
+  sr_anim_cache_end(anim);
+  SR_CHECK_EQ(n, g->site.in.occ_count);
+  SR_CHECK(n == 0 || m.nv > 0);
+  uint64_t scared = sr_mesh_digest(&m);
+  g->site.panic_at = 0;
+  sr_mesh_clear(&m);
+  memset(anim, 0, sizeof *anim);
+  sr_anim_cache_begin(anim, 1.0);
+  sr_build_occupants(&g->site, anim, 1.0, g->player.pos, &m);
+  sr_anim_cache_end(anim);
+  SR_CHECK(n == 0 || sr_mesh_digest(&m) != scared);
+  for (int i = 0; i < g->site.in.occ_count; i++) (void)sr_occupant_look(&g->site, i);
+  /* every room mesh builds, with the new furniture */
+  for (int k = SR_FLOOR_SHOP; k < SR_FLOOR_COUNT; k++) {
+    if (enter_kind(g, (SrInteriorKind)k, -1) < 0) continue;
+    for (int r = 0; r < g->site.in.w * g->site.in.h; r++) {
+      sr_build_interior_room(&g->site, r, &m);
+      SR_CHECK(m.nv > 0);
+    }
+    SrLight lights[32];
+    SR_CHECK(sr_site_collect_lights(&g->site, lights, 32) > 0);
+  }
+  sr_mesh_free(&m);
+  free(anim);
+  if (g->site.active) sr_game_leave(g);
+  /* a shop after hours stays shut */
+  for (int b = 0; b < g->city->building_count; b++) {
+    if (g->city->buildings[b].poi != SR_POI_FOOD) continue;
+    int open, hours;
+    sr_poi_hours(g->city, b, &open, &hours);
+    if (hours >= 24) continue;
+    sr_clock_set_seconds(&g->clock, (sr_game_time(g) / 86400 + 1) * 86400 + (int64_t)((open + hours + 1) % 24) * 3600);
+    sr_game_teleport_building(g, b);
+    SR_CHECK_EQ(sr_game_context(g).kind, SR_CTX_CLOSED);
+    break;
+  }
+  sr_game_destroy(g);
+}
+
 void suite_site(void) {
   SR_RUN(test_apartment_template);
   SR_RUN(test_mission_interior_props);
@@ -1285,6 +1515,8 @@ void suite_site(void) {
   SR_RUN(test_cyberware_in_play);
   SR_RUN(test_street_gadgets);
   SR_RUN(test_shops);
+  SR_RUN(test_civilian_floors);
+  SR_RUN(test_counters_and_people);
   SR_RUN(test_interior_render_and_ui);
   SR_RUN(test_crowd_lod);
   SR_RUN(test_light_grid);

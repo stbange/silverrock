@@ -174,6 +174,11 @@ static void test_interactions(void) {
   sr_poi_hours(g->city, food, &open, &hours);
   sr_game_skip(g, ((open + 1 + 24) - sr_time_hour(sr_game_time(g))) % 24 * 3600, false);
   sr_game_teleport_building(g, food);
+  SR_SPEC("player-life", "Every building has an inside");
+  SR_CHECK_EQ(sr_game_context(g).kind, SR_CTX_ENTER); /* walk in, then order at the counter */
+  SR_CHECK_EQ(sr_game_interact(g), SR_OK);
+  SR_CHECK(sr_game_inside(g));
+  face_prop(g, SR_PROP_COUNTER);
   SR_CHECK_EQ(sr_game_context(g).kind, SR_CTX_FOOD);
   float sat = g->player.satiety;
   SR_CHECK_EQ(sr_game_interact(g), SR_OK);
@@ -182,6 +187,7 @@ static void test_interactions(void) {
   SR_CHECK(sr_game_interact(g) != SR_OK);
   g->player.cred = 5000;
   SR_CHECK_EQ(sr_game_eat_at(g, g->player.home), SR_ERR_NOT_FOUND);
+  sr_game_leave(g);
   /* home: go inside, walk to the bed, sleep 8 hours */
   sr_game_teleport_building(g, g->player.home);
   SR_CHECK_EQ(sr_game_context(g).kind, SR_CTX_HOME);
@@ -251,6 +257,9 @@ static void test_job_interactions(void) {
   int open, hours;
   sr_poi_hours(g->city, fixer, &open, &hours);
   sr_game_teleport_building(g, fixer);
+  SR_CHECK_EQ(sr_game_context(g).kind, SR_CTX_ENTER);
+  SR_CHECK_EQ(sr_game_interact(g), SR_OK);
+  face_prop(g, SR_PROP_COUNTER); /* the fixer's table in the back room */
   SR_CHECK_EQ(sr_game_context(g).kind, SR_CTX_FIXER);
   SR_SPEC("job-system", "Fixer offers jobs");
   SR_CHECK_EQ(sr_game_interact(g), SR_OK); /* the fixer's offers open as a list */
@@ -261,6 +270,7 @@ static void test_job_interactions(void) {
   SR_CHECK_EQ(g->screen, SR_SCREEN_PLAY);
   SR_CHECK(g->active_job >= 0);
   SrJob *j = sr_jobs_get(&g->jobs, g->active_job);
+  sr_game_leave(g);
   sr_game_teleport_building(g, j->target_building);
   SR_CHECK_EQ(sr_game_context(g).kind, SR_CTX_JOB_TARGET);
   int tries = 0;
@@ -276,8 +286,13 @@ static void test_job_interactions(void) {
   }
   SR_CHECK(j->state != SR_JS_ACCEPTED || !j->executed);
   /* a second visit the same day: no new work */
+  if (sr_game_inside(g)) sr_game_leave(g);
   sr_game_teleport_building(g, fixer);
+  sr_game_interact(g);
+  face_prop(g, SR_PROP_COUNTER);
   for (int i = 0; i < 5; i++) sr_game_interact(g);
+  if (g->screen == SR_SCREEN_SHOP) sr_game_shop_close(g);
+  sr_game_leave(g);
   SR_CHECK_EQ(sr_game_accept(g, 99999), SR_ERR_NOT_FOUND);
   SrMissionResult none = sr_game_execute(g, 99999, SR_AP_GHOST);
   SR_CHECK(!none.success);

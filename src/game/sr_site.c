@@ -87,6 +87,7 @@ static bool wall_at(const SrSite *s, float lx, float lz, float r, bool crouched,
     float X = (float)k * CELL;
     if (fabsf(lx - X) >= reach) continue;
     int room = cz * in->w + (k - 1);
+    if (in->doors[room] & SR_INT_OPEN_E) continue; /* open floor */
     float along = lz - ((float)cz + 0.5f) * CELL;
     bool open = sr_site_door_open(s, room, 0) && fabsf(along) < SR_SITE_DOOR_HALF - r;
     if (!open && !sight && crouched && (in->vents[room] & 1))
@@ -98,6 +99,7 @@ static bool wall_at(const SrSite *s, float lx, float lz, float r, bool crouched,
     float Z = (float)k * CELL;
     if (fabsf(lz - Z) >= reach) continue;
     int room = (k - 1) * in->w + cx;
+    if (in->doors[room] & SR_INT_OPEN_S) continue;
     float along = lx - ((float)cx + 0.5f) * CELL;
     bool open = sr_site_door_open(s, room, 1) && fabsf(along) < SR_SITE_DOOR_HALF - r;
     if (!open && !sight && crouched && (in->vents[room] & 2))
@@ -107,15 +109,50 @@ static bool wall_at(const SrSite *s, float lx, float lz, float r, bool crouched,
   return false;
 }
 
+bool sr_site_prop_extent(const SrProp *p, float *hx, float *hz) {
+  float a = 0.5f, b = 0.5f; /* half extents along the prop's width and depth */
+  switch ((SrPropType)p->type) {
+    case SR_PROP_BED:
+    case SR_PROP_DESK:
+    case SR_PROP_SHELF:
+    case SR_PROP_SERVER:
+    case SR_PROP_CRATE:
+    case SR_PROP_WARDROBE:
+    case SR_PROP_CONSOLE: break;
+    case SR_PROP_COUNTER:
+      a = p->variant == SR_COUNTER_TABLE ? 0.6f : 1.2f;
+      b = 0.35f;
+      break;
+    case SR_PROP_TABLE: a = b = 0.4f; break;
+    case SR_PROP_POD:
+      a = 1.0f;
+      b = 0.55f;
+      break;
+    case SR_PROP_LIFT:
+    case SR_PROP_MAILBOX:
+      a = 0.6f;
+      b = 0.2f;
+      break;
+    default: return false;
+  }
+  bool along_x = p->facing == 0 || p->facing == 2; /* facing north or south: the width runs along x */
+  *hx = along_x ? a : b;
+  *hz = along_x ? b : a;
+  return true;
+}
+
 bool sr_site_blocked(const SrSite *s, float x, float z, float radius, bool crouched) {
   if (wall_at(s, x - s->ox, z - s->oz, radius, crouched, false)) return true;
   for (int i = 0; i < s->in.prop_count; i++) { /* solid furniture */
     const SrProp *p = &s->in.props[i];
-    if (p->type != SR_PROP_BED && p->type != SR_PROP_DESK && p->type != SR_PROP_SHELF && p->type != SR_PROP_SERVER &&
-        p->type != SR_PROP_CRATE && p->type != SR_PROP_WARDROBE && p->type != SR_PROP_CONSOLE)
-      continue;
+    float hx, hz;
+    if (!sr_site_prop_extent(p, &hx, &hz)) continue;
     float px = s->ox + (float)p->x / 100.0f, pz = s->oz + (float)p->z / 100.0f;
-    if (fabsf(x - px) < 0.5f + radius && fabsf(z - pz) < 0.5f + radius) return true;
+    if (fabsf(x - px) < hx + radius && fabsf(z - pz) < hz + radius) return true;
+  }
+  for (int i = 0; i < s->in.occ_count; i++) { /* people stand their ground */
+    SrVec3 o = sr_site_occupant_pos(s, i, NULL);
+    if (fabsf(x - o.x) < 0.25f + radius && fabsf(z - o.z) < 0.25f + radius) return true;
   }
   return false;
 }
@@ -182,7 +219,8 @@ int sr_site_prop_near(const SrSite *s, SrVec3 eye, float yaw, float range) {
   for (int i = 0; i < s->in.prop_count; i++) {
     SrPropType t = (SrPropType)s->in.props[i].type;
     if (t != SR_PROP_EXIT && t != SR_PROP_BED && t != SR_PROP_STASH && t != SR_PROP_TERMINAL && t != SR_PROP_WARDROBE &&
-        t != SR_PROP_OBJECTIVE && t != SR_PROP_CONSOLE)
+        t != SR_PROP_OBJECTIVE && t != SR_PROP_CONSOLE && t != SR_PROP_COUNTER && t != SR_PROP_FLAT_DOOR &&
+        t != SR_PROP_MAILBOX && t != SR_PROP_LIFT && t != SR_PROP_BOOTH)
       continue;
     float sc = ahead_score(eye, yaw, sr_site_prop_pos(s, i), range);
     if (sc > bs) {
@@ -406,9 +444,19 @@ void sr_site_noise(SrSite *s, SrVec3 pos, float radius) {
   for (int i = 0; i < s->guard_count; i++) sr_hear_noise(&s->guards[i].e, pos, radius);
 }
 
+SrVec3 sr_site_occupant_pos(const SrSite *s, int i, float *yaw) {
+  const SrOccupant *o = &s->in.occ[i];
+  static const float k_yaw[4] = {0.0f, -SR_PI / 2, SR_PI, SR_PI / 2}; /* north, east, south, west */
+  if (yaw) *yaw = k_yaw[o->facing & 3];
+  return sr_v3(s->ox + (float)o->x / 100.0f, SR_SITE_FLOOR_Y, s->oz + (float)o->z / 100.0f);
+}
+
+bool sr_site_panicked(const SrSite *s) { return s->panic_at > 0 || s->alarm || s->hostile; }
+
 bool sr_site_shoot(SrSite *s, SrDeltas *d, SrVec3 eye, float yaw, float pitch, const SrWeaponStats *w) {
   float cone = cosf(0.035f + w->spread * 0.01f);
   sr_site_noise(s, eye, w->noise * 1.5f);
+  if (s->panic_at <= 0) s->panic_at = SR_MAX(s->time, 0.001f); /* everyone inside ducks */
   int gi = sr_site_guard_ahead(s, eye, yaw, pitch, w->range, cone);
   if (gi < 0) return false;
   SrGuard *g = &s->guards[gi];

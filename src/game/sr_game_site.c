@@ -30,25 +30,29 @@ static int site_job_for(const SrGame *g, int building) {
   return -1;
 }
 
-bool sr_game_enterable(const SrGame *g, int b) {
-  if (b < 0 || b >= g->city->building_count) return false;
-  if (b == g->player.home) return true;
-  if (bld(g, b)->flags & SR_BF_MISSION) return true;
-  return site_job_for(g, b) >= 0;
+/* Every building has an inside: mission sites and job targets use the site layout, the home the
+ * apartment, everything else a civilian floor. */
+bool sr_game_enterable(const SrGame *g, int b) { return b >= 0 && b < g->city->building_count; }
+
+static bool site_layout(const SrGame *g, int b) {
+  return (bld(g, b)->flags & SR_BF_MISSION) || site_job_for(g, b) >= 0;
 }
 
 bool sr_game_inside(const SrGame *g) { return g->site.active; }
 
 static void interior_for(SrGame *g, int b, SrInterior *out) {
-  bool home = b == g->player.home;
-  if (g->approach_building == b && g->approach.apartment == home && (!home || g->approach.tier == g->player.tier)) {
+  bool home = b == g->player.home, site = !home && site_layout(g, b);
+  if (g->approach_building == b && g->approach.apartment == home && (!home || g->approach.tier == g->player.tier) &&
+      (g->approach.kind == SR_FLOOR_SITE) == site) {
     *out = g->approach;
     return;
   }
   if (home)
     sr_interior_apartment(g->city, b, g->player.tier, out);
-  else
+  else if (site)
     sr_interior_generate(g->city, b, out);
+  else
+    sr_interior_civilian(g->city, b, out);
   g->approach = *out;
   g->approach_building = b;
 }
@@ -663,6 +667,58 @@ static bool behind_unaware(const SrGuard *gd, SrVec3 eye) {
   return sr_v3_dot(sr_v3_norm(to), sr_dir_from_yaw_pitch(gd->e.yaw, 0)) <= -0.3f;
 }
 
+SrContextKind sr_game_counter_context(const SrGame *g) {
+  const SrSite *s = &g->site;
+  int poi = bld(g, s->building)->poi;
+  switch ((SrInteriorKind)s->in.kind) {
+    case SR_FLOOR_SHOP: return poi == SR_POI_GROCERY ? SR_CTX_FOOD : SR_CTX_SHOP;
+    case SR_FLOOR_FOOD:
+    case SR_FLOOR_BAR: return SR_CTX_FOOD;
+    case SR_FLOOR_CLINIC: return SR_CTX_CLINIC;
+    case SR_FLOOR_CAPSULE: return SR_CTX_CAPSULE;
+    case SR_FLOOR_FIXER: return SR_CTX_FIXER;
+    default: return SR_CTX_TALK;
+  }
+}
+
+void sr_game_info_text(const SrGame *g, SrContextKind kind, int prop, char *out, size_t cap) {
+  const SrSite *s = &g->site;
+  const SrBuilding *b = bld(g, s->building);
+  uint64_t pick = sr_mix64((uint64_t)s->building * 31u + (uint64_t)(prop + 1) + (uint64_t)(sr_game_time(g) / 600));
+  if (kind == SR_CTX_TALK) {
+    static const char *const desk[] = {
+        "\"Residents and appointments only.\"", "\"Take a number. Someone will call you.\"",
+        "\"We're not hiring. Try the terminal.\"", "\"Can I help you? No? Then keep moving.\""};
+    static const char *const police[] = {"\"File a report online. Next.\"", "\"You look familiar. Don't.\"",
+                                         "\"Lost something? So did we. Next.\""};
+    static const char *const booth[] = {"\"Booths are by the minute. Jack in with J.\"",
+                                        "\"Twenty minutes of fake sun. Cash only.\""};
+    if (b->poi == SR_POI_POLICE)
+      snprintf(out, cap, "%s", police[pick % 3]);
+    else if (s->in.kind == SR_FLOOR_BOOTH)
+      snprintf(out, cap, "%s", booth[b->poi == SR_POI_UV_BOOTH ? 1 : 0]);
+    else
+      snprintf(out, cap, "%s", desk[pick % 4]);
+    return;
+  }
+  const SrProp *p = prop >= 0 && prop < s->in.prop_count ? &s->in.props[prop] : NULL;
+  switch (p ? (SrPropType)p->type : SR_PROP_COUNT) {
+    case SR_PROP_FLAT_DOOR: {
+      static const char *const behind[] = {"a television, loud", "someone arguing", "nothing at all",
+                                           "a baby crying",      "synth music",     "a dog barking"};
+      snprintf(out, cap, "Flat %d. Locked. Behind the door: %s.", p->variant, behind[pick % 6]);
+      return;
+    }
+    case SR_PROP_MAILBOX: snprintf(out, cap, "Mailboxes. Final notices, mostly."); return;
+    case SR_PROP_LIFT: snprintf(out, cap, "The lift needs a resident's keycard."); return;
+    case SR_PROP_BOOTH:
+      snprintf(out, cap, "%s",
+               b->poi == SR_POI_MATRIX_BOOTH ? "A public deck. Press J to jack in." : "A UV booth. Out of order.");
+      return;
+    default: snprintf(out, cap, "Nothing to see."); return;
+  }
+}
+
 SrContext sr_game_site_context(SrGame *g) {
   SrContext ctx = {SR_CTX_NONE, -1, -1, -1, 1e9f, -1};
   const SrPlayer *p = &g->player;
@@ -693,10 +749,17 @@ SrContext sr_game_site_context(SrGame *g) {
   }
   int pr = sr_site_prop_near(s, p->pos, p->yaw, REACH);
   if (pr >= 0) {
-    static const SrContextKind k[SR_PROP_COUNT] = {SR_CTX_EXIT,     SR_CTX_BED,       SR_CTX_STASH,   SR_CTX_TERMINAL,
-                                                   SR_CTX_WARDROBE, SR_CTX_OBJECTIVE, SR_CTX_CONSOLE, SR_CTX_NONE};
+    static const SrContextKind k[SR_PROP_COUNT] = {
+        [SR_PROP_EXIT] = SR_CTX_EXIT,         [SR_PROP_BED] = SR_CTX_BED,
+        [SR_PROP_STASH] = SR_CTX_STASH,       [SR_PROP_TERMINAL] = SR_CTX_TERMINAL,
+        [SR_PROP_WARDROBE] = SR_CTX_WARDROBE, [SR_PROP_OBJECTIVE] = SR_CTX_OBJECTIVE,
+        [SR_PROP_CONSOLE] = SR_CTX_CONSOLE,   [SR_PROP_FLAT_DOOR] = SR_CTX_INFO,
+        [SR_PROP_MAILBOX] = SR_CTX_INFO,      [SR_PROP_LIFT] = SR_CTX_INFO,
+        [SR_PROP_BOOTH] = SR_CTX_INFO};
     SrContextKind kind = k[s->in.props[pr].type];
     if (kind == SR_CTX_OBJECTIVE && (s->job < 0 || s->objective_done)) kind = SR_CTX_NONE;
+    if (kind == SR_CTX_BED && !s->in.apartment) kind = SR_CTX_NONE; /* clinic beds are for patients */
+    if (s->in.props[pr].type == SR_PROP_COUNTER) kind = sr_game_counter_context(g);
     if (kind != SR_CTX_NONE) {
       ctx.kind = kind;
       ctx.prop = pr;
@@ -777,6 +840,13 @@ SrResult sr_game_site_interact(SrGame *g, const SrContext *c) {
       return r;
     }
     case SR_CTX_CLIMB_DOWN: return sr_game_climb_down(g);
+    case SR_CTX_INFO:
+    case SR_CTX_TALK: {
+      char msg[128];
+      sr_game_info_text(g, c->kind, c->prop, msg, sizeof msg);
+      sr_game_toast(g, msg);
+      return SR_OK;
+    }
     default: return SR_ERR_NOT_FOUND;
   }
 }

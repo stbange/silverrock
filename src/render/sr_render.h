@@ -250,6 +250,11 @@ uint64_t sr_site_mesh_key(const SrSite *s, const SrDeltas *d);
 void sr_build_site_dynamic(const SrSite *s, const SrDeltas *d, float time_s, SrMesh *out);
 /* Guards posed by their alert state, hits and falls (time in game seconds; the cache may be NULL). */
 void sr_build_guards(const SrSite *s, SrAnimCache *anim, double now, SrVec3 player, SrMesh *out);
+/* The people on a civilian floor (appended to out): keepers behind counters, customers, residents
+ * and workers in their poses, ducking when the place is shot up. Returns how many were drawn. */
+int sr_build_occupants(const SrSite *s, SrAnimCache *anim, double now, SrVec3 player, SrMesh *out);
+/* The look of occupant i (deterministic per building and seat). */
+SrAppearance sr_occupant_look(const SrSite *s, int i);
 /* Door leaves swinging toward their state over 0.3 s; angle holds 2 per room (0 shut, 1 open). */
 void sr_build_doors(const SrSite *s, float *angle, float dt, bool snap, SrMesh *out);
 /* Animation input of one guard (now in site seconds). */
@@ -426,8 +431,8 @@ typedef struct SrSceneCache {
   SrMesh pools;            /* light pools and wall splashes (every frame) */
   SrMesh crowd_fx;         /* footfall splashes, headlight beams, car spray, muzzle flashes (glow pass) */
   SrAnimCache anim;        /* poses of citizens and guards (presentation only) */
-  int near_drawn, beams_drawn, route_drawn; /* diagnostics for the budget test */
-  SrMesh view_model;                        /* the player's hands and weapon */
+  int near_drawn, beams_drawn, route_drawn, occupants_drawn; /* diagnostics for the budget test */
+  SrMesh view_model;                                         /* the player's hands and weapon */
   float door_angle[SR_INT_MAX_ROOMS * 2];
   int32_t door_building; /* the site the door angles belong to */
   float sway_x, sway_y;  /* the weapon's lag behind the look */
