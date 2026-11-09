@@ -49,8 +49,8 @@ const char *sr_weather_name(SrWeather w) {
 
 /* The climate: fog always, rain nearly always, and the player sees one or two blocks. */
 float sr_weather_visibility(SrWeather w) {
-  static const float v[SR_WX_COUNT] = {200.0f, 150.0f, 90.0f, 60.0f, 110.0f, 120.0f};
-  return (unsigned)w < SR_WX_COUNT ? v[w] : 200.0f;
+  static const float v[SR_WX_COUNT] = {95.0f, 72.0f, 55.0f, 34.0f, 55.0f, 65.0f}; /* metres: a heavy, wet haze */
+  return (unsigned)w < SR_WX_COUNT ? v[w] : v[0];
 }
 
 static float weather_rain(SrWeather w) {

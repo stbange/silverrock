@@ -461,8 +461,8 @@ static void test_weather_and_sky(void) {
     SrWeatherState w = sr_weather_at(77, slot * 7200 + 3600);
     rainy += w.rain > 0.0f;
     SR_CHECK(w.wetness >= 0.6f);
-    SR_CHECK(w.visibility <= 200.0f);
-    if (w.rain > 0.0f) SR_CHECK(w.visibility <= 150.0f);
+    SR_CHECK(w.visibility <= 100.0f);
+    if (w.rain > 0.0f) SR_CHECK(w.visibility <= 75.0f);
   }
   SR_CHECK(rainy >= slots * 85 / 100);
   SR_CHECK_STR(sr_weather_name(SR_WX_CLEAR), "overcast");

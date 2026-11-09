@@ -80,6 +80,14 @@ static void test_palettes_and_fog(void) {
   SR_CHECK_NEAR(plain, 1.0, 1e-6);
   SR_CHECK(neon <= 0.31f);
   SR_CHECK_NEAR(sr_fog_factor(10, 100, 400, 0), 0, 0);
+  /* street haze: thin underfoot, thick by the end of the block */
+  SR_SPEC("retro-rendering", "Haze in the street");
+  float vis = sr_weather_visibility(SR_WX_DRIZZLE), fogv = sr_weather_visibility(SR_WX_FOG);
+  SR_CHECK(sr_fog_factor(5, vis * 0.03f, vis, 0) < 0.2f);
+  SR_CHECK(sr_fog_factor(25, vis * 0.03f, vis, 0) > 0.5f);
+  SR_CHECK(sr_fog_factor(60, vis * 0.03f, vis, 0) > 0.9f);
+  SR_CHECK(sr_fog_factor(20, fogv * 0.03f, fogv, 0) > 0.75f);
+  SR_CHECK(sr_fog_factor(vis, vis * 0.03f, vis, 1.0f) <= 0.31f);
 }
 
 static void test_lights(void) {

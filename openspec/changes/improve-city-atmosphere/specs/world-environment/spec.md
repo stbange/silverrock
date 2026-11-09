@@ -41,8 +41,8 @@ transitions, determined by the seed and the clock, with rain falling most of the
 - **THEN** rain falls in at least 85 % of the slots, and the street wetness never drops below 0.6
 
 ### Requirement: Weather effects
-Weather SHALL change visibility distance and surface wetness, with visibility never above 200 m outside the
-Pall-removal ending, and SHALL be readable by other systems, so that citizens and perception can react to it.
+Weather SHALL change visibility distance and surface wetness, with visibility never above 100 m at street level
+outside the Pall-removal ending, and SHALL be readable by other systems, so that citizens and perception can react to it.
 
 #### Scenario: Downpour reduces visibility
 - **WHEN** the weather is downpour or fog
@@ -50,7 +50,7 @@ Pall-removal ending, and SHALL be readable by other systems, so that citizens an
 
 #### Scenario: Short sight lines
 - **WHEN** the visibility is sampled over one simulated year outside the Pall-removal ending
-- **THEN** it never exceeds 200 m, and it is at most 150 m in every weather with rain
+- **THEN** it never exceeds 100 m, and it is at most 75 m in every weather with rain
 
 ## ADDED Requirements
 

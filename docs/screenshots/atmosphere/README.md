@@ -16,5 +16,16 @@ at the default 480 × 270 internal resolution before the post pass (no bloom, gr
 | `s3_05_oldquarter.png` | The Old Quarter: row houses, lantern strings over the lane |
 | `s3_15_aerial.png` | From above: setbacks, roofs, the distant city and the skyline |
 
+**Street haze (2026-11-09).** The fog was made much heavier. It starts a few metres away, thickens fast, glows with
+the street light instead of going black, and thins above the roofs. Visibility at street level is now 34 to 95 m.
+
+| File | Shows |
+|---|---|
+| `haze_commercial.png` | Drizzle in a commercial street: the far end of the block sinks into the haze |
+| `haze_entertainment.png` | Drizzle in the entertainment district: neon carries through the haze |
+| `haze_residential.png` | A residential street, the towers fading a block away |
+| `haze_fog.png` | Fog weather: a pale lit haze, the street ends about 30 m away |
+| `haze_smog.png` | Smog in the industrial district: brown and thick |
+
 The full-window gameplay screenshots (HUD, bloom, grading and vignette included) are in
 `docs/screenshots/m5/`.

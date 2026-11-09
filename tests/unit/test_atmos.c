@@ -279,7 +279,15 @@ static void test_deck_and_sky(void) {
   }
   SR_CHECK(sky == 1 && deck == 1 && halo >= 1);
   SR_CHECK(f->fog_end <= 60.0f + 1e-3f);
-  SR_CHECK(f->halo_count > 0); /* neon shows through the fog at the end of the street */
+  SR_CHECK(f->fog_start < 3.0f);                      /* the haze starts a few steps away */
+  SR_CHECK(f->fog[0] + f->fog[1] + f->fog[2] > 0.5f); /* lit by the city, never black */
+  SR_CHECK(f->halo_count > 0);                        /* neon shows through the fog at the end of the street */
+  float street_end = f->fog_end;
+  g->player.pos.y += 120.0f; /* above the roofs the haze thins */
+  sr_scene_build(s, g, 16.0f / 9.0f, f);
+  SR_CHECK(f->fog_end > street_end * 3.0f);
+  g->player.pos.y -= 120.0f;
+  sr_scene_build(s, g, 16.0f / 9.0f, f);
   SR_CHECK(!f->daylight);
   g->pall_removed = true;
   sr_clock_set_seconds(&g->clock, 2 * 86400 + 12 * 3600);

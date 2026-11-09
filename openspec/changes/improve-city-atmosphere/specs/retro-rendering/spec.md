@@ -217,3 +217,13 @@ and SHALL add a vignette by default.
 #### Scenario: Grading follows the district
 - **WHEN** the camera walks from one district into another
 - **THEN** the grade blends from the first district's values to the second's over about 30 m with no sudden jump
+
+### Requirement: Street haze
+The fog SHALL start a few metres from the viewer and thicken quickly, so that in drizzle the far end of a block is
+mostly hidden while the pavement underfoot stays clear. The fog colour SHALL be lit by the city, never black, and
+neon and lit windows SHALL show through it longer than unlit walls. Above the roofs the haze SHALL thin out.
+
+#### Scenario: Haze in the street
+- **WHEN** a wall is 5 m, 25 m and 60 m away in drizzle, or 20 m away in fog weather
+- **THEN** it is less than a fifth hidden at 5 m, more than half at 25 m, almost fully at 60 m and more than three
+  quarters at 20 m in fog, while neon at the fog end stays at least two thirds visible

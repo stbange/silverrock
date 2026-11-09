@@ -1075,10 +1075,11 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   }
   f->band_dir_x = sky.band_dir_x;
   /* each weather has its own look: brown smog, sickly green acid rain, pale fog, dark downpours */
-  static const float wx_tint[SR_WX_COUNT][4] = {{0.12f, 0.10f, 0.13f, 0.45f}, /* dry, dusky overcast */
-                                                {0.06f, 0.09f, 0.17f, 0.55f}, {0.03f, 0.04f, 0.07f, 0.45f},
-                                                {0.17f, 0.18f, 0.20f, 0.45f}, {0.30f, 0.23f, 0.10f, 0.6f},
-                                                {0.10f, 0.25f, 0.09f, 0.6f}};
+  /* The haze glows: street light scattered in wet air, so the fog is lit, never black. */
+  static const float wx_tint[SR_WX_COUNT][4] = {{0.15f, 0.13f, 0.17f, 0.55f}, /* dry, dusky overcast */
+                                                {0.11f, 0.14f, 0.22f, 0.6f},  {0.07f, 0.09f, 0.13f, 0.55f},
+                                                {0.27f, 0.29f, 0.32f, 0.7f},  {0.34f, 0.26f, 0.13f, 0.65f},
+                                                {0.13f, 0.29f, 0.12f, 0.65f}};
   if (!sky.daylight) {
     const float *wt = wx_tint[w.to];
     for (int k = 0; k < 3; k++) f->fog[k] += (wt[k] - f->fog[k]) * wt[3] * w.blend;
@@ -1086,8 +1087,8 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   }
   /* ground mist: low-lying districts and foggy weather */
   SrDistrictType dtype = district >= 0 ? c->districts[district].type : SR_D_RESIDENTIAL;
-  f->mist = 0.06f + (dtype == SR_D_UNDERCITY || dtype == SR_D_DOCKS ? 0.3f : 0.0f) +
-            (w.to == SR_WX_FOG ? 0.3f : 0.0f) * w.blend;
+  f->mist = 0.14f + (dtype == SR_D_UNDERCITY || dtype == SR_D_DOCKS ? 0.3f : 0.0f) +
+            (w.to == SR_WX_FOG ? 0.35f : 0.0f) * w.blend;
   if (sky.daylight) f->mist = 0.0f;
   /* 35 % less ambient than M1: walls stay darker than the neon on them */
   f->ambient[0] = pal->ambient.r / 255.0f * sky.ambient * 0.65f;
@@ -1105,8 +1106,10 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
   f->time_s = (float)sr_time_of_day(t) + (float)(g->steps % 60) / 60.0f;
   f->hour = (float)sr_time_of_day(t) / 3600.0f;
   for (int u = 0; u < 4; u++) f->win_share[u] = sr_window_share(u, f->hour);
-  f->fog_end = SR_MIN(w.visibility, (float)(s->view_chunks + 1) * SR_CHUNK_BLOCKS * SR_BLOCK_CM / 100.0f);
-  f->fog_start = f->fog_end * 0.15f;
+  /* the haze lies in the streets: above the roofs (aerodynes, the aerial view) it thins out */
+  float vis = w.visibility + SR_MAX(0.0f, vc.eye.y - 20.0f) * 4.0f;
+  f->fog_end = SR_MIN(vis, (float)(s->view_chunks + 1) * SR_CHUNK_BLOCKS * SR_BLOCK_CM / 100.0f);
+  f->fog_start = f->fog_end * 0.03f; /* the haze starts a few steps away */
   f->wetness = w.wetness;
   f->dither = g->settings.dither;
   f->quantize = g->settings.quantize;
@@ -1404,6 +1407,7 @@ void sr_scene_build_body(SrSceneCache *s, const SrGame *g, float aspect, SrFrame
 float sr_fog_factor(float z, float start, float end, float emissive) {
   float f = (z - start) / (end - start);
   f = f < 0 ? 0 : f > 1 ? 1 : f;
+  f = fminf((1.0f - expf(-3.0f * f)) * 1.0524f, 1.0f); /* thick early, then slowly to full (as the shader) */
   return f * (1.0f - 0.85f * emissive);
 }
 

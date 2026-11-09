@@ -254,6 +254,7 @@ static const char *k_world_fs =
     "}\n"
     "void main() {\n"
     "  float f = clamp((v_fogz - u_fogr.x) / (u_fogr.y - u_fogr.x), 0.0, 1.0);\n"
+    "  f = min((1.0 - exp(-3.0 * f)) * 1.0524, 1.0);\n" /* thick early, then slowly to full: sr_fog_factor */
     "  vec3 fogc = fog_color();\n"
     "  f = clamp(f + u_mist * clamp((3.0 - v_wpos.y) / 3.0, 0.0, 1.0) * clamp(v_fogz / 25.0, 0.0, 1.0), 0.0, 1.0);\n"
     "  if (u_fogr.y < 1e5) f = max(f, smoothstep(190.0, 255.0, v_wpos.y) * 0.85);\n" /* towers fade into the clouds */
@@ -287,7 +288,7 @@ static const char *k_world_fs =
     "              : vec3(1.0, 0.45, 0.8);\n"
     "      c = vec4(lc * (0.5 + 0.3 * t.g), 1.0);\n" /* peaks at 0.8: windows never clip to white */
     "      em = 0.6;\n"
-    "      fog_em = 0.35;\n" /* windows sink into the fog sooner than neon */
+    "      fog_em = 0.2;\n" /* windows sink into the fog sooner than neon */
     "    } else {\n"
     "      c = vec4(vec3(0.03, 0.035, 0.05) + u_fog * 0.12 + v_color.rgb * 0.04, 1.0);\n"
     "      em = 0.0;\n"
