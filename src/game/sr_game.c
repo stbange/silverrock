@@ -93,6 +93,7 @@ SrResult sr_game_new(SrGame *g, uint64_t seed, const SrCityOptions *opt, SrBackg
   g->last_minute = sr_clock_seconds(&g->clock) / 60;
   g->steps = 0;
   g->combat_count = 0;
+  sr_guide_new_game(g);
   g->hostiles_near = 0;
   g->pall_removed = false;
   g->force_weather = -1;
@@ -311,6 +312,28 @@ static void move_player(SrGame *g, const SrActionState *a, float dt) {
   if (len > 0.1f && sprint) sr_progress_use_skill(&p->prog, SR_SK_ATHLETICS, SR_USE_HOSTILE, 0);
 }
 
+/* The city map: the stick pans, jump and crouch zoom, interact picks the place under the cursor,
+ * reload cycles the filter, the gadget button clears the route, map or pause closes. */
+static void map_input(SrGame *g, const SrActionState *a) {
+  float pan = g->map.span * 0.9f * (float)SR_STEP_DT;
+  g->map.cx += a->move_x * pan;
+  g->map.cz -= a->move_y * pan;
+  if (a->down[SR_ACT_JUMP]) sr_map_zoom(g, 0.98f);
+  if (a->down[SR_ACT_CROUCH]) sr_map_zoom(g, 1.0f / 0.98f);
+  if (a->pressed[SR_ACT_INTERACT]) sr_map_pick(g, g->map.aspect > 0 ? g->map.aspect : 16.0f / 9.0f, 0.5f, 0.5f);
+  if (a->pressed[SR_ACT_RELOAD]) g->map.filter = (g->map.filter + 1) % SR_MAPF_COUNT;
+  if (a->pressed[SR_ACT_GADGET]) sr_route_clear(g);
+  if (a->pressed[SR_ACT_MAP] || a->pressed[SR_ACT_PAUSE]) sr_map_close(g);
+}
+
+/* Help: up and down turn the pages, pause goes back. The settings toggles are keys (platform). */
+static void help_input(SrGame *g, const SrActionState *a) {
+  int dir = a->move_y > 0.5f ? -1 : a->move_y < -0.5f ? 1 : 0;
+  if (dir != 0 && dir != g->menu_axis) g->help_page = (g->help_page + dir + SR_HELP_PAGES) % SR_HELP_PAGES;
+  g->menu_axis = dir;
+  if (a->pressed[SR_ACT_PAUSE]) sr_help_close(g);
+}
+
 void sr_game_step(SrGame *g, const SrActionState *a) {
   if (!g->started) return;
   sr_game_encounter_menu(g); /* an encounter that began while time was skipped */
@@ -323,6 +346,14 @@ void sr_game_step(SrGame *g, const SrActionState *a) {
       if (a->pressed[SR_ACT_INTERACT]) sr_game_shop_buy(g, g->menu.sel);
       if (a->pressed[SR_ACT_PAUSE]) sr_game_shop_close(g);
     }
+    return;
+  }
+  if (g->screen == SR_SCREEN_MAP) {
+    if (a) map_input(g, a);
+    return;
+  }
+  if (g->screen == SR_SCREEN_HELP) {
+    if (a) help_input(g, a);
     return;
   }
   if (g->screen != SR_SCREEN_PLAY) {
@@ -364,9 +395,11 @@ void sr_game_step(SrGame *g, const SrActionState *a) {
         if (a->pressed[SR_ACT_QUICK1 + q] && sr_game_use_quick(g, q)) g->fx.throw_t = fx_now;
     }
     if (a->pressed[SR_ACT_TERMINAL]) g->screen = SR_SCREEN_TERMINAL;
+    if (a->pressed[SR_ACT_MAP] && !g->dive.active) sr_map_open(g);
   }
   sr_clock_step(&g->clock);
   process_minutes(g, false);
+  sr_guide_step(g);
   int64_t t = sr_game_time(g);
   g->cam.pos = g->player.pos;
   g->cam.forward = sr_dir_from_yaw_pitch(g->player.yaw, 0);

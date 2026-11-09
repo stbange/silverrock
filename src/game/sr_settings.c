@@ -19,6 +19,9 @@ void sr_settings_default(SrSettings *s) {
   s->reflections = true;
   s->pixel_lighting = true;
   s->head_bob = true;
+  s->guidance = true;
+  s->minimap = true;
+  s->nav_path = true;
   s->camera_shake = 2;
   s->brightness = 0;
   s->mouse_sensitivity = 0.0025f;
@@ -33,11 +36,11 @@ typedef enum { T_INT, T_BOOL, T_FLOAT, T_STR } FieldType;
 typedef struct {
   const char *key;
   FieldType type;
-  size_t offset;
+  size_t offset, size;
 } Field;
 
 #define F(name, type)                                                                                                  \
-  { #name, type, offsetof(SrSettings, name) }
+  { #name, type, offsetof(SrSettings, name), sizeof(((SrSettings *)0)->name) }
 static const Field k_fields[] = {F(internal_res, T_INT),
                                  F(integer_scale, T_BOOL),
                                  F(fullscreen, T_BOOL),
@@ -54,6 +57,10 @@ static const Field k_fields[] = {F(internal_res, T_INT),
                                  F(brightness, T_INT),
                                  F(head_bob, T_BOOL),
                                  F(camera_shake, T_INT),
+                                 F(guidance, T_BOOL),
+                                 F(minimap, T_BOOL),
+                                 F(nav_path, T_BOOL),
+                                 F(tips_seen, T_STR),
                                  F(mouse_sensitivity, T_FLOAT),
                                  F(touch_sensitivity, T_FLOAT),
                                  F(aim_assist, T_FLOAT),
@@ -102,7 +109,7 @@ int sr_settings_parse(SrSettings *s, const char *text) {
           applied++;
           break;
         default:
-          sr_strlcpy(dst, val, sizeof s->bindings);
+          sr_strlcpy(dst, val, k_fields[i].size);
           applied++;
           break;
       }

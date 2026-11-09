@@ -3,6 +3,7 @@
 #ifndef SR_GAME_H
 #define SR_GAME_H
 
+#include "game/sr_guide.h"
 #include "game/sr_settings.h"
 #include "game/sr_net.h"
 #include "game/sr_site.h"
@@ -76,7 +77,9 @@ typedef enum SrScreen {
   SR_SCREEN_TERMINAL,
   SR_SCREEN_DEAD,
   SR_SCREEN_CREATE,
-  SR_SCREEN_SHOP
+  SR_SCREEN_SHOP,
+  SR_SCREEN_MAP, /* the city map */
+  SR_SCREEN_HELP
 } SrScreen;
 
 #define SR_MENU_MAX 12
@@ -172,8 +175,12 @@ typedef struct SrGame {
   int glitches;           /* glitches so far */
   uint32_t cyber_offline; /* bitmask of installed implants down for the day (malfunction) */
   int64_t cyber_day;
-  float speed; /* measured player speed, m/s */
-  SrViewFx fx; /* first-person presentation (not saved) */
+  float speed;   /* measured player speed, m/s */
+  SrViewFx fx;   /* first-person presentation (not saved) */
+  SrRoute route; /* destination and route (not saved) */
+  SrGuide guide; /* tips (the ones seen live in the settings) */
+  SrMapView map; /* the city map's view */
+  int help_page, help_return;
   SrMenu menu;
   int menu_axis;
   /* the Matrix */

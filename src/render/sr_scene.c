@@ -922,8 +922,8 @@ void sr_scene_free(SrSceneCache *s) {
   sr_mesh_free(&s->host);
   SrMesh *sky2[] = {&s->beams, &s->blimps, &s->blimp_glow, &s->distant, &s->skyline_glow, &s->vertical, &s->trains};
   for (size_t i = 0; i < sizeof sky2 / sizeof sky2[0]; i++) sr_mesh_free(sky2[i]);
-  SrMesh *gloom[] = {&s->sky,         &s->deck, &s->deck_glow, &s->halos, &s->near_glow,
-                     &s->silhouettes, &s->sun,  &s->wet,       &s->fronts};
+  SrMesh *gloom[] = {&s->sky,         &s->deck, &s->deck_glow, &s->halos,  &s->near_glow,
+                     &s->silhouettes, &s->sun,  &s->wet,       &s->fronts, &s->route_beacon};
   for (size_t i = 0; i < sizeof gloom / sizeof gloom[0]; i++) sr_mesh_free(gloom[i]);
   for (int i = 0; i < 32; i++) sr_mesh_free(&s->street[i].mesh);
   for (int i = 0; i < 24; i++) sr_mesh_free(&s->blocks[i].mesh);
@@ -1227,6 +1227,11 @@ static void scene_build(SrSceneCache *s, const SrGame *g, float aspect, SrFrame 
     s->near_drawn += dx * dx + dz * dz <= SR_CROWD_NEAR_M * SR_CROWD_NEAR_M;
   }
   s->near_drawn = SR_MIN(s->near_drawn, cx.max_near);
+  sr_mesh_clear(&s->route_beacon);
+  s->route_drawn = g->settings.nav_path /* the route on the pavement and the beacon over the destination */
+                       ? sr_build_route_ar(&g->route, p->pos, sr_game_fx_now(g), &s->crowd_fx, &s->route_beacon)
+                       : 0;
+  add_draw(f, &s->route_beacon, SR_PASS_HALO, p->pos);
   add_draw(f, &s->crowd_fx, SR_PASS_GLOW, p->pos);
   add_draw(f, &s->characters, g->thermal ? SR_PASS_XRAY : SR_PASS_WORLD, p->pos);
   if (w.rain > 0.05f) { /* game time: same time, same drops */

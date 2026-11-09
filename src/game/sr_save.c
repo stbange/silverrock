@@ -777,6 +777,7 @@ SrResult sr_save_read(SrGame *g, const void *data, size_t len) {
       sr_game_teleport_building(g, g->player.home);
     }
   }
+  sr_guide_new_game(g);
   return SR_OK;
 }
 

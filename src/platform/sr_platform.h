@@ -21,6 +21,8 @@ typedef struct SrApp {
   bool gles;
   SrGlBackend gfx;
   SrGame *game;
+  bool map_drag; /* the finger on the map has moved: no tap when it lifts */
+  float map_touch_x, map_touch_y;
   SrInput input;
   SrLoop loop;
   SrSceneCache scene;
@@ -49,6 +51,12 @@ typedef struct SrApp {
 /* Initialises everything; headless skips window and GL. Returns false on fatal error. */
 bool sr_app_init(SrApp *a, int argc, char **argv);
 void sr_app_shop_tap(SrApp *a, float ny);
+/* The city map by pointer (nx, ny normalised 0..1): the buttons on touch, else go to the place there. */
+void sr_app_map_tap(SrApp *a, float nx, float ny, bool touch);
+/* Help by pointer: a topic, a setting on the last page, or the title to go back. */
+void sr_app_help_tap(SrApp *a, float nx, float ny);
+/* Help by key: G/N/P/R settings, up and down pages; true when the key was used. */
+bool sr_app_help_key(SrApp *a, SDL_Scancode sc);
 void sr_app_event(SrApp *a, const SDL_Event *e);
 /* One frame: input, fixed steps, render, present. */
 void sr_app_iterate(SrApp *a);

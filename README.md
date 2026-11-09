@@ -11,7 +11,8 @@ agenda.
 ![Night street in a generated city](docs/screenshots/street.png)
 
 **Status:** milestones M0–M5 implemented (2026-11-06), followed by a playability pass, a pass on the city's atmosphere
-(2026-11-07) and a pass on animation (2026-11-08); see the [playtest notes](docs/reviews/playtest-2026-11-07-after.md),
+(2026-11-07), a pass on animation (2026-11-08) and in-game help, guidance, navigation and a city map (2026-11-09,
+[screenshots](docs/screenshots/nav/)); see the [playtest notes](docs/reviews/playtest-2026-11-07-after.md),
 the [visual review](docs/reviews/visuals-2026-11-07-after.md) and the
 [animation review](docs/reviews/animation-2026-11-08-after.md). You wake up in your apartment, walk a generated city at night
 among citizens, traffic and aerodynes, eat, sleep, pay (or miss) rent, move to a better place, ride the metro, buy
@@ -40,7 +41,9 @@ cmake --preset linux-gcc-debug && cmake --build --preset linux-gcc-debug
 Controls: WASD move, mouse look, left click fire, J jack in/out, V Netsight, E interact (enter buildings, eat, sleep, shop, talk to fixers,
 do and report jobs, take down guards from behind, ride the metro), Q active cyberware, T terminal (left/right switch tabs: home, news, market, Board, story; E in the home
 terminal lists apartments), 1–4 quick slots (gadgets), Shift sprint, C crouch (crawl through vents, enter by the
-service door), Space jump, Esc pause, F11 fullscreen. Gamepads and touch work too.
+service door), Space jump, M city map (pick a place to get a route: chevrons on the pavement, a beacon over the
+destination, turn hints and a minimap), Esc pause, H in the pause menu or F1 help and guidance settings (tips, minimap
+and route can each be turned off), F11 fullscreen. Gamepads and touch work too.
 
 Web build (needs the Emscripten SDK):
 
@@ -54,7 +57,7 @@ Then serve `build/web/` with any static web server and open `silverrock.html`.
 
 | Suite | Command |
 |---|---|
-| Unit tests (122 tests) | `./build/linux-gcc-debug/sr_tests` |
+| Unit tests (204 tests) | `./build/linux-gcc-debug/sr_tests` |
 | Platform and GL tests (needs a display or Xvfb) | `xvfb-run -a ./build/linux-gcc-debug/sr_platform_tests` |
 | Headless game scenarios | `ctest --test-dir build/linux-gcc-debug -R game_` |
 | World sweep / balance report | `./build/linux-gcc-debug/sr_headless --sweep 2000` / `--balance 20` |
@@ -83,7 +86,7 @@ Then serve `build/web/` with any static web server and open `silverrock.html`.
 ## Specifications (OpenSpec)
 
 Each roadmap milestone is an OpenSpec change in [`openspec/changes/`](openspec/changes) with a proposal, design, tasks
-and spec deltas (22 capabilities, 206 requirements, 310 scenarios). Implemented changes get archived into
+and spec deltas (24 capabilities, 287 requirements, 496 scenarios). Implemented changes get archived into
 [`openspec/specs/`](openspec/specs).
 
 | Milestone | Change | Capabilities |
@@ -98,6 +101,7 @@ and spec deltas (22 capabilities, 206 requirements, 310 scenarios). Implemented 
 | City atmosphere | [`improve-city-atmosphere`](openspec/changes/improve-city-atmosphere) | retro-rendering, city-generation, world-environment, news-media, story-campaign |
 | Body variety | [`add-body-variety`](openspec/changes/add-body-variety) | population-simulation, retro-rendering, game-persistence, player-life |
 | Animation | [`improve-animation`](openspec/changes/improve-animation) | retro-rendering, population-simulation, combat, player-life |
+| Navigation and guidance | [`add-navigation-guidance`](openspec/changes/add-navigation-guidance) | navigation, guidance |
 
 Validate the specs:
 

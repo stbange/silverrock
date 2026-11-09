@@ -5,6 +5,7 @@
 #include "game/sr_save.h"
 #include "game/sr_script.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -354,6 +355,53 @@ void sr_app_shop_tap(SrApp *a, float ny) {
   sr_game_shop_buy(a->game, row);
 }
 
+void sr_app_map_tap(SrApp *a, float nx, float ny, bool touch) {
+  SrGame *g = a->game;
+  int b = touch ? sr_ui_map_button_at(&a->ui, nx * (float)a->ui.w, ny * (float)a->ui.h) : 0;
+  switch (b) {
+    case 1: sr_map_zoom(g, 0.6f); break;
+    case 2: sr_map_zoom(g, 1.0f / 0.6f); break;
+    case 3: g->map.filter = (g->map.filter + 1) % SR_MAPF_COUNT; break;
+    case 4: sr_route_clear(g); break;
+    case 5: sr_map_close(g); break;
+    default: sr_map_pick(g, g->map.aspect, nx, ny); break;
+  }
+}
+
+static void help_setting(SrApp *a, SrGuideSetting which) {
+  sr_guide_toggle(a->game, which);
+  sr_app_save_settings(a);
+}
+
+void sr_app_help_tap(SrApp *a, float nx, float ny) {
+  SrGame *g = a->game;
+  float y = ny * (float)a->ui.h;
+  if (ny < 0.15f) {
+    sr_help_close(g);
+    return;
+  }
+  if (nx < 0.3f) {
+    int r = sr_ui_help_row_at(&a->ui, y);
+    if (r >= 0) g->help_page = r;
+    return;
+  }
+  int set = sr_ui_help_setting_at(&a->ui, g, true, y);
+  if (set >= 0) help_setting(a, (SrGuideSetting)set);
+}
+
+bool sr_app_help_key(SrApp *a, SDL_Scancode sc) {
+  SrGame *g = a->game;
+  switch (sc) {
+    case SDL_SCANCODE_G: help_setting(a, SR_GUIDE_SET_GUIDANCE); return true;
+    case SDL_SCANCODE_N: help_setting(a, SR_GUIDE_SET_MINIMAP); return true;
+    case SDL_SCANCODE_P: help_setting(a, SR_GUIDE_SET_NAV_PATH); return true;
+    case SDL_SCANCODE_R: help_setting(a, SR_GUIDE_SET_RESET); return true;
+    case SDL_SCANCODE_UP: g->help_page = (g->help_page + SR_HELP_PAGES - 1) % SR_HELP_PAGES; return true;
+    case SDL_SCANCODE_DOWN: g->help_page = (g->help_page + 1) % SR_HELP_PAGES; return true;
+    default: return false;
+  }
+}
+
 void sr_app_event(SrApp *a, const SDL_Event *e) {
   SrGame *g = a->game;
   switch (e->type) {
@@ -373,6 +421,13 @@ void sr_app_event(SrApp *a, const SDL_Event *e) {
         if (sc == SDL_SCANCODE_RETURN) start_created(a);
         break;
       }
+      if (down && g->screen == SR_SCREEN_HELP && sr_app_help_key(a, e->key.scancode)) break;
+      if (down && !e->key.repeat &&
+          (e->key.scancode == SDL_SCANCODE_F1 || (e->key.scancode == SDL_SCANCODE_H && g->screen == SR_SCREEN_PAUSE)) &&
+          (g->screen == SR_SCREEN_PAUSE || g->screen == SR_SCREEN_PLAY)) {
+        sr_help_open(g);
+        break;
+      }
       if (down && e->key.scancode == SDL_SCANCODE_RETURN && g->screen == SR_SCREEN_TITLE) {
         sr_game_begin_create(g, (uint64_t)SDL_GetTicksNS() ^ 0x5EEDu);
         break;
@@ -384,6 +439,9 @@ void sr_app_event(SrApp *a, const SDL_Event *e) {
       sr_input_key(&a->input, sr_platform_key(e->key.scancode), down);
       break;
     }
+    case SDL_EVENT_MOUSE_WHEEL:
+      if (g->screen == SR_SCREEN_MAP) sr_map_zoom(g, e->wheel.y > 0 ? 0.85f : 1.0f / 0.85f);
+      break;
     case SDL_EVENT_MOUSE_MOTION:
       if (a->relative_mouse) sr_input_mouse_motion(&a->input, e->motion.xrel, e->motion.yrel);
       break;
@@ -400,7 +458,22 @@ void sr_app_event(SrApp *a, const SDL_Event *e) {
         create_tap(a, mx, my);
         break;
       }
-      if (down && g->screen == SR_SCREEN_PAUSE) sr_game_confirm_resume(g);
+      if (down && (g->screen == SR_SCREEN_MAP || g->screen == SR_SCREEN_HELP)) {
+        float mx = a->css_w > 0 ? e->button.x / a->css_w : 0.5f, my = a->css_h > 0 ? e->button.y / a->css_h : 0.5f;
+        if (g->screen == SR_SCREEN_HELP)
+          sr_app_help_tap(a, mx, my);
+        else if (e->button.button == SDL_BUTTON_RIGHT)
+          sr_route_clear(g);
+        else
+          sr_app_map_tap(a, mx, my, false);
+        break;
+      }
+      if (down && g->screen == SR_SCREEN_PAUSE) {
+        if (a->css_h > 0 && e->button.y / a->css_h > 0.7f)
+          sr_help_open(g);
+        else
+          sr_game_confirm_resume(g);
+      }
       if (down && g->screen == SR_SCREEN_SHOP) {
         sr_app_shop_tap(a, a->css_h > 0 ? e->button.y / a->css_h : 0.5f);
         break;
@@ -426,7 +499,29 @@ void sr_app_event(SrApp *a, const SDL_Event *e) {
         if (phase == 0) create_tap(a, e->tfinger.x, e->tfinger.y);
         break;
       }
-      if (phase == 0 && g->screen == SR_SCREEN_PAUSE) sr_game_confirm_resume(g);
+      if (g->screen == SR_SCREEN_MAP || g->screen == SR_SCREEN_HELP) {
+        if (phase == 0 && g->screen == SR_SCREEN_HELP) sr_app_help_tap(a, e->tfinger.x, e->tfinger.y);
+        if (phase == 0 && g->screen == SR_SCREEN_MAP) {
+          a->map_drag = false;
+          a->map_touch_x = e->tfinger.x;
+          a->map_touch_y = e->tfinger.y;
+        }
+        if (phase == 1 && g->screen == SR_SCREEN_MAP) { /* a drag pans the map */
+          float aspect = g->map.aspect > 0 ? g->map.aspect : 16.0f / 9.0f;
+          g->map.cx -= e->tfinger.dx * g->map.span * aspect;
+          g->map.cz -= e->tfinger.dy * g->map.span;
+          if (fabsf(e->tfinger.x - a->map_touch_x) + fabsf(e->tfinger.y - a->map_touch_y) > 0.03f) a->map_drag = true;
+        }
+        if (phase == 2 && g->screen == SR_SCREEN_MAP && !a->map_drag)
+          sr_app_map_tap(a, e->tfinger.x, e->tfinger.y, true);
+        break;
+      }
+      if (phase == 0 && g->screen == SR_SCREEN_PAUSE) {
+        if (e->tfinger.y > 0.7f)
+          sr_help_open(g);
+        else
+          sr_game_confirm_resume(g);
+      }
       if (g->screen == SR_SCREEN_SHOP) {
         if (phase == 0) sr_app_shop_tap(a, e->tfinger.y);
         break;
@@ -473,6 +568,25 @@ void sr_app_event(SrApp *a, const SDL_Event *e) {
         else
           sr_game_create_select(g, (g->create_bg + 1) % SR_BG_COUNT);
         break;
+      }
+      if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && g->screen == SR_SCREEN_PAUSE &&
+          e->gbutton.button == SDL_GAMEPAD_BUTTON_NORTH) {
+        sr_help_open(g);
+        break;
+      }
+      if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && g->screen == SR_SCREEN_HELP) {
+        bool used = true;
+        switch (e->gbutton.button) {
+          case SDL_GAMEPAD_BUTTON_NORTH: help_setting(a, SR_GUIDE_SET_GUIDANCE); break;
+          case SDL_GAMEPAD_BUTTON_WEST: help_setting(a, SR_GUIDE_SET_MINIMAP); break;
+          case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: help_setting(a, SR_GUIDE_SET_NAV_PATH); break;
+          case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: help_setting(a, SR_GUIDE_SET_RESET); break;
+          case SDL_GAMEPAD_BUTTON_DPAD_UP: sr_app_help_key(a, SDL_SCANCODE_UP); break;
+          case SDL_GAMEPAD_BUTTON_DPAD_DOWN: sr_app_help_key(a, SDL_SCANCODE_DOWN); break;
+          case SDL_GAMEPAD_BUTTON_EAST: sr_help_close(g); break;
+          default: used = false; break;
+        }
+        if (used) break;
       }
       sr_input_gamepad_button(&a->input, sr_platform_pad_button(e->gbutton.button),
                               e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN);
@@ -557,6 +671,7 @@ void sr_app_iterate(SrApp *a) {
   }
   a->ui.px_per_css = a->css_w > 0 ? (float)a->win_w / a->css_w : 1.0f;
   sr_ui_begin(&a->ui, a->win_w, a->win_h, ui_scale(a));
+  if (a->win_h > 0) g->map.aspect = (float)a->win_w / (float)a->win_h;
   sr_ui_build(&a->ui, g, &a->input, a->portrait);
   sr_glb_render(&a->gfx, f, &a->ui, a->win_w, a->win_h, g->settings.integer_scale);
   SDL_GL_SwapWindow(a->window);

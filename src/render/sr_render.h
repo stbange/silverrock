@@ -229,6 +229,10 @@ void sr_build_vehicles(const SrCrowd *cr, const SrCrowdCtx *x, SrVec3 cam, float
 float sr_wheel_angle(const SrVehicle *v);
 /* Headlight beams of cars within 60 m (at most `max`) and spray behind fast wheels; returns beams. */
 int sr_build_headlights(const SrCrowd *cr, SrVec3 eye, float wet, uint64_t steps, int max, SrMesh *fx);
+/* The route in the world (sr_nav_mesh.c): chevrons on the walking line along the next 60 m (into
+ * chevrons, may be NULL) and a shaft of light over the destination (into beacon, may be NULL).
+ * Returns the pieces drawn. */
+int sr_build_route_ar(const SrRoute *r, SrVec3 eye, double t, SrMesh *chevrons, SrMesh *beacon);
 void sr_build_character(const SrAppearance *a, SrVec3 pos, SrVec3 dir, bool umbrella, SrMesh *out);
 /* Character facing `dir`; walk >= 0 is the distance walked and drives the walk cycle. */
 void sr_build_character_walk(const SrAppearance *a, SrVec3 pos, SrVec3 dir, float walk, bool umbrella, SrMesh *out);
@@ -415,13 +419,14 @@ typedef struct SrSceneCache {
   int view_chunks; /* radius in chunks */
   /* the gloom (sr_sky_mesh.c) */
   SrMesh sky, deck, deck_glow, halos, near_glow, silhouettes, sun;
+  SrMesh route_beacon; /* the destination's shaft of light (halo pass: seen through the fog) */
   SrMesh beams, blimps, blimp_glow, distant, skyline_glow;
-  SrMesh vertical, trains;     /* skyways and metro tracks (built once), trains (every frame) */
-  SrMesh pools;                /* light pools and wall splashes (every frame) */
-  SrMesh crowd_fx;             /* footfall splashes, headlight beams, car spray, muzzle flashes (glow pass) */
-  SrAnimCache anim;            /* poses of citizens and guards (presentation only) */
-  int near_drawn, beams_drawn; /* diagnostics for the budget test */
-  SrMesh view_model;           /* the player's hands and weapon */
+  SrMesh vertical, trains; /* skyways and metro tracks (built once), trains (every frame) */
+  SrMesh pools;            /* light pools and wall splashes (every frame) */
+  SrMesh crowd_fx;         /* footfall splashes, headlight beams, car spray, muzzle flashes (glow pass) */
+  SrAnimCache anim;        /* poses of citizens and guards (presentation only) */
+  int near_drawn, beams_drawn, route_drawn; /* diagnostics for the budget test */
+  SrMesh view_model;                        /* the player's hands and weapon */
   float door_angle[SR_INT_MAX_ROOMS * 2];
   int32_t door_building; /* the site the door angles belong to */
   float sway_x, sway_y;  /* the weapon's lag behind the look */

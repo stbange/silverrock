@@ -875,6 +875,22 @@ Diegetic where possible: the terminal, the phone, the AR overlay. Bitmap fonts, 
 colours for corp interfaces. The HUD is minimal: health, visibility meter, ammo, quick slots, compass with
 landmarks, job objective.
 
+**Navigation and guidance** (the AR overlay of a city that sells everything, including directions):
+
+- **City map (M):** districts, buildings, the metro and places by filter (food, services, work, travel). Pick a place
+  to set it as the destination. Time stops while it is open.
+- **The route:**
+  - Glowing chevrons on the pavement for the next 60 m.
+  - A shaft of light over the destination, seen above the roofs.
+  - A diamond on the compass with the distance and the next turn.
+  - A heading-up minimap.
+  - With no destination set, the route follows the active job.
+- **Guidance:** one-time tips when something new happens (hunger, rent, Heat, the Matrix, ...) and the current goal
+  under the compass.
+- **Help:** pages on every system, from the pause screen or F1.
+- **Settings:** tips and goal, the minimap and the route in the world can each be turned off on the help's settings
+  page.
+
 ## 17. Audio
 
 - Dark synth and synthwave soundtrack with dynamic layers: explore, tension, combat, Matrix.

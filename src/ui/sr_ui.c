@@ -215,6 +215,7 @@ static void hud(SrUi *ui, const SrGame *g, const SrInput *in) {
                sr_corp_color(g->city->factions.f[f].hue));
   }
   sr_ui_rect(ui, cx - 1, m, 2, 9.0f * (float)s, k_white);
+  sr_ui_nav_compass(ui, g, cx, cw, m, s);
   /* the district's billboards rotate the latest headlines */
   const char *head = !g->site.active && d >= 0 ? sr_news_billboard(&g->chess.news, d, t) : NULL;
   if (head) {
@@ -283,8 +284,8 @@ static void hud(SrUi *ui, const SrGame *g, const SrInput *in) {
     }
     centered_text(ui, (float)ui->h * 0.4f, "NEURAL GLITCH", k_red, s);
   }
-  /* active job objective */
-  if (g->active_job >= 0) {
+  /* with guidance off the active job still shows, plainly, above the minimap */
+  if (g->active_job >= 0 && !g->settings.guidance) {
     const SrJob *j = NULL;
     for (int i = 0; i < g->jobs.count; i++)
       if (g->jobs.jobs[i].id == g->active_job) j = &g->jobs.jobs[i];
@@ -293,9 +294,12 @@ static void hud(SrUi *ui, const SrGame *g, const SrInput *in) {
       float dist = sqrtf(powf((float)(tb->x0 + tb->x1) / 200.0f - p->pos.x, 2) +
                          powf((float)(tb->y0 + tb->y1) / 200.0f - p->pos.z, 2));
       snprintf(buf, sizeof buf, "%s: %s %.0fm", j->executed ? "REPORT" : "JOB", j->title, (double)dist);
-      text_fit(ui, m, (float)ui->h - m - 7.0f * (float)s, buf, k_white, s, rx - m);
+      float jy = (float)ui->h - m - 7.0f * (float)s;
+      if (g->settings.minimap && !touch && !g->site.active) jy -= (float)ui->h * 0.24f + m;
+      text_fit(ui, m, jy, buf, k_white, s, rx - m);
     }
   }
+  sr_ui_nav_overlay(ui, g, in);
   if (g->toast_time > 0) { /* centred in the free area, shrunk to fit */
     float area = rx - m, mid = (m + rx) / 2;
     int ts = fit_scale(g->toast, s, area - 8);
@@ -905,10 +909,15 @@ void sr_ui_build(SrUi *ui, const SrGame *g, const SrInput *in, bool portrait) {
       centered(ui, (float)ui->h * 0.4f, "PAUSED", k_cyan, s * 2);
       centered(ui, (float)ui->h * 0.4f + 22.0f * (float)s,
                in && in->scheme == SR_SCHEME_TOUCH ? "TAP TO RESUME" : "PRESS ESC TO RESUME", k_white, s);
+      centered(ui, (float)ui->h * 0.75f,
+               in && in->scheme == SR_SCHEME_TOUCH ? "TAP HERE FOR HELP AND GUIDANCE" : "H  HELP AND GUIDANCE", k_amber,
+               s);
       break;
     case SR_SCREEN_TERMINAL: terminal(ui, g); break;
     case SR_SCREEN_SHOP: shop_screen(ui, g, in); break;
     case SR_SCREEN_CREATE: create_screen(ui, g, in); break;
+    case SR_SCREEN_MAP: sr_ui_map_screen(ui, g, in); break;
+    case SR_SCREEN_HELP: sr_ui_help_screen(ui, g, in); break;
     case SR_SCREEN_DEAD:
       sr_ui_rect(ui, 0, 0, (float)ui->w, (float)ui->h, (SrColor){30, 0, 0, 240});
       centered(ui, (float)ui->h * 0.4f, "FLATLINED", k_red, s * 2);

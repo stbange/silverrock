@@ -17,6 +17,10 @@ typedef struct SrSettings {
   int brightness;      /* -2..2: lifts the dark tones for dark screens and bright rooms */
   bool head_bob;       /* the view rises and falls with each step */
   int camera_shake;    /* 0 off, 1 low, 2 full: explosions and heavy landings */
+  bool guidance;       /* tips and the current goal */
+  bool minimap;        /* the minimap in the HUD */
+  bool nav_path;       /* the route drawn on the pavement */
+  char tips_seen[20];  /* tips already shown (hex bits of SrTip) */
   float mouse_sensitivity;
   float touch_sensitivity;
   float aim_assist; /* 0..1 */

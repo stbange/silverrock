@@ -558,6 +558,207 @@ static void test_render_matrix(void) {
   free(host);
 }
 
+/* The city map, help and the navigation HUD in the real window: taps, keys and screenshots
+ * (SR_NAV_SHOTS=dir writes nav_hud, nav_map, nav_map_far, nav_help, nav_help_settings, nav_touch_*). */
+static void nav_shot(const char *name, int frames) {
+  if (g_shot_dir) {
+    window_shot(name, frames);
+  } else {
+    for (int i = 0; i < frames; i++) sr_app_iterate(&g_app);
+  }
+}
+
+static void key_event(SDL_Scancode sc) {
+  SDL_Event e;
+  memset(&e, 0, sizeof e);
+  e.type = SDL_EVENT_KEY_DOWN;
+  e.key.scancode = sc;
+  sr_app_event(&g_app, &e);
+  e.type = SDL_EVENT_KEY_UP;
+  sr_app_event(&g_app, &e);
+}
+
+static void finger(int type, float x, float y, float dx, float dy) {
+  SDL_Event e;
+  memset(&e, 0, sizeof e);
+  e.type = (SDL_EventType)type;
+  e.tfinger.fingerID = 7;
+  e.tfinger.x = x;
+  e.tfinger.y = y;
+  e.tfinger.dx = dx;
+  e.tfinger.dy = dy;
+  sr_app_event(&g_app, &e);
+}
+
+static void test_navigation_screens(void) {
+  g_shot_dir = getenv("SR_NAV_SHOTS");
+  sr_app_start_game(&g_app, 0x5EEDC0DEull);
+  SrGame *g = g_app.game;
+  g->settings.dynamic_res = false;
+  g_app.fixed_frame_dt = 1.0 / 60.0;
+  sr_game_leave(g);
+  g->crowd_enabled = true;
+  sr_clock_set_seconds(&g->clock, (sr_game_time(g) / 86400 + 1) * 86400 + 22 * 3600);
+  g->last_minute = sr_game_time(g) / 60;
+  /* a destination a few blocks away: the compass marker, the turn, the minimap and the pavement */
+  SR_SPEC("navigation", "Route to a chosen place");
+  const SrCity *c = g->city;
+  int dest = -1;
+  float best = 1e9f;
+  for (int b = 0; b < c->building_count; b++) {
+    if (c->buildings[b].poi != SR_POI_FOOD) continue;
+    int32_t bx, bz;
+    sr_building_center(&c->buildings[b], &bx, &bz);
+    float d = fabsf(
+        sqrtf(powf((float)bx / 100.0f - g->player.pos.x, 2) + powf((float)bz / 100.0f - g->player.pos.z, 2)) - 220.0f);
+    if (d < best) best = d, dest = b;
+  }
+  SR_CHECK(dest >= 0);
+  sr_route_set_building(g, dest);
+  SR_CHECK(g->route.n >= 2);
+  /* stand on the walking line where the route starts, facing along it */
+  g->player.pos.x = g->route.pts[1].x;
+  g->player.pos.z = g->route.pts[1].z;
+  sr_route_plan(g);
+  SrVec3 nxt = g->route.pts[g->route.n - 1];
+  for (int i = g->route.n - 1; i >= 1; i--)
+    if (sr_v3_len(sr_v3_sub(g->route.pts[i], g->player.pos)) > 15.0f) nxt = g->route.pts[i];
+  g->player.yaw = atan2f(-(nxt.x - g->player.pos.x), -(nxt.z - g->player.pos.z));
+  g->player.pitch = -0.12f;
+  g->guide.tip = -1;
+  sr_guide_tip(g, SR_TIP_MAP);
+  nav_shot("nav_hud", 90);
+  SR_CHECK(g->route.kind == SR_DEST_BUILDING);
+  printf("  route pieces drawn: %d, route %d points, %.0f m, player %.1f %.1f, p1 %.1f %.1f\n", g_app.scene.route_drawn,
+         g->route.n, (double)g->route.length, (double)g->player.pos.x, (double)g->player.pos.z,
+         (double)g->route.pts[1].x, (double)g->route.pts[1].z);
+  SR_CHECK(g_app.scene.route_drawn > 10);
+  /* a point down the street: its beacon stands in the street */
+  sr_route_set_point(g, g->player.pos.x - sinf(g->player.yaw) * 90.0f, g->player.pos.z - cosf(g->player.yaw) * 90.0f);
+  g->player.pitch = 0.2f;
+  nav_shot("nav_beacon", 2);
+  SR_CHECK(g_app.scene.route_beacon.nv > 0);
+  g->player.pitch = -0.12f;
+  sr_route_set_building(g, dest);
+
+  /* the map: M opens it, the clock stops */
+  SR_SPEC("navigation", "City map");
+  int64_t t0 = sr_game_time(g);
+  g->map.span = 0;
+  sr_input_key(&g_app.input, SR_KEY_M, true);
+  sr_app_iterate(&g_app);
+  sr_input_key(&g_app.input, SR_KEY_M, false);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_MAP);
+  nav_shot("nav_map", 4);
+  SR_CHECK_EQ(sr_game_time(g), t0);
+  /* the mouse wheel zooms out, a click sets a destination there */
+  SDL_Event e;
+  memset(&e, 0, sizeof e);
+  e.type = SDL_EVENT_MOUSE_WHEEL;
+  e.wheel.y = -1;
+  float span = g->map.span;
+  sr_app_event(&g_app, &e);
+  SR_CHECK(g->map.span > span);
+  for (int i = 0; i < 12; i++) sr_app_event(&g_app, &e);
+  nav_shot("nav_map_far", 2);
+  memset(&e, 0, sizeof e);
+  e.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+  e.button.button = SDL_BUTTON_LEFT;
+  e.button.x = g_app.css_w * 0.3f;
+  e.button.y = g_app.css_h * 0.4f;
+  sr_app_event(&g_app, &e);
+  SR_CHECK(g->route.kind != SR_DEST_NONE);
+  SR_CHECK(g->route.building != dest || g->route.kind != SR_DEST_BUILDING);
+  e.button.button = SDL_BUTTON_RIGHT; /* right click clears */
+  sr_app_event(&g_app, &e);
+  SR_CHECK_EQ(g->route.kind, SR_DEST_NONE);
+  /* touch: a drag pans without picking, the buttons zoom, filter and close */
+  float cx = g->map.cx;
+  finger(SDL_EVENT_FINGER_DOWN, 0.5f, 0.5f, 0, 0);
+  finger(SDL_EVENT_FINGER_MOTION, 0.6f, 0.5f, 0.1f, 0);
+  finger(SDL_EVENT_FINGER_UP, 0.6f, 0.5f, 0, 0);
+  SR_CHECK(g->map.cx < cx);
+  SR_CHECK_EQ(g->route.kind, SR_DEST_NONE);
+  finger(SDL_EVENT_FINGER_DOWN, 0.45f, 0.45f, 0, 0);
+  finger(SDL_EVENT_FINGER_UP, 0.45f, 0.45f, 0, 0);
+  SR_CHECK(g->route.kind != SR_DEST_NONE);
+  span = g->map.span;
+  float bh = (float)g_app.ui.h * 0.09f, by = 1.0f - (bh / 2 + 3) / (float)g_app.ui.h;
+  sr_app_map_tap(&g_app, 0.1f, by, true); /* zoom in */
+  SR_CHECK(g->map.span < span);
+  sr_app_map_tap(&g_app, 0.3f, by, true); /* zoom out */
+  SR_CHECK(fabsf(g->map.span - span) < 1.0f);
+  sr_app_map_tap(&g_app, 0.5f, by, true); /* filter */
+  SR_CHECK_EQ(g->map.filter, 1);
+  g_app.input.scheme = SR_SCHEME_TOUCH;
+  nav_shot("nav_touch_map", 2);
+  sr_app_map_tap(&g_app, 0.7f, by, true); /* clear */
+  SR_CHECK_EQ(g->route.kind, SR_DEST_NONE);
+  sr_app_map_tap(&g_app, 0.9f, by, true); /* close */
+  SR_CHECK_EQ(g->screen, SR_SCREEN_PLAY);
+  g_app.input.scheme = SR_SCHEME_KBM;
+  /* help from the pause screen: H, the settings by key, ESC back to the pause screen */
+  SR_SPEC("guidance", "Help can be opened at any time");
+  g->screen = SR_SCREEN_PAUSE;
+  key_event(SDL_SCANCODE_H);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_HELP);
+  nav_shot("nav_help", 2);
+  for (int i = 0; i < SR_HELP_PAGES - 1; i++) key_event(SDL_SCANCODE_DOWN);
+  SR_CHECK_EQ(g->help_page, SR_HELP_PAGES - 1);
+  SR_SPEC("guidance", "Guidance can be turned off");
+  key_event(SDL_SCANCODE_G);
+  key_event(SDL_SCANCODE_N);
+  key_event(SDL_SCANCODE_P);
+  SR_CHECK(!g->settings.guidance && !g->settings.minimap && !g->settings.nav_path);
+  nav_shot("nav_help_settings", 2);
+  /* a tap on a setting flips it back; a tap on a topic turns the page; the title goes back */
+  float sy = 0;
+  for (float y = 0.15f; y < 1.0f && sy == 0; y += 0.005f)
+    if (sr_ui_help_setting_at(&g_app.ui, g, true, y * (float)g_app.ui.h) == 0) sy = y;
+  SR_CHECK(sy > 0);
+  sr_app_help_tap(&g_app, 0.6f, sy);
+  SR_CHECK(g->settings.guidance);
+  key_event(SDL_SCANCODE_N);
+  key_event(SDL_SCANCODE_P);
+  sr_app_help_tap(&g_app, 0.1f, 0.18f + 0.08f * 2 + 0.01f);
+  SR_CHECK_EQ(g->help_page, 2);
+  sr_app_help_tap(&g_app, 0.5f, 0.05f);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_PAUSE);
+  /* touch on the pause screen: the bottom opens help, the gamepad's top button too */
+  finger(SDL_EVENT_FINGER_DOWN, 0.5f, 0.8f, 0, 0);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_HELP);
+  memset(&e, 0, sizeof e);
+  e.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+  e.gbutton.button = SDL_GAMEPAD_BUTTON_EAST;
+  sr_app_event(&g_app, &e);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_PAUSE);
+  e.gbutton.button = SDL_GAMEPAD_BUTTON_NORTH;
+  sr_app_event(&g_app, &e);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_HELP);
+  e.gbutton.button = SDL_GAMEPAD_BUTTON_WEST;
+  sr_app_event(&g_app, &e);
+  SR_CHECK(!g->settings.minimap);
+  e.gbutton.button = SDL_GAMEPAD_BUTTON_WEST;
+  sr_app_event(&g_app, &e);
+  e.gbutton.button = SDL_GAMEPAD_BUTTON_EAST;
+  sr_app_event(&g_app, &e);
+  sr_game_confirm_resume(g);
+  /* F1 opens help in play, and help returns to play */
+  key_event(SDL_SCANCODE_F1);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_HELP);
+  sr_input_key(&g_app.input, SR_KEY_ESCAPE, true);
+  sr_app_iterate(&g_app);
+  sr_input_key(&g_app.input, SR_KEY_ESCAPE, false);
+  sr_app_iterate(&g_app);
+  SR_CHECK_EQ(g->screen, SR_SCREEN_PLAY);
+  /* the touch HUD with a route */
+  sr_route_set_building(g, dest);
+  g_app.input.scheme = SR_SCHEME_TOUCH;
+  nav_shot("nav_touch_hud", 30);
+  g_app.input.scheme = SR_SCHEME_KBM;
+  sr_app_save_settings(&g_app);
+}
+
 static void test_shop_taps(void) {
   sr_app_start_game(&g_app, 0x5EEDC0DEull);
   SrGame *g = g_app.game;
@@ -1765,6 +1966,7 @@ void suite_platform(void) {
   SR_RUN(test_retro_toggles);
   SR_RUN(test_render_interiors);
   SR_RUN(test_shop_taps);
+  SR_RUN(test_navigation_screens);
   SR_RUN(test_bloom);
   SR_RUN(test_render_matrix);
   SR_RUN(test_peak_crowd_render);
