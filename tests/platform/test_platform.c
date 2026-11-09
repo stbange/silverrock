@@ -1209,7 +1209,10 @@ static void test_logging_and_storage(void) {
   FILE *f = fopen(g_app.log_path, "r");
   SR_CHECK(f != NULL);
   if (f) {
-    char buf[4096];
+    char buf[4096]; /* the newest lines: the end of the file */
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, size > (long)sizeof buf - 1 ? size - (long)sizeof buf + 1 : 0, SEEK_SET);
     size_t n = fread(buf, 1, sizeof buf - 1, f);
     buf[n] = '\0';
     fclose(f);
