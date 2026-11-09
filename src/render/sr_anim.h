@@ -243,6 +243,8 @@ const SrAnimSlot *sr_anim_cache_find(const SrAnimCache *c, uint64_t key);
 SrExpression sr_anim_expression(const SrAnimInput *in, double now);
 /* Face style of an appearance: 0 plain, 1 stubble, 2 scar, 3 tattoo. */
 int sr_anim_face_style(const SrAppearance *a);
+/* The face atlas cell for an expression: the style, on the feminine set for women. */
+int sr_anim_face_cell(const SrAppearance *a, int expr);
 
 /* Hand prop carried by an appearance (briefcase, bag, box, cigarette, phone or none). */
 int sr_anim_accessory(const SrAppearance *a);

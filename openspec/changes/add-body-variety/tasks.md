@@ -11,3 +11,4 @@
 - [x] 1.7 Gait and stance by body: sway, arms out, wider stance, stride
 - [x] 1.8 Character creation: build, frame, height and chrome; the figure on the creation screen (spec: "Choose the body")
 - [x] 1.9 Distant crowd takes height and width; lineup strips; tests; budget 380 triangles; docs
+- [x] 1.10 Feminine faces: a second face set of 4 styles x 8 expressions on two more atlas layers (spec: "Women have feminine faces")

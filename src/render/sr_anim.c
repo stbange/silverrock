@@ -1134,6 +1134,10 @@ void sr_anim_pose(const SrAnimInput *in, const SrSkel *s, double now, float gait
 
 int sr_anim_face_style(const SrAppearance *a) { return a->face % 4; }
 
+int sr_anim_face_cell(const SrAppearance *a, int expr) {
+  return ((sr_look_female(a) ? 4 : 0) + sr_anim_face_style(a)) * SR_EXPR_COUNT + expr % SR_EXPR_COUNT;
+}
+
 static bool once_active(const SrAnimInput *in, int clip, double now) {
   if (in->once != clip || in->once_t0 < 0) return false;
   double ph = (now - in->once_t0) / sr_anim_clip_len(clip);
@@ -1373,7 +1377,7 @@ void sr_anim_mesh(SrMesh *m, const SrAnimInput *in, const SrSkel *s, const SrPos
   box(m, &b.head, sr_v3(-hw, 0, -hd), sr_v3(hw, hh, hd), sk, SR_LAYER_WHITE, 0);
   {
     int e = in->expr == SR_EXPR_AUTO ? (int)sr_anim_expression(in, in->face_t) : in->expr % SR_EXPR_COUNT;
-    SrAtlasCell fc = sr_atlas_cell(SR_LAYER_FACES, sr_anim_face_style(a) * SR_EXPR_COUNT + e);
+    SrAtlasCell fc = sr_atlas_cell(SR_LAYER_FACES, sr_anim_face_cell(a, e));
     float fz = hd + 0.002f;
     sr_mesh_quad(m, xf_pt(&b.head, sr_v3(-hw, 0, fz)), xf_pt(&b.head, sr_v3(hw, 0, fz)),
                  xf_pt(&b.head, sr_v3(hw, hh, fz)), xf_pt(&b.head, sr_v3(-hw, hh, fz)), fc.u0, fc.v1, fc.u1, fc.v0, sk,

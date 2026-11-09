@@ -638,17 +638,22 @@ static void noise_layer(uint8_t *rgba) {
     }
 }
 
-/* A face on white, multiplied by the skin colour: deep-set eyes, level brows, a nose shadow and a
- * thin mouth. Expressions move only brows, lids and mouth, and stay small: serious, never cartoonish.
- * Styles: 0 plain, 1 stubble, 2 a scar across the eye, 3 a line tattoo under the eye. */
-static void face_cell(uint8_t *rgba, int ox, int oy, int style, int expr) {
+/* A face on white, multiplied by the skin colour: deep-set eyes, brows, a nose shadow and a mouth.
+ * Expressions move only brows, lids and mouth, and stay small: serious, never cartoonish.
+ * Styles: 0 plain, 1 stubble (feminine: made up), 2 a scar across the eye, 3 a line tattoo under the eye.
+ * Feminine faces: thinner arched brows, larger eyes lined with a flick at the outer corner, a smaller
+ * nose, fuller tinted lips and a jaw that narrows to the chin. */
+static void face_cell(uint8_t *rgba, int ox, int oy, int style, int expr, bool fem) {
   uint8_t g[32][32];
+  bool lip[32][32];
+  memset(lip, 0, sizeof lip);
   for (int y = 0; y < 32; y++)
     for (int x = 0; x < 32; x++) {
       int v = 255;
       if (x < 2 || x > 29) v = 214;    /* the sides turn away from the light */
       if (y >= 29) v = SR_MIN(v, 218); /* under the jaw */
       if (y < 3) v = SR_MIN(v, 236);
+      if (fem && y >= 25 && (x < 2 + (y - 24) || x > 29 - (y - 24))) v = SR_MIN(v, 214); /* a narrower chin */
       g[y][x] = (uint8_t)v;
     }
 #define SET(xx, yy, vv)                                                                                                \
@@ -656,60 +661,95 @@ static void face_cell(uint8_t *rgba, int ox, int oy, int style, int expr) {
     if ((xx) >= 0 && (xx) < 32 && (yy) >= 0 && (yy) < 32) g[yy][xx] = (uint8_t)(vv);                                   \
   } while (0)
   enum { NEUTRAL, STERN, FEAR, PAIN, TALK, SURPRISE, CLOSED, CONTENT };
+  bool madeup = fem && style == 1;
   /* a soft shadow under the brow ridge and beside the nose; cheekbones */
   for (int x = 6; x <= 25; x++) {
     if (x >= 14 && x <= 17) continue;
-    SET(x, 11, 226);
-    SET(x, 12, 234);
+    SET(x, 11, fem ? 236 : 226);
+    if (!fem) SET(x, 12, 234);
   }
-  for (int x = 5; x <= 9; x++) SET(x, 17, 232);
-  for (int x = 22; x <= 26; x++) SET(x, 17, 232);
-  for (int y = 13; y <= 19; y++) {
-    SET(15, y, 224);
-    SET(16, y, 236);
+  for (int x = 5; x <= 9; x++) SET(x, 17, fem ? 238 : 232);
+  for (int x = 22; x <= 26; x++) SET(x, 17, fem ? 238 : 232);
+  if (fem) { /* a short, narrow nose */
+    for (int y = 15; y <= 19; y++) SET(15, y, 236);
+    SET(14, 20, 190);
+    SET(17, 20, 190);
+    SET(15, 20, 226);
+    SET(16, 20, 226);
+  } else {
+    for (int y = 13; y <= 19; y++) {
+      SET(15, y, 224);
+      SET(16, y, 236);
+    }
+    SET(13, 20, 160); /* nostrils */
+    SET(14, 20, 172);
+    SET(17, 20, 172);
+    SET(18, 20, 160);
+    for (int x = 14; x <= 17; x++) SET(x, 21, 220);
   }
-  SET(13, 20, 160); /* nostrils */
-  SET(14, 20, 172);
-  SET(17, 20, 172);
-  SET(18, 20, 160);
-  for (int x = 14; x <= 17; x++) SET(x, 21, 220);
-  SET(15, 22, 226); /* philtrum */
-  SET(16, 22, 230);
-  /* brows: low, straight and heavy; the inner end dips for anger and pain, lifts for fear */
+  SET(15, 22, fem ? 236 : 226); /* philtrum */
+  SET(16, 22, fem ? 238 : 230);
+  /* brows: the inner end dips for anger and pain, lifts for fear */
   int inner = expr == STERN || expr == PAIN ? 1 : expr == FEAR || expr == SURPRISE ? -1 : 0;
   int by = expr == SURPRISE ? 9 : 10;
-  for (int k = 0; k <= 5; k++) {
-    int dy = k >= 4 ? inner : 0;
-    SET(7 + k, by + dy, 58);
-    SET(24 - k, by + dy, 58);
-    if (k >= 1 && k <= 4) {
-      SET(7 + k, by + dy - 1, 96);
-      SET(24 - k, by + dy - 1, 96);
+  if (fem) { /* thin and arched, higher above the eye, the peak a third of the way in */
+    static const int arch[6] = {9, 8, 7, 7, 8, 8}; /* rows from the outer end to the inner end */
+    for (int k = 0; k <= 5; k++) {
+      int y = arch[k] + (k >= 4 ? inner : 0) - (expr == SURPRISE ? 1 : 0);
+      SET(7 + k, y, k == 0 ? 130 : 84);
+      SET(24 - k, y, k == 0 ? 130 : 84);
+    }
+  } else { /* low, straight and heavy */
+    for (int k = 0; k <= 5; k++) {
+      int dy = k >= 4 ? inner : 0;
+      SET(7 + k, by + dy, 58);
+      SET(24 - k, by + dy, 58);
+      if (k >= 1 && k <= 4) {
+        SET(7 + k, by + dy - 1, 96);
+        SET(24 - k, by + dy - 1, 96);
+      }
     }
   }
   /* eyes: a dark upper lid over a small iris, the white barely showing */
   for (int side = 0; side < 2; side++) {
-    int ex = side ? 19 : 8; /* left edge of the eye */
+    int ex = side ? 19 : 8;                                  /* left edge of the eye */
+    int outer = side ? ex + 5 : ex - 1, dir = side ? 1 : -1; /* the outer corner */
     if (expr == CLOSED) {
-      for (int x = ex; x <= ex + 4; x++) SET(x, 13, 96);
+      for (int x = ex; x <= ex + 4; x++) SET(x, 13, fem ? 70 : 96);
+      if (fem) SET(outer, 13, 90); /* lashes */
       continue;
     }
     bool wide = expr == FEAR || expr == SURPRISE, squint = expr == PAIN || expr == STERN;
     int lid = wide ? 12 : 13;
-    for (int x = ex; x <= ex + 4; x++) SET(x, lid, x == ex || x == ex + 4 ? 110 : 72);
+    if (fem && madeup) /* a little shadow over the lid */
+      for (int x = ex; x <= ex + 4; x++) SET(x, lid - 1, 200);
+    for (int x = ex; x <= ex + 4; x++) SET(x, lid, fem ? 48 : (x == ex || x == ex + 4 ? 110 : 72));
+    if (fem) { /* lined, with a flick up at the outer corner */
+      SET(outer, lid, madeup ? 40 : 70);
+      SET(outer + dir, lid - 1, madeup ? 60 : 120);
+    }
     int iy = lid + 1;
     if (!squint || expr == STERN) {
       SET(ex, iy, 240);
-      SET(ex + 1, iy, 236);
+      SET(ex + 1, iy, fem ? 244 : 236);
       SET(ex + 2, iy, 40);
-      SET(ex + 3, iy, 52);
-      SET(ex + 4, iy, 236);
+      SET(ex + 3, iy, fem ? 44 : 52);
+      SET(ex + 4, iy, fem ? 244 : 236);
+    }
+    if (fem && !squint) { /* a taller eye: the iris shows two rows, white beside it */
+      SET(ex + 1, iy + 1, 236);
+      SET(ex + 2, iy + 1, wide ? 225 : 70);
+      SET(ex + 3, iy + 1, wide ? 225 : 82);
+      SET(ex + 4, iy + 1, 240);
+      for (int x = ex + 1; x <= ex + 4; x++) SET(x, iy + 2, 176); /* the lower lashes */
+      continue;
     }
     if (wide) { /* white above and below the iris */
       SET(ex + 2, iy + 1, 225);
       SET(ex + 3, iy + 1, 225);
     }
-    for (int x = ex + 1; x <= ex + 3; x++) SET(x, iy + (squint ? 1 : wide ? 2 : 1), 218); /* lower lid shadow */
+    for (int x = ex + 1; x <= ex + 3; x++)
+      SET(x, iy + (squint ? 1 : wide ? 2 : 1), fem ? 206 : 218); /* lower lid shadow (lashes on women) */
   }
   /* the mouth */
   switch (expr) {
@@ -756,7 +796,16 @@ static void face_cell(uint8_t *rgba, int ox, int oy, int style, int expr) {
       for (int x = 13; x <= 18; x++) SET(x, 25, 205);
       break;
   }
-  if (style == 1) /* stubble */
+  if (fem) { /* fuller lips: an upper lip over the line and a lower lip under it, tinted */
+    int top = 23, bottom = expr == FEAR ? 27 : expr == PAIN || expr == TALK || expr == SURPRISE ? 26 : 25;
+    for (int x = 13; x <= 18; x++) {
+      if (g[top][x] > 200) SET(x, top, madeup ? 150 : 178);
+      if (g[bottom][x] > 200) SET(x, bottom, madeup ? 140 : 172);
+    }
+    for (int y = 22; y <= 27; y++)
+      for (int x = 11; x <= 20; x++) lip[y][x] = g[y][x] < 225;
+  }
+  if (style == 1 && !fem) /* stubble */
     for (int y = 21; y <= 30; y++)
       for (int x = 6; x <= 25; x++)
         if ((h32(SR_LAYER_FACES, x, y) % 3u) == 0 && g[y][x] > 180) SET(x, y, 196);
@@ -769,13 +818,20 @@ static void face_cell(uint8_t *rgba, int ox, int oy, int style, int expr) {
     }
 #undef SET
   for (int y = 0; y < 32; y++)
-    for (int x = 0; x < 32; x++) px(rgba, ox + x, oy + y, g[y][x], g[y][x], g[y][x], 255);
+    for (int x = 0; x < 32; x++) {
+      int v = g[y][x];
+      if (lip[y][x]) /* a rose tint, darker on the made-up face */
+        px(rgba, ox + x, oy + y, v, v * (madeup ? 62 : 74) / 100, v * (madeup ? 68 : 78) / 100, 255);
+      else
+        px(rgba, ox + x, oy + y, v, v, v, 255);
+    }
 }
 
+/* Faces: 8 styles (4 masculine, 4 feminine) x 8 expressions over 4 layers of 16 cells. */
 static void face_atlas(int index, uint8_t *rgba) {
   for (int c = 0; c < 16; c++) {
-    int cell = index * 16 + c;
-    face_cell(rgba, (c % 4) * 32, (c / 4) * 32, cell / 8, cell % 8);
+    int cell = index * 16 + c, style = cell / 8;
+    face_cell(rgba, (c % 4) * 32, (c / 4) * 32, style % 4, cell % 8, style >= 4);
   }
 }
 
@@ -821,7 +877,7 @@ void sr_texgen_layer(int layer, uint8_t *rgba) {
     noise_layer(rgba);
     return;
   }
-  if (layer >= SR_LAYER_FACES && layer < SR_LAYER_FACES + 2) {
+  if (layer >= SR_LAYER_FACES && layer < SR_LAYER_FACES + 4) {
     face_atlas(layer - SR_LAYER_FACES, rgba);
     return;
   }

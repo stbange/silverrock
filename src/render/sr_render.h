@@ -40,8 +40,8 @@ enum {
   SR_LAYER_ADS = 42,          /* 4 layers of billboard and poster content */
   SR_LAYER_SCRIPT = 46,       /* 64 neon script glyphs */
   SR_LAYER_NOISE = 47,        /* cloud noise for the Pall */
-  SR_LAYER_FACES = 48,        /* 2 atlas layers: 4 face styles x 8 expressions (SrExpression) */
-  SR_LAYER_RESERVED = 50      /* 50..63 free for M6 */
+  SR_LAYER_FACES = 48,        /* 4 atlas layers: 8 face styles (4 masculine, 4 feminine) x 8 expressions */
+  SR_LAYER_RESERVED = 52      /* 52..63 free for M6 */
 };
 
 /* A cell of a 4x4 atlas layer (32 px cells); v0 is the top edge, v1 the bottom. */

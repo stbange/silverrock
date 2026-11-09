@@ -1747,14 +1747,14 @@ static void test_anim_shots(void) {
   sr_mesh_init(&st->people);
   sr_mesh_box(&st->ground, sr_v3(-6, -0.05f, -6), sr_v3(6, 0, 6), (SrColor){60, 62, 70, 255}, SR_LAYER_SIDEWALK, 1.0f,
               0);
-  for (int style = 0; style < 4; style++)
+  for (int style = 0; style < 8; style++) /* 0..3 men, 4..7 women */
     for (int e = 0; e < SR_EXPR_COUNT; e++) {
       sr_mesh_clear(&st->people);
       for (int k = 0; k < 4; k++) {
         SrAppearance fa = sr_appearance_generate(300u + (uint64_t)k, SR_ROLE_WORKER, 0);
-        fa.face = (uint8_t)style;
+        fa.face = (uint8_t)(style % 4);
         fa.skin = (uint8_t)(k * 2);
-        fa.body = 1;
+        fa.body = (uint8_t)(style >= 4 ? 8 + 1 : 1); /* bit 3: the feminine frame */
         fa.cyber = 0;
         fa.hair = (uint8_t)(4 + k);
         SrAnimInput in;

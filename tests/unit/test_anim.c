@@ -1534,11 +1534,19 @@ static void test_faces(void) {
   SrMesh m;
   sr_mesh_init(&m);
   sr_anim_mesh(&m, &in, &sk, &p, 0);
-  SrAtlasCell fc = sr_atlas_cell(SR_LAYER_FACES, sr_anim_face_style(&a) * SR_EXPR_COUNT + SR_EXPR_STERN);
+  SrAtlasCell fc = sr_atlas_cell(SR_LAYER_FACES, sr_anim_face_cell(&a, SR_EXPR_STERN));
   int face_verts = 0;
   for (int v = 0; v < m.nv; v++)
     face_verts += m.v[v].layer == fc.layer && (fabsf(m.v[v].u - fc.u0) < 1e-5f || fabsf(m.v[v].u - fc.u1) < 1e-5f);
   SR_CHECK_EQ(face_verts, 4);
+  /* women take the feminine cell of the same style and expression */
+  SR_SPEC("retro-rendering", "Women have feminine faces");
+  SrAppearance wf = a, wm = a;
+  wf.body = (uint8_t)(wf.body | 8u);
+  wm.body = (uint8_t)(wm.body & ~8u);
+  SR_CHECK_EQ(sr_anim_face_cell(&wf, SR_EXPR_TALK), sr_anim_face_cell(&wm, SR_EXPR_TALK) + 4 * SR_EXPR_COUNT);
+  SR_CHECK(sr_anim_face_cell(&wm, SR_EXPR_TALK) < 4 * SR_EXPR_COUNT);
+  SR_CHECK(sr_atlas_cell(SR_LAYER_FACES, sr_anim_face_cell(&wf, SR_EXPR_CONTENT)).layer < SR_LAYER_RESERVED);
   sr_mesh_free(&m);
   /* serious faces: civilians rest neutral, guards, police and gangers stern */
   for (int role = 0; role < SR_ROLE_COUNT; role++) {
@@ -1552,23 +1560,37 @@ static void test_faces(void) {
   }
   /* the atlas: level brows and a straight mouth at rest; no grin anywhere; small eyes */
   uint8_t *px = (uint8_t *)malloc((size_t)SR_TEX_SIZE * SR_TEX_SIZE * 4);
-  for (int layer = 0; layer < 2; layer++) {
+  for (int layer = 0; layer < 4; layer++) {
     sr_texgen_layer(SR_LAYER_FACES + layer, px);
     for (int c = 0; c < 16; c++) {
       int cell = layer * 16 + c, style = cell / SR_EXPR_COUNT, e = cell % SR_EXPR_COUNT;
-      if (e == SR_EXPR_NEUTRAL) {
+      bool fem = style >= 4;
+      if (fem && e == SR_EXPR_NEUTRAL) { /* thin arched brows, lined eyes, tinted lips, a narrow chin */
+        SR_CHECK(face_px(px, style, e, 9, 7) < 100 && face_px(px, style, e, 7, 9) < 140);
+        SR_CHECK(face_px(px, style, e, 9, 8) > 200 && face_px(px, style, e, 9, 10) > 200); /* one texel thin */
+        SR_CHECK(face_px(px, style, e, 7, 13) < 90);                                       /* the flick */
+        int off = (((c / 4) * 32 + 24) * SR_TEX_SIZE + (c % 4) * 32 + 15) * 4;
+        SR_CHECK(px[off] > px[off + 1] + 10); /* the lips are tinted, not grey */
+        SR_CHECK(face_px(px, style, e, 3, 29) < 220 && face_px(px, style, e, 16, 29) >= 214);
+      }
+      if (!fem && e == SR_EXPR_NEUTRAL) {
         SR_CHECK_EQ(face_px(px, style, e, 7, 10), face_px(px, style, e, 12, 10)); /* level brow */
         SR_CHECK(face_px(px, style, e, 7, 10) < 90);
         for (int x = 12; x <= 19; x++) SR_CHECK(face_px(px, style, e, x, 24) < 110); /* a closed, level mouth */
       }
       /* mouth corners never rise more than one texel above the line, and only in the content face */
       int lifted = face_px(px, style, e, 11, 23) < 150 || face_px(px, style, e, 20, 23) < 150;
+      if (fem) { /* the masculine rest checks below apply to both sets except the brows */
+        if (e == SR_EXPR_NEUTRAL)
+          for (int x = 12; x <= 19; x++) SR_CHECK(face_px(px, style, e, x, 24) < 110);
+      }
       SR_CHECK(!lifted);
       int lift12 = face_px(px, style, e, 12, 23) < 150;
       SR_CHECK(!lift12 || e == SR_EXPR_CONTENT);
       /* eyes: dark texels in an eye's box span at most three rows */
       int rows = 0;
       for (int y = 11; y <= 15; y++) { /* below the brow, above a tattoo */
+        if (fem) break;                /* lined eyes are checked above */
         bool dark = false;
         for (int x = 9; x <= 10; x++) dark |= face_px(px, style, e, x, y) < 130;
         rows += dark;
