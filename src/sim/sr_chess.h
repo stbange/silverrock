@@ -234,7 +234,14 @@ typedef enum SrEnding {
   SR_END_DEFECTOR,
   SR_END_BURN,
   SR_END_KINGMAKER,
-  SR_END_SUNRISE
+  SR_END_SUNRISE,
+  /* added by add-more-endings */
+  SR_END_CHAIR,       /* the player takes the handler's chair: head of the patron's black ops */
+  SR_END_EXODUS,      /* the player leaves the city with the people closest to them */
+  SR_END_CITY_HALL,   /* reformers take City Hall: bribes exposed, the police back in city hands */
+  SR_END_STREET,      /* the city goes to the strongest gang */
+  SR_END_SHAREHOLDER, /* the player buys a seat on a corporation's board */
+  SR_END_COUNT
 } SrEnding;
 
 typedef enum SrCastRole {
@@ -420,6 +427,12 @@ typedef struct SrSaga {
   /* lines said lately (hashes), so nobody repeats themselves */
   uint32_t said[8];
   uint8_t said_n;
+  /* added by add-more-endings (appended: older v6 saves load the part before) */
+  int64_t portfolio;        /* the player's shares at market value, set by the game */
+  int32_t stipend;          /* weekly pay after The Chair (paid with the favours) */
+  int8_t street_gang;       /* the gang holding the most districts, -1 none */
+  uint8_t street_districts; /* districts it holds */
+  bool exodus;              /* the player left after Exodus: the game wipes Heat and bounties once */
 } SrSaga;
 
 /* ---- the whole corporate game ---------------------------------------------------------------- */
@@ -634,6 +647,8 @@ const char *sr_saga_season_name(const SrSaga *g);
 /* One line for the open request's yes option, e.g. "Pay Ana Reyes's debt (1200 cred)"; "" when none. */
 void sr_saga_ask_label(const SrChess *ch, char *out, size_t cap);
 const char *sr_saga_ask_name(SrAskType t);
+/* What each ending needs, for the terminal (one short line). */
+const char *sr_ending_hint(SrEnding e);
 /* Endings open at the climax: the story's own (sr_story_endings) plus the ones friends open. */
 unsigned sr_saga_endings(const SrChess *ch);
 /* True when a line with this text was said lately (and remembers it when not). */

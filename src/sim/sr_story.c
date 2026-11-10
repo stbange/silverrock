@@ -16,8 +16,25 @@ const char *sr_arc_name(SrArcType t) {
 }
 
 const char *sr_ending_name(SrEnding e) {
-  static const char *const n[] = {"-", "Loyal", "Defector", "Burn the Board", "Kingmaker", "Sunrise"};
-  return (unsigned)e <= SR_END_SUNRISE ? n[e] : "?";
+  static const char *const n[SR_END_COUNT] = {"-",         "Loyal",        "Defector",       "Burn the Board",
+                                              "Kingmaker", "Sunrise",      "The Chair",      "Exodus",
+                                              "City Hall", "Street Kings", "The Shareholder"};
+  return (unsigned)e < SR_END_COUNT ? n[e] : "?";
+}
+
+const char *sr_ending_hint(SrEnding e) {
+  static const char *const h[SR_END_COUNT] = {"",
+                                              "stay with your first patron",
+                                              "switch patrons",
+                                              "leak files, be hunted, or a reporter who trusts you",
+                                              "crown any megacorp",
+                                              "go deep in the Matrix, or a Ghost who trusts you",
+                                              "trust 90 and a handler who is your friend",
+                                              "two people close to you and 20000 cred",
+                                              "a council scandal or the Coup, and a reporter on your side",
+                                              "a gang holding 3 districts and a fixer who is your friend",
+                                              "shares worth 100000 cred"};
+  return (unsigned)e < SR_END_COUNT ? h[e] : "";
 }
 
 const char *sr_scenario_name(SrScenario s) {
@@ -457,7 +474,33 @@ unsigned sr_saga_endings(const SrChess *ch) {
   if (g->bond[SR_CAST_JOURNALIST] >= SR_BOND_FRIEND && s->cast[SR_CAST_JOURNALIST].alive) m |= 1u << SR_END_BURN;
   if (g->bond[SR_CAST_GHOST] >= SR_BOND_FRIEND) m |= 1u << SR_END_SUNRISE;
   if (g->sun_seen) m &= ~(1u << SR_END_SUNRISE); /* the sun is already out */
+  /* The Chair: loyal to the end, trusted completely, and the handler wants you in their seat */
+  if (s->patron >= 0 && s->retainer && s->patron == s->first_patron && s->trust >= 90 &&
+      g->bond[SR_CAST_HANDLER] >= SR_BOND_FRIEND && s->cast[SR_CAST_HANDLER].alive)
+    m |= 1u << SR_END_CHAIR;
+  /* Exodus: people to leave with and the money to do it */
+  int close = 0;
+  for (int r = 0; r < SR_CAST_COUNT; r++) close += s->cast[r].alive && g->bond[r] >= SR_BOND_CLOSE;
+  if (close >= 2 && g->cash >= 20000) m |= 1u << SR_END_EXODUS;
+  /* City Hall: a scandal to stand on and a reporter to tell it */
+  bool exposed = false;
+  for (int i = 0; i < ch->pol.seat_count; i++) exposed |= ch->pol.seats[i].exposed;
+  if ((exposed || s->scenario == SR_SC_COUP) && s->cast[SR_CAST_JOURNALIST].alive && g->bond[SR_CAST_JOURNALIST] >= 15)
+    m |= 1u << SR_END_CITY_HALL;
+  /* Street Kings: a gang strong enough and a fixer who will make the introductions */
+  if (g->street_gang >= 0 && g->street_districts >= 3 && s->cast[SR_CAST_FIXER].alive &&
+      g->bond[SR_CAST_FIXER] >= SR_BOND_FRIEND)
+    m |= 1u << SR_END_STREET;
+  /* The Shareholder: enough stock to demand a seat */
+  if (g->portfolio >= 100000) m |= 1u << SR_END_SHAREHOLDER;
   return m;
+}
+
+static void shift(SrChess *ch, int f, SrResource r, int delta) {
+  if (f < 0 || f >= SR_MAX_FACTIONS) return;
+  int16_t lo, hi;
+  sr_resource_bounds(r, &lo, &hi);
+  ch->f[f].res[r] = (int16_t)SR_CLAMP(ch->f[f].res[r] + delta, lo, hi);
 }
 
 static void boost(SrChess *ch, int f, int capital, int image) {
@@ -487,10 +530,50 @@ void sr_story_end(SrChess *ch, SrCity *c, SrEnding e, int64_t now) {
       break;
     }
     case SR_END_SUNRISE: boost(ch, s->scenario_corp, -60, -40); break;
+    case SR_END_CHAIR: /* the patron's machine now runs through the player */
+      boost(ch, s->patron, 40, 5);
+      ch->saga.stipend = 1500;
+      s->trust = 100;
+      break;
+    case SR_END_EXODUS: /* the player is gone: nobody wins, the hunters lose the trail */
+      ch->saga.exodus = true;
+      s->hostile = -1;
+      ch->camp.hunter = -1;
+      ch->camp.blacklist = 0;
+      break;
+    case SR_END_CITY_HALL: /* reformers in City Hall: every bought councillor exposed */
+      for (int i = 0; i < ch->pol.seat_count; i++)
+        if (ch->pol.seats[i].bribed >= 0) {
+          ch->pol.seats[i].exposed = true;
+          ch->pol.seats[i].bribed = -1;
+        }
+      ch->pol.police_budget = 1;
+      for (int f = 0; f < c->factions.corp_count; f++) shift(ch, f, SR_RES_INFLUENCE, -30);
+      break;
+    case SR_END_STREET: { /* the gangs take the city: corporate muscle withdraws */
+      int gang = ch->saga.street_gang;
+      ch->camp.king = (int8_t)gang;
+      for (int f = 0; f < c->factions.corp_count; f++) shift(ch, f, SR_RES_FORCE, -20);
+      shift(ch, gang, SR_RES_FORCE, 40);
+      break;
+    }
+    case SR_END_SHAREHOLDER: { /* a seat on the board of the corporation the player owns most of */
+      int best = -1;
+      for (int f = 0; f < c->factions.corp_count; f++)
+        if (best < 0 || (int64_t)ch->market.shares[f] * ch->market.price[f] >
+                            (int64_t)ch->market.shares[best] * ch->market.price[best])
+          best = f;
+      ch->camp.king = (int8_t)best;
+      boost(ch, best, 30, 10);
+      if (best >= 0) ch->market.price[best] = ch->market.price[best] * 5 / 4;
+      break;
+    }
     default: break;
   }
   /* the sequence: three voices, a news montage, a city that looks different */
-  int winner = e == SR_END_KINGMAKER ? ch->camp.king : e == SR_END_LOYAL || e == SR_END_DEFECTOR ? s->patron : -1;
+  int winner = e == SR_END_KINGMAKER || e == SR_END_SHAREHOLDER || e == SR_END_STREET ? ch->camp.king
+               : e == SR_END_LOYAL || e == SR_END_DEFECTOR || e == SR_END_CHAIR       ? s->patron
+                                                                                      : -1;
   const char *wn = winner >= 0 ? c->factions.f[winner].name : "Nobody";
   static const SrCastRole voices[3] = {SR_CAST_HANDLER, SR_CAST_JOURNALIST, SR_CAST_GHOST};
   for (int i = 0; i < 3; i++) {
@@ -501,16 +584,23 @@ void sr_story_end(SrChess *ch, SrCity *c, SrEnding e, int64_t now) {
   char head[64];
   snprintf(head, sizeof head, "The board changes: %s", sr_ending_name(e));
   sr_news_publish(ch, c, -1, s->scenario_corp, -1, -1, SR_NEWS_STORY, false, head, now);
-  if (winner >= 0) {
+  if (winner >= 0 && e != SR_END_STREET) {
     sr_headline(head, sizeof head, "%1 now runs the city in all but name", wn, NULL, NULL);
     sr_news_publish(ch, c, c->factions.media_count > 0 ? c->factions.media_first : -1, winner, -1, -1, SR_NEWS_STORY,
                     false, head, now);
     ch->pol.police_contract = (int8_t)winner; /* the winner's colours on the streets */
+  } else if (e == SR_END_STREET) {            /* a gang: its colours on the streets, the police stand aside */
+    ch->pol.police_contract = -1;
+    sr_headline(head, sizeof head, "%1 rule the streets; corp security pulls back", wn, NULL, NULL);
+    sr_news_publish(ch, c, -1, winner, -1, -1, SR_NEWS_STORY, false, head, now);
   } else {
     ch->pol.police_contract = -1;
     ch->pol.curfew = 0; /* the old order is gone: curfews lifted */
-    sr_news_publish(ch, c, -1, -1, -1, -1, SR_NEWS_STORY, false,
-                    e == SR_END_SUNRISE ? "Daylight over the city" : "Corporate files flood the streets", now);
+    const char *what = e == SR_END_SUNRISE     ? "Daylight over the city"
+                       : e == SR_END_EXODUS    ? "A runner vanishes; the corps stop looking"
+                       : e == SR_END_CITY_HALL ? "Reformers sweep City Hall; bribed seats fall"
+                                               : "Corporate files flood the streets";
+    sr_news_publish(ch, c, -1, -1, -1, -1, SR_NEWS_STORY, false, what, now);
   }
   sr_chess_note(ch, now, head);
   sr_story_log(ch, now, sr_ending_name(e));

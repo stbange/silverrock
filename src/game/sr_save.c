@@ -3,6 +3,7 @@
 #include "core/sr_log.h"
 #include "core/sr_str.h"
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -749,7 +750,14 @@ SrResult sr_save_read(SrGame *g, const void *data, size_t len) {
         g->last_raid = sr_get_i64(&s);
         g->flatlines = sr_get_i32(&s);
         break;
-      case SR_SEC_SAGA: get_blob(&s, &g->chess.saga, sizeof g->chess.saga); break;
+      case SR_SEC_SAGA: { /* the saga grows at its end: an older, shorter one loads into the front */
+        uint32_t blob = sr_get_u32(&s);
+        uint32_t take = blob < sizeof g->chess.saga ? blob : (uint32_t)sizeof g->chess.saga;
+        sr_get_bytes(&s, &g->chess.saga, take);
+        if (blob > take) sr_get_bytes(&s, NULL, blob - take);
+        if (take <= offsetof(SrSaga, street_gang)) g->chess.saga.street_gang = -1;
+        break;
+      }
       case SR_SEC_DELTAS: {
         int n = sr_get_u16(&s);
         for (int i = 0; i < n; i++) {

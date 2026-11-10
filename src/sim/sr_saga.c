@@ -22,6 +22,7 @@ void sr_saga_init(SrSaga *g) {
   memset(g, 0, sizeof *g);
   for (int i = 0; i < SR_SAGA_HISTORY; i++) g->kings[i] = -1;
   g->ask.corp = -1;
+  g->street_gang = -1;
 }
 
 void sr_saga_bond(SrChess *ch, SrCastRole r, int delta) {
@@ -46,6 +47,11 @@ const char *sr_saga_season_name(const SrSaga *g) {
     case SR_END_BURN: return "Ashes";
     case SR_END_KINGMAKER: return "The Crown";
     case SR_END_SUNRISE: return "Daylight";
+    case SR_END_CHAIR: return "The Chair";
+    case SR_END_EXODUS: return "The Return";
+    case SR_END_CITY_HALL: return "Reform";
+    case SR_END_STREET: return "The Street";
+    case SR_END_SHAREHOLDER: return "Dividends";
     default: return "The Long Night";
   }
 }
@@ -166,6 +172,28 @@ void sr_saga_ending(SrChess *ch, const SrCity *c, SrEnding e, int64_t now) {
       sr_saga_bond(ch, SR_CAST_HANDLER, -20);
       g->sun_seen = true;
       break;
+    case SR_END_CHAIR: /* the handler moves upstairs; the street keeps its distance from a corp boss */
+      sr_saga_bond(ch, SR_CAST_HANDLER, 20);
+      sr_saga_bond(ch, SR_CAST_FIXER, -10);
+      sr_saga_bond(ch, SR_CAST_JOURNALIST, -15);
+      break;
+    case SR_END_EXODUS: /* the ones who left with you, and the ones you left behind */
+      for (int r = 0; r < SR_CAST_COUNT; r++) sr_saga_bond(ch, (SrCastRole)r, g->bond[r] >= SR_BOND_CLOSE ? 10 : -10);
+      break;
+    case SR_END_CITY_HALL:
+      sr_saga_bond(ch, SR_CAST_JOURNALIST, 20);
+      sr_saga_bond(ch, SR_CAST_LANDLORD, 10);
+      sr_saga_bond(ch, SR_CAST_HANDLER, -25);
+      break;
+    case SR_END_STREET:
+      sr_saga_bond(ch, SR_CAST_FIXER, 20);
+      sr_saga_bond(ch, SR_CAST_NEIGHBOUR, -10);
+      sr_saga_bond(ch, SR_CAST_HANDLER, -25);
+      break;
+    case SR_END_SHAREHOLDER:
+      sr_saga_bond(ch, SR_CAST_RIVAL, -15);
+      sr_saga_bond(ch, SR_CAST_GHOST, -10);
+      break;
     default: break;
   }
 }
@@ -175,7 +203,9 @@ static void begin_season(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_
   SrStory *s = &ch->story;
   SrCampaign *cp = &ch->camp;
   SrEnding prev = (SrEnding)s->ending;
-  int winner = prev == SR_END_KINGMAKER ? cp->king : prev == SR_END_LOYAL || prev == SR_END_DEFECTOR ? s->patron : -1;
+  int winner = prev == SR_END_KINGMAKER || prev == SR_END_SHAREHOLDER || prev == SR_END_STREET ? cp->king
+               : prev == SR_END_LOYAL || prev == SR_END_DEFECTOR || prev == SR_END_CHAIR       ? s->patron
+                                                                                               : -1;
   int slot = g->season % SR_SAGA_HISTORY;
   g->endings[slot] = (uint8_t)prev;
   g->scenarios[slot] = s->scenario;
@@ -266,6 +296,40 @@ static void begin_season(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_
       sayf(ch, SR_CAST_FIXER, "The crown you handed %1 is getting heavy. Everyone else wants it off.",
            corp_name(c, winner), NULL, NULL);
       a = second >= 0 && second != winner ? second : a;
+      b = winner;
+      opener = SR_ARC_SCANDAL;
+      break;
+    case SR_END_CHAIR: /* the player runs the black ops: everybody wants the new chair to fail */
+      s->trust = 100;
+      for (int f = 0; f < c->factions.corp_count; f++)
+        if (f != s->patron) boost(ch, f, SR_RES_INTEL, 12);
+      sayf(ch, SR_CAST_HANDLER, "Your chair, your problem. Every rival of %1 is testing the new boss.",
+           corp_name(c, s->patron), NULL, NULL);
+      b = sr_story_rival_of(c, a, (uint64_t)now);
+      opener = SR_ARC_MOLE;
+      break;
+    case SR_END_EXODUS: /* back in town, clean, and nobody's man */
+      sr_story_say(ch, SR_CAST_FIXER, "You came back. Nobody remembers your face. Let's keep it that way.");
+      opener = SR_ARC_SHORTAGE;
+      a = -1;
+      break;
+    case SR_END_CITY_HALL: /* the corps want City Hall back */
+      for (int f = 0; f < c->factions.corp_count; f++) boost(ch, f, SR_RES_CAPITAL, 10);
+      sr_story_say(ch, SR_CAST_JOURNALIST, "The reformers are in, and every corp in town is buying them back.");
+      opener = SR_ARC_ELECTION;
+      a = -1;
+      break;
+    case SR_END_STREET: /* the corps fight to take the streets back */
+      for (int f = 0; f < c->factions.corp_count; f++) boost(ch, f, SR_RES_FORCE, 15);
+      sayf(ch, SR_CAST_FIXER, "%1 own the streets now. The corps are hiring muscle to take them back.",
+           corp_name(c, winner), NULL, NULL);
+      opener = SR_ARC_PROXY;
+      a = -1;
+      break;
+    case SR_END_SHAREHOLDER: /* the other shareholders want the newcomer out */
+      sayf(ch, SR_CAST_RIVAL, "The rest of the %1 board wants you out. They're not subtle about it.",
+           corp_name(c, winner), NULL, NULL);
+      a = sr_story_rival_of(c, winner >= 0 ? winner : leader, (uint64_t)now);
       b = winner;
       opener = SR_ARC_SCANDAL;
       break;
@@ -703,6 +767,15 @@ void sr_saga_tick(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_t now) 
   SrStory *s = &ch->story;
   if (s->act == SR_ACT_EPILOGUE && ch->camp.ending_at > 0 && now >= ch->camp.ending_at + SR_INTERLUDE_S)
     begin_season(ch, c, pop, now);
+  /* the strongest gang (Street Kings) */
+  g->street_gang = -1;
+  g->street_districts = 0;
+  for (int f = c->factions.gang_first; f < c->factions.gang_first + c->factions.gang_count; f++) {
+    if (ch->f[f].dissolved) continue;
+    int n = 0;
+    for (int d = 0; d < c->district_count && d < 32; d++) n += (c->factions.f[f].turf >> d) & 1u;
+    if (n > g->street_districts) g->street_gang = (int8_t)f, g->street_districts = (uint8_t)n;
+  }
   /* a successor is a stranger */
   for (int r = 0; r < SR_CAST_COUNT; r++)
     if (!s->cast[r].alive && !(g->flags[r] & SR_TIE_TAKEN)) g->bond[r] = 0, g->flags[r] = 0;
@@ -736,6 +809,8 @@ void sr_saga_tick(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_t now) 
   if (now >= g->next_perk) {
     perk(ch, c, now);
     g->next_perk = now + SR_WEEK_S;
+    if (g->stipend > 0 && s->patron >= 0 && s->retainer) /* The Chair pays every week */
+      g->refund += g->stipend, g->refund_role = SR_CAST_HANDLER;
     /* friendship needs keeping up: strong feelings fade a little every week, both ways */
     for (int r = 0; r < SR_CAST_COUNT; r++) {
       if (g->bond[r] > 40) sr_saga_bond(ch, (SrCastRole)r, -3);

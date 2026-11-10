@@ -605,11 +605,32 @@ static void terminal_story(SrUi *ui, const SrGame *g, float x, float y, float li
     text_fit(ui, x, y, buf, k_cyan, s, (float)ui->w - 2 * x);
     y += line;
   }
-  if (st->act >= SR_ACT_KNIGHT && st->ending == SR_END_NONE) {
-    text_fit(ui, x, y,
-             "ENDINGS: LOYAL (STAY), DEFECTOR (SWITCH), BURN (LEAKS, A REPORTER FRIEND), KINGMAKER, SUNRISE (?)",
-             k_cyan, s, (float)ui->w - 2 * x);
-    y += line;
+  if (st->act >= SR_ACT_KNIGHT && st->ending == SR_END_NONE) { /* ten endings: which are open now, in two lines */
+    unsigned open = sr_saga_endings(&g->chess);
+    char row[2][200];
+    size_t len[2] = {0, 0};
+    row[0][0] = row[1][0] = '\0';
+    for (int e = SR_END_LOYAL; e < SR_END_COUNT; e++) {
+      int k = e <= SR_END_SUNRISE ? 0 : 1;
+      if (len[k] >= sizeof row[k]) continue;
+      len[k] += (size_t)snprintf(row[k] + len[k], sizeof row[k] - len[k], "%s%s%s",
+                                 len[k] ? "  " : "ENDINGS: ", sr_ending_name((SrEnding)e), (open >> e) & 1u ? "*" : "");
+    }
+    for (int k = 0; k < 2; k++) {
+      for (char *q = row[k]; *q; q++)
+        if (*q >= 'a' && *q <= 'z') *q = (char)(*q - 32);
+      text_fit(ui, x, y, row[k], k_cyan, s, (float)ui->w - 2 * x);
+      y += line;
+    }
+    for (int e = SR_END_CHAIR; e < SR_END_COUNT; e++) /* what the next locked one needs */
+      if (!((open >> e) & 1u)) {
+        snprintf(buf, sizeof buf, "* OPEN NOW.  %s: %s", sr_ending_name((SrEnding)e), sr_ending_hint((SrEnding)e));
+        for (char *q = buf; *q; q++)
+          if (*q >= 'a' && *q <= 'z') *q = (char)(*q - 32);
+        text_fit(ui, x, y, buf, k_white, s, (float)ui->w - 2 * x);
+        y += line;
+        break;
+      }
   }
   int options = 0, okind = 0;
   while (sr_game_story_option(g, options, &okind)) options++;

@@ -1,10 +1,12 @@
 /* Playability pass after M5 (improve-playability): every scenario of that change. */
+#include "core/sr_mem.h"
 #include "core/sr_rng.h"
 #include "game/sr_save.h"
 #include "game/sr_script.h"
 #include "sr_test.h"
 #include "ui/sr_ui.h"
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1402,6 +1404,233 @@ static void test_save_v6(void) {
   sr_game_destroy(g);
 }
 
+/* ---- more endings ------------------------------------------------------------------------------ */
+
+static SrGame *finale_game(uint64_t seed) {
+  SrGame *g = saga_game(seed);
+  g->chess.story.act = SR_ACT_PROMOTION;
+  g->chess.story.finale_ready = true;
+  return g;
+}
+
+static bool open_now(SrGame *g, SrEnding e) {
+  g->chess.saga.cash = g->player.cred;
+  g->chess.saga.portfolio = sr_market_portfolio(&g->chess.market, g->city);
+  return (sr_saga_endings(&g->chess) >> e) & 1u;
+}
+
+static void test_more_endings(void) {
+  SR_SPEC("story-campaign", "Ten endings");
+  for (int e = 0; e <= SR_END_COUNT; e++) {
+    SR_CHECK(sr_ending_name((SrEnding)e)[0] != '\0');
+    (void)sr_ending_hint((SrEnding)e);
+    char line[112];
+    for (int l = 0; l < 3; l++) {
+      sr_story_ending_text(line, sizeof line, (SrEnding)e, l, "Acme");
+      SR_CHECK(e == 0 || e >= SR_END_COUNT || (line[0] && strchr(line, '%') == NULL));
+    }
+  }
+  SR_CHECK_STR(sr_ending_name(SR_END_SHAREHOLDER), "The Shareholder");
+  SR_CHECK(sr_ending_hint(SR_END_EXODUS)[0] != '\0');
+
+  /* The Chair: trust 90 and a handler who is a friend; the stipend follows, the next season starts on top */
+  SR_SPEC("story-campaign", "The Chair");
+  SrGame *g = finale_game(81);
+  SrStory *st = &g->chess.story;
+  SrSaga *sg = &g->chess.saga;
+  st->trust = 89;
+  sg->bond[SR_CAST_HANDLER] = SR_BOND_FRIEND;
+  SR_CHECK(!open_now(g, SR_END_CHAIR));
+  st->trust = 90;
+  SR_CHECK(open_now(g, SR_END_CHAIR));
+  sg->bond[SR_CAST_HANDLER] = SR_BOND_FRIEND - 1;
+  SR_CHECK(!open_now(g, SR_END_CHAIR));
+  sg->bond[SR_CAST_HANDLER] = SR_BOND_FRIEND;
+  SR_CHECK_EQ(sr_game_choose_ending(g, SR_END_CHAIR), SR_OK);
+  SR_CHECK_EQ(sg->stipend, 1500);
+  SR_CHECK(inbox_has(g, "The chair is yours"));
+  sr_game_skip(g, SR_INTERLUDE_S + SR_TICK_S, false);
+  SR_CHECK_STR(sr_saga_season_name(sg), "The Chair");
+  SR_CHECK_EQ(st->act, SR_ACT_KNIGHT);
+  SR_CHECK_EQ(st->trust, 100);
+  int64_t cash = g->player.cred;
+  sg->next_perk = sr_game_time(g);
+  sg->next_ask = sr_game_time(g) + 400 * 86400;
+  sr_game_skip(g, SR_TICK_S + 120, false);
+  SR_CHECK(g->player.cred >= cash + 1500 - 600); /* the week's pay, less a bill or two */
+  SR_CHECK_EQ(sr_game_choose_ending(g, (SrEnding)SR_END_COUNT), SR_ERR_INVALID);
+  sr_game_destroy(g);
+
+  /* Exodus: two people close and 20000 cred; half the cred goes, Heat and hunters with it */
+  SR_SPEC("story-campaign", "Exodus");
+  g = finale_game(82);
+  st = &g->chess.story;
+  sg = &g->chess.saga;
+  sg->bond[SR_CAST_NEIGHBOUR] = SR_BOND_CLOSE;
+  g->player.cred = 50000;
+  SR_CHECK(!open_now(g, SR_END_EXODUS));
+  sg->bond[SR_CAST_FIXER] = SR_BOND_CLOSE;
+  SR_CHECK(open_now(g, SR_END_EXODUS));
+  g->player.cred = 19999;
+  SR_CHECK(!open_now(g, SR_END_EXODUS));
+  g->player.cred = 50000;
+  SR_CHECK(open_now(g, SR_END_EXODUS));
+  g->heat.level[0] = 4;
+  st->hostile = (int8_t)((st->patron + 1) % g->city->factions.corp_count);
+  g->chess.camp.hunter = st->hostile;
+  SR_CHECK_EQ(sr_game_choose_ending(g, SR_END_EXODUS), SR_OK);
+  SR_CHECK_EQ(g->player.cred, 25000);
+  SR_CHECK_EQ(g->heat.level[0], 0);
+  SR_CHECK_EQ(st->hostile, -1);
+  SR_CHECK_EQ(g->chess.camp.hunter, -1);
+  SR_CHECK_EQ(g->chess.camp.blacklist, 0);
+  SR_CHECK(sg->exodus);
+  SR_CHECK(sg->bond[SR_CAST_FIXER] > SR_BOND_CLOSE && sg->bond[SR_CAST_LANDLORD] < 0);
+  sr_game_skip(g, SR_INTERLUDE_S + SR_TICK_S, false);
+  SR_CHECK_STR(sr_saga_season_name(sg), "The Return");
+  SR_CHECK(inbox_has(g, "Nobody remembers your face"));
+  sr_game_destroy(g);
+
+  /* City Hall: a scandal or the Coup, and a reporter on the player's side; bribes exposed */
+  SR_SPEC("story-campaign", "City Hall");
+  g = finale_game(83);
+  st = &g->chess.story;
+  sg = &g->chess.saga;
+  SrPolitics *pol = &g->chess.pol;
+  sg->bond[SR_CAST_JOURNALIST] = 15;
+  st->scenario = SR_SC_MERGER;
+  for (int i = 0; i < pol->seat_count; i++) pol->seats[i].exposed = false;
+  SR_CHECK(!open_now(g, SR_END_CITY_HALL));
+  st->scenario = SR_SC_COUP;
+  SR_CHECK(open_now(g, SR_END_CITY_HALL));
+  st->scenario = SR_SC_MERGER;
+  pol->seats[0].exposed = true;
+  SR_CHECK(open_now(g, SR_END_CITY_HALL));
+  sg->bond[SR_CAST_JOURNALIST] = 14;
+  SR_CHECK(!open_now(g, SR_END_CITY_HALL));
+  sg->bond[SR_CAST_JOURNALIST] = 30;
+  pol->seats[1].bribed = 0;
+  pol->seats[1].exposed = false;
+  int infl = g->chess.f[0].res[SR_RES_INFLUENCE];
+  SR_CHECK_EQ(sr_game_choose_ending(g, SR_END_CITY_HALL), SR_OK);
+  SR_CHECK(pol->seats[1].exposed && pol->seats[1].bribed == -1);
+  SR_CHECK_EQ(pol->police_contract, -1);
+  SR_CHECK_EQ(pol->curfew, 0);
+  SR_CHECK(g->chess.f[0].res[SR_RES_INFLUENCE] < infl || infl <= 0);
+  sr_game_skip(g, SR_INTERLUDE_S + SR_TICK_S, false);
+  SR_CHECK_STR(sr_saga_season_name(sg), "Reform");
+  sr_game_destroy(g);
+
+  /* Street Kings: a gang with three districts and a fixer who is a friend */
+  SR_SPEC("story-campaign", "Street Kings");
+  g = finale_game(84);
+  st = &g->chess.story;
+  sg = &g->chess.saga;
+  SrCity *c = g->city;
+  int gang = c->factions.gang_first;
+  for (int f = gang; f < gang + c->factions.gang_count; f++) c->factions.f[f].turf = 0;
+  c->factions.f[gang].turf = 0x7; /* districts 0, 1 and 2 */
+  sg->bond[SR_CAST_FIXER] = SR_BOND_FRIEND;
+  sr_game_skip(g, SR_TICK_S + 60, false); /* the saga notices the strongest gang */
+  SR_CHECK_EQ(sg->street_gang, gang);
+  SR_CHECK_EQ(sg->street_districts, 3);
+  sg->bond[SR_CAST_FIXER] = SR_BOND_FRIEND;
+  SR_CHECK(open_now(g, SR_END_STREET));
+  sg->bond[SR_CAST_FIXER] = 0;
+  SR_CHECK(!open_now(g, SR_END_STREET));
+  sg->bond[SR_CAST_FIXER] = SR_BOND_FRIEND;
+  int force = g->chess.f[gang].res[SR_RES_FORCE];
+  SR_CHECK_EQ(sr_game_choose_ending(g, SR_END_STREET), SR_OK);
+  SR_CHECK_EQ(g->chess.camp.king, gang);
+  SR_CHECK(g->chess.f[gang].res[SR_RES_FORCE] >= force);
+  SR_CHECK_EQ(g->chess.pol.police_contract, -1);
+  SR_CHECK(inbox_has(g, "gave the city to the gangs"));
+  sr_game_skip(g, SR_INTERLUDE_S + SR_TICK_S, false);
+  SR_CHECK_STR(sr_saga_season_name(sg), "The Street");
+  sr_game_destroy(g);
+
+  /* The Shareholder: 100000 cred of stock; the corp the player owns most of gives them a seat */
+  SR_SPEC("story-campaign", "The Shareholder");
+  g = finale_game(85);
+  sg = &g->chess.saga;
+  SrMarket *mk = &g->chess.market;
+  int corp = 1 % g->city->factions.corp_count;
+  memset(mk->shares, 0, sizeof mk->shares);
+  SR_CHECK(!open_now(g, SR_END_SHAREHOLDER));
+  mk->shares[corp] = (int32_t)(100000 / SR_MAX(1, mk->price[corp]) + 1);
+  SR_CHECK(open_now(g, SR_END_SHAREHOLDER));
+  int32_t price = mk->price[corp];
+  SR_CHECK_EQ(sr_game_choose_ending(g, SR_END_SHAREHOLDER), SR_OK);
+  SR_CHECK_EQ(g->chess.camp.king, corp);
+  SR_CHECK_EQ(mk->price[corp], price * 5 / 4);
+  SR_CHECK_EQ(g->chess.pol.police_contract, corp);
+  sr_game_skip(g, SR_INTERLUDE_S + SR_TICK_S, false);
+  SR_CHECK_STR(sr_saga_season_name(sg), "Dividends");
+  SR_CHECK(inbox_has(g, "wants you out"));
+  sr_game_destroy(g);
+
+  /* the terminal lists every ending and marks the open ones */
+  g = finale_game(86);
+  g->chess.story.finale_ready = false;
+  g->chess.story.trust = 95;
+  g->chess.saga.bond[SR_CAST_HANDLER] = 50;
+  SrUi ui;
+  sr_ui_init(&ui);
+  g->screen = SR_SCREEN_TERMINAL;
+  g->term_tab = SR_TAB_STORY;
+  sr_ui_begin(&ui, 1280, 720, 2);
+  sr_ui_build(&ui, g, NULL, false);
+  SR_CHECK(ui.mesh.nv > 0);
+  sr_ui_free(&ui);
+  /* the story options offer an open new ending */
+  g->chess.story.finale_ready = true;
+  g->chess.saga.cash = g->player.cred;
+  int kind = 0;
+  bool chair = false;
+  for (int i = 0; sr_game_story_option(g, i, &kind); i++) chair |= kind == 10 + SR_END_CHAIR;
+  SR_CHECK(chair);
+  sr_game_destroy(g);
+  /* an older v6 save (a saga without the new fields) still loads its saga */
+  g = saga_game(87);
+  g->chess.saga.season = 3;
+  g->chess.saga.bond[SR_CAST_FIXER] = 33;
+  SrWriter w;
+  sr_writer_init(&w);
+  SR_CHECK_EQ(sr_save_write(g, &w, SR_SAVE_VERSION, 1), SR_OK);
+  /* cut the saga section down to its old size: find it and rewrite its length */
+  size_t old_size = offsetof(SrSaga, portfolio);
+  bool cut = false;
+  /* section: [type][version][payload length][payload = blob length + blob][crc of payload] */
+  for (size_t i = 0; i + 16 < w.len && !cut; i++) {
+    uint32_t type, plen, blen;
+    memcpy(&type, w.data + i, 4);
+    memcpy(&plen, w.data + i + 8, 4);
+    memcpy(&blen, w.data + i + 12, 4);
+    if (type != SR_SEC_SAGA || blen != sizeof(SrSaga) || plen != 4 + sizeof(SrSaga)) continue;
+    size_t drop = sizeof(SrSaga) - old_size;
+    uint32_t np = (uint32_t)(4 + old_size), nb = (uint32_t)old_size;
+    memcpy(w.data + i + 8, &np, 4);
+    memcpy(w.data + i + 12, &nb, 4);
+    size_t tail = i + 12 + 4 + sizeof(SrSaga); /* where the crc was */
+    memmove(w.data + i + 16 + old_size, w.data + tail, w.len - tail);
+    w.len -= drop;
+    uint32_t crc = sr_crc32(w.data + i + 12, np);
+    memcpy(w.data + i + 12 + np, &crc, 4);
+    cut = true;
+  }
+  SR_CHECK(cut);
+  if (cut) {
+    SrGame *l = sr_game_create();
+    SR_CHECK_EQ(sr_save_read(l, w.data, w.len), SR_OK);
+    SR_CHECK_EQ(l->chess.saga.season, 3);
+    SR_CHECK_EQ(l->chess.saga.bond[SR_CAST_FIXER], 33);
+    SR_CHECK_EQ(l->chess.saga.street_gang, -1);
+    sr_game_destroy(l);
+  }
+  sr_writer_free(&w);
+  sr_game_destroy(g);
+}
+
 void suite_play(void) {
   SR_RUN(test_headlines);
   SR_RUN(test_patron_warning);
@@ -1425,4 +1654,5 @@ void suite_play(void) {
   SR_RUN(test_people_drama);
   SR_RUN(test_story_fixes);
   SR_RUN(test_save_v6);
+  SR_RUN(test_more_endings);
 }

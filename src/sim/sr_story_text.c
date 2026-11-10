@@ -116,7 +116,7 @@ const char *sr_story_ghost_text(void) {
 }
 
 /* [ending][line]: the handler, the journalist, the Ghost. */
-static const char *const k_endings[SR_END_SUNRISE + 1][3] = {
+static const char *const k_endings[SR_END_COUNT][3] = {
     {"", "", ""},
     {"We won. You did that. Nobody will ever know, which is the point.", "%1 owns the board now. I can't prove how.",
      "Loyal to the end. The Pall stays."},
@@ -127,10 +127,22 @@ static const char *const k_endings[SR_END_SUNRISE + 1][3] = {
     {"You picked a king. Hope you picked right.", "%1 rises out of nowhere. Somebody made that happen.",
      "Kings come and go. The runner who crowns them stays."},
     {"The grid is down. Look outside.", "The sky over the city is blue. Nobody can explain it.",
-     "You found the machine. Enjoy the sun."}};
+     "You found the machine. Enjoy the sun."},
+    {"The chair is yours. My people are your people now. Don't waste them.",
+     "%1 promotes from the street. Nobody knows who runs its dirty work.",
+     "You sat down at the table. Mind it doesn't eat you."},
+    {"You walked. Smart. Don't send a postcard.", "The runner everyone talked about is gone. So are their friends.",
+     "Some games you win by leaving the board."},
+    {"Reformers. In my city. You'll regret this, and so will they.",
+     "City Hall is clean for the first time in years. It won't last. Enjoy it.",
+     "Votes are a kind of code too. You rewrote them."},
+    {"The gangs? You gave the city to the gangs?", "Corp security pulls out as %1 take the streets.",
+     "The street was always theirs. You just made it official."},
+    {"You bought a seat at the table. Literally.", "Mystery investor takes a seat on the %1 board.",
+     "Money talks. Yours just learned to shout."}};
 
 void sr_story_ending_text(char *out, size_t cap, SrEnding e, int line, const char *corp) {
-  if ((unsigned)e > SR_END_SUNRISE || line < 0 || line > 2) {
+  if ((unsigned)e >= SR_END_COUNT || line < 0 || line > 2) {
     out[0] = '\0';
     return;
   }

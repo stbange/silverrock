@@ -467,6 +467,7 @@ void sr_game_chess_minute(SrGame *g, int64_t t) {
   SrChess *ch = &g->chess;
   ch->street_cred = g->player.prog.street_cred;
   ch->saga.cash = g->player.cred;
+  ch->saga.portfolio = sr_market_portfolio(&ch->market, g->city);
   if (ch->saga.refund > 0) { /* someone pays the player back */
     char why[48];
     snprintf(why, sizeof why, "from %s", ch->story.cast[ch->saga.refund_role % SR_CAST_COUNT].name);
@@ -684,7 +685,14 @@ SrResult sr_game_accept_offer(SrGame *g) {
 
 SrResult sr_game_choose_ending(SrGame *g, SrEnding e) {
   SrStory *s = &g->chess.story;
-  if (!s->finale_ready || !(sr_saga_endings(&g->chess) & (1u << e))) return SR_ERR_INVALID;
+  if (!s->finale_ready || (unsigned)e >= SR_END_COUNT || !(sr_saga_endings(&g->chess) & (1u << e)))
+    return SR_ERR_INVALID;
+  if (e == SR_END_EXODUS) { /* leaving costs half of everything; the city forgets the runner */
+    int64_t half = g->player.cred / 2;
+    sr_player_tx(&g->player, now_of(g), (int32_t)-SR_MIN(half, 2000000000LL), "leaving town");
+    memset(g->heat.level, 0, sizeof g->heat.level);
+    g->enc.active = false;
+  }
   sr_story_end(&g->chess, g->city, e, now_of(g));
   deliver_story(g);
   sync_world(g, now_of(g));
@@ -829,7 +837,7 @@ const char *sr_game_story_option(const SrGame *g, int i, int *kind) {
   }
   if (s->finale_ready) {
     unsigned m = sr_saga_endings(&g->chess);
-    for (int e = SR_END_LOYAL; e <= SR_END_SUNRISE; e++) {
+    for (int e = SR_END_LOYAL; e < SR_END_COUNT; e++) {
       if (!(m & (1u << e))) continue;
       if (e == SR_END_KINGMAKER) { /* the player picks the king */
         for (int k = 0; k < g->city->factions.corp_count; k++)

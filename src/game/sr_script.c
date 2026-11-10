@@ -593,9 +593,9 @@ static bool story_bot(SrGame *g, int max_tier) {
   if (st->finale_ready) { /* endings vary by seed and season */
     unsigned m = sr_saga_endings(&g->chess);
     int n = 0;
-    for (int e = SR_END_LOYAL; e <= SR_END_SUNRISE; e++) n += (m >> e) & 1u;
+    for (int e = SR_END_LOYAL; e < SR_END_COUNT; e++) n += (m >> e) & 1u;
     int pick = (int)(sr_mix64(g->seed + g->chess.saga.season * 977u) % (uint64_t)SR_MAX(1, n));
-    for (int e = SR_END_LOYAL; e <= SR_END_SUNRISE; e++)
+    for (int e = SR_END_LOYAL; e < SR_END_COUNT; e++)
       if (((m >> e) & 1u) && pick-- == 0) {
         sr_game_choose_ending(g, (SrEnding)e);
         break;

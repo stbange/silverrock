@@ -58,7 +58,7 @@ Then serve `build/web/` with any static web server and open `silverrock.html`.
 
 | Suite | Command |
 |---|---|
-| Unit tests (211 tests) | `./build/linux-gcc-debug/sr_tests` |
+| Unit tests (212 tests) | `./build/linux-gcc-debug/sr_tests` |
 | Platform and GL tests (needs a display or Xvfb) | `xvfb-run -a ./build/linux-gcc-debug/sr_platform_tests` |
 | Headless game scenarios | `ctest --test-dir build/linux-gcc-debug -R game_` |
 | World sweep / balance report | `./build/linux-gcc-debug/sr_headless --sweep 2000` / `--balance 20` |
@@ -105,6 +105,7 @@ and spec deltas (24 capabilities, 287 requirements, 496 scenarios). Implemented 
 | Navigation and guidance | [`add-navigation-guidance`](openspec/changes/add-navigation-guidance) | navigation, guidance |
 | Building interiors | [`add-building-interiors`](openspec/changes/add-building-interiors) | player-life, city-generation, retro-rendering, population-simulation |
 | Endless saga | [`add-endless-saga`](openspec/changes/add-endless-saga) | story-campaign, news-media, game-persistence |
+| More endings | [`add-more-endings`](openspec/changes/add-more-endings) | story-campaign |
 
 Validate the specs:
 

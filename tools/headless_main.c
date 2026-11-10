@@ -209,9 +209,9 @@ static void pt_story_choices(SrGame *g, FILE *ev, int day, bool loyal) {
   if (st->finale_ready && st->ending == SR_END_NONE) {
     unsigned m = sr_saga_endings(&g->chess);
     int n = 0;
-    for (int e = SR_END_LOYAL; e <= SR_END_SUNRISE; e++) n += (m >> e) & 1u;
+    for (int e = SR_END_LOYAL; e < SR_END_COUNT; e++) n += (m >> e) & 1u;
     int pick = (int)(sr_mix64(g->seed + g->chess.saga.season * 977u) % (uint64_t)(n > 0 ? n : 1));
-    for (int e = SR_END_LOYAL; e <= SR_END_SUNRISE; e++)
+    for (int e = SR_END_LOYAL; e < SR_END_COUNT; e++)
       if (((m >> e) & 1u) && pick-- == 0) {
         sr_game_choose_ending(g, (SrEnding)e);
         snprintf(buf, sizeof buf, "chose the ending %s (offered mask %x)", sr_ending_name((SrEnding)e), m);
