@@ -1449,7 +1449,7 @@ static void test_budget_and_saves(void) {
   printf("  pose evaluation: %.3f ms for 48 characters\n", per_frame);
   SR_CHECK(per_frame < 8.0);
   /* saves: the format is unchanged and nothing of the animation is stored */
-  SR_CHECK_EQ(SR_SAVE_VERSION, 5u);
+  SR_CHECK_EQ(SR_SAVE_VERSION, 6u); /* v6 added the saga, nothing of the animation */
   g->fx.shot_t = 99.0;
   g->fx.bob = 3.0f;
   g->fx.eye_y = 1.2f;

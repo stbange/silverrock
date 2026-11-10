@@ -339,6 +339,7 @@ typedef enum SrTermTab {
   SR_TAB_MARKET,
   SR_TAB_BOARD,
   SR_TAB_STORY,
+  SR_TAB_PEOPLE, /* the people around the player: standing, favours, requests */
   SR_TAB_COUNT
 } SrTermTab;
 typedef enum SrEncChoice { SR_ENC_FIGHT, SR_ENC_FLEE, SR_ENC_PAY } SrEncChoice;
@@ -379,6 +380,8 @@ SrResult sr_game_accept_retainer(SrGame *g);
 SrResult sr_game_accept_offer(SrGame *g);
 SrResult sr_game_trade(SrGame *g, int corp, int qty);
 SrResult sr_game_choose_ending(SrGame *g, SrEnding e);
+/* Answers the open personal request: yes pays its cost (denied without the cred), no refuses. */
+SrResult sr_game_answer_ask(SrGame *g, bool yes);
 /* Buys fake evidence pointing at a faction for an accepted job (framing). */
 SrResult sr_game_frame(SrGame *g, int32_t job, int faction);
 /* Black-op (T4) jobs from the handler when trust and Street Cred allow; returns jobs offered. */

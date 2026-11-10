@@ -360,6 +360,11 @@ void sr_guide_objective(const SrGame *g, char *out, int cap) {
       snprintf(out, (size_t)cap, "REPORT BACK: %s", where);
     else
       snprintf(out, (size_t)cap, "JOB: %s AT %s", sr_job_type_name((SrJobType)j->type), where);
+  } else if (g->chess.saga.ask.open) { /* someone is waiting for an answer */
+    snprintf(out, (size_t)cap, "%s IS WAITING FOR AN ANSWER: TERMINAL, PEOPLE",
+             g->chess.story.cast[g->chess.saga.ask.role % SR_CAST_COUNT].name);
+    for (char *q = out; *q; q++)
+      if (*q >= 'a' && *q <= 'z') *q = (char)(*q - 32);
   } else if (p->rent > 0 && p->rent_due - t < 2 * 86400 && p->cred < p->rent) {
     snprintf(out, (size_t)cap, "RENT DUE IN %d H: %d CRED. FIND WORK.", (int)((p->rent_due - t) / 3600), p->rent);
   } else if (p->satiety < 25.0f) {

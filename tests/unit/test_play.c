@@ -605,8 +605,18 @@ static void test_staged_acts(void) {
   for (int e = 0; e <= SR_END_SUNRISE + 1; e++)
     for (int l = -1; l <= 3; l++) sr_story_ending_text(line, sizeof line, (SrEnding)e, l, "X");
   for (int a = SR_ACT_PROLOGUE; a <= SR_ACT_EPILOGUE; a++) SR_CHECK(sr_story_act_text((SrAct)a)[0]);
-  for (int k = 0; k < SR_STORY_QUEUE + 3; k++) sr_story_say(&g->chess, SR_CAST_FIXER, "queued");
+  g->chess.camp.msg_count = 0;
+  for (int k = 0; k < SR_STORY_QUEUE + 3; k++) {
+    char q[16];
+    snprintf(q, sizeof q, "queued %d", k);
+    sr_story_say(&g->chess, SR_CAST_FIXER, q);
+  }
   SR_CHECK_EQ(g->chess.camp.msg_count, SR_STORY_QUEUE);
+  /* nobody says the same thing twice in a row */
+  SR_SPEC("story-campaign", "No repeated lines");
+  g->chess.camp.msg_count = 0;
+  for (int k = 0; k < 4; k++) sr_story_say(&g->chess, SR_CAST_FIXER, "the same line");
+  SR_CHECK_EQ(g->chess.camp.msg_count, 1);
   /* Act III: the scenario corp's message on billboards everywhere */
   int news3 = g->chess.news.count;
   st->act_started -= SR_ACT2_MAX_S;
@@ -745,10 +755,12 @@ static void test_nudge_and_epilogue(void) {
   SR_CHECK_EQ(sr_game_choose_ending(g, SR_END_BURN), SR_OK);
   SR_CHECK(st->sandbox);
   SR_CHECK_EQ(g->chess.pol.curfew, 0); /* the old order is gone */
-  SR_CHECK(!g->chess.camp.new_cycle);
+  SR_CHECK_EQ(g->chess.saga.season, 0);
   sr_game_skip(g, 2 * SR_WEEK_S + SR_TICK_S, false);
-  SR_CHECK(g->chess.camp.new_cycle);
-  SR_CHECK(inbox_has(g, "Work's back"));
+  SR_CHECK_EQ(g->chess.saga.season, 1); /* the next season: the corps rebuild, the gangs move */
+  SR_CHECK(inbox_has(g, "the gangs smell it"));
+  SR_CHECK_EQ(st->ending, SR_END_NONE);
+  SR_CHECK(!st->sandbox);
   sr_game_skip(g, SR_WEEK_S, false);
   int active = 0;
   for (int i = 0; i < SR_MAX_ARCS; i++) active += st->arcs[i].active;
@@ -843,6 +855,553 @@ static void test_save_v5(void) {
   sr_game_destroy(g);
 }
 
+/* ---- the saga: seasons and people -------------------------------------------------------------- */
+
+/* A game in Act II on a retainer, rich enough to help people. */
+static SrGame *saga_game(uint64_t seed) {
+  SrGame *g = game(seed);
+  SrStory *st = &g->chess.story;
+  st->offer_open = true;
+  sr_game_accept_retainer(g);
+  st->act = SR_ACT_KNIGHT;
+  st->trust = 60;
+  g->player.cred = 50000;
+  g->player.prog.street_cred = 50;
+  g->chess.saga.cash = g->player.cred;
+  return g;
+}
+
+static void force_ask(SrGame *g, SrAskType t, SrCastRole r, int corp, int32_t cost) {
+  g->chess.saga.ask = (SrAsk){(uint8_t)t, (uint8_t)r, (int8_t)corp, true, cost, sr_game_time(g) + SR_ASK_OPEN_S};
+}
+
+static void test_seasons(void) {
+  SR_SPEC("story-campaign", "The game goes on in seasons");
+  SrGame *g = saga_game(61);
+  SrStory *st = &g->chess.story;
+  SrSaga *sg = &g->chess.saga;
+  SR_CHECK_STR(sr_saga_season_name(sg), "The Climb");
+  int patron = st->patron;
+  /* a loyal ending: two weeks later the next season, with the winner as everybody's target */
+  st->act = SR_ACT_PROMOTION;
+  st->finale_ready = true;
+  st->scenario = SR_SC_MERGER;
+  st->scenario_corp = (int8_t)patron;
+  SR_CHECK_EQ(sr_game_choose_ending(g, SR_END_LOYAL), SR_OK);
+  SR_CHECK_EQ(st->act, SR_ACT_EPILOGUE);
+  SR_CHECK(sg->bond[SR_CAST_HANDLER] >= 15); /* the handler takes it personally, in a good way */
+  int64_t ended = sr_game_time(g);
+  sr_game_skip(g, SR_INTERLUDE_S - SR_TICK_S, false);
+  SR_CHECK_EQ(sg->season, 0);
+  sr_game_skip(g, 2 * SR_TICK_S, false);
+  SR_CHECK_EQ(sg->season, 1);
+  SR_CHECK_STR(sr_saga_season_name(sg), "The Reckoning");
+  SR_CHECK_EQ(sg->endings[0], SR_END_LOYAL);
+  SR_CHECK_EQ(sg->scenarios[0], SR_SC_MERGER);
+  SR_CHECK_EQ(sg->kings[0], patron);
+  SR_CHECK(sg->season_started >= ended + SR_INTERLUDE_S);
+  SR_CHECK_EQ(st->ending, SR_END_NONE);
+  SR_CHECK_EQ(st->act, SR_ACT_KNIGHT); /* still on the retainer: straight back to real operations */
+  SR_CHECK(st->retainer && st->patron == patron && st->first_patron == patron);
+  SR_CHECK(!st->finale_ready && !st->sandbox && g->chess.camp.ending_at == 0);
+  SR_CHECK(inbox_has(g, "every knife in the city"));
+  bool titled = false;
+  for (int i = 0; i < 4; i++) {
+    const SrLogEntry *le = sr_story_log_entry(&g->chess, i);
+    titled |= le && strcmp(le->text, "Season 2: The Reckoning") == 0;
+  }
+  SR_CHECK(titled);
+  int active = 0;
+  for (int i = 0; i < SR_MAX_ARCS; i++) active += st->arcs[i].active;
+  SR_CHECK(active >= 1); /* the season opens with an arc */
+  /* the next climax does not repeat the last scenario, and comes again */
+  st->act_started -= SR_ACT2_MAX_S;
+  sr_game_skip(g, SR_TICK_S + 60, false);
+  SR_CHECK_EQ(st->act, SR_ACT_PROMOTION);
+  SR_CHECK(st->scenario != SR_SC_MERGER && st->scenario != SR_SC_NONE);
+  /* Street Cred above Knight stays open after the first ending */
+  /* a second ending, burned: the handler turns, the hunt stays personal into season three */
+  st->finale_ready = true;
+  st->leaks = 2;
+  SR_CHECK_EQ(sr_game_choose_ending(g, SR_END_BURN), SR_OK);
+  SR_CHECK(sg->bond[SR_CAST_HANDLER] <= SR_BOND_ENEMY);
+  SR_CHECK(sg->bond[SR_CAST_JOURNALIST] >= 15);
+  st->hostile = (int8_t)patron;
+  st->patron = -1;
+  st->retainer = false;
+  sr_game_skip(g, SR_INTERLUDE_S + SR_TICK_S, false);
+  SR_CHECK_EQ(sg->season, 2);
+  SR_CHECK_STR(sr_saga_season_name(sg), "Ashes");
+  SR_CHECK_EQ(st->hostile, patron); /* personal: the grudge survives the reset */
+  SR_CHECK(sr_story_blacklisted(&g->chess, patron));
+  SR_CHECK(st->patron >= 0 && st->patron != patron && st->offer_open && !st->retainer);
+  SR_CHECK_EQ(st->act, SR_ACT_PAWN);
+  SR_CHECK_EQ(st->leaks, 0);
+  /* accepting the new retainer: Act II after a week in a later season, not three */
+  SR_CHECK_EQ(sr_game_accept_retainer(g), SR_OK);
+  st->trust = 60;
+  sr_game_skip(g, SR_WEEK_S + SR_TICK_S, false);
+  SR_CHECK_EQ(st->act, SR_ACT_KNIGHT);
+  /* without a personal grudge the old hunt is called off at the reset */
+  sg->bond[SR_CAST_HANDLER] = 0;
+  st->act = SR_ACT_PROMOTION;
+  st->finale_ready = true;
+  SR_CHECK_EQ(sr_game_choose_ending(g, SR_END_KINGMAKER), SR_OK);
+  sr_game_skip(g, SR_INTERLUDE_S + SR_TICK_S, false);
+  SR_CHECK_EQ(sg->season, 3);
+  SR_CHECK_STR(sr_saga_season_name(sg), "The Crown");
+  SR_CHECK_EQ(st->hostile, -1);
+  SR_CHECK(inbox_has(g, "called off the hunt"));
+  /* Sunrise: the sun stays out, and that ending is not offered twice */
+  sg->bond[SR_CAST_GHOST] = SR_BOND_FRIEND; /* a Ghost who listens opens it */
+  st->act = SR_ACT_PROMOTION;
+  st->finale_ready = true;
+  SR_CHECK(sr_saga_endings(&g->chess) & (1u << SR_END_SUNRISE));
+  SR_CHECK_EQ(sr_game_choose_ending(g, SR_END_SUNRISE), SR_OK);
+  SR_CHECK(sg->sun_seen && g->pall_removed);
+  sr_game_skip(g, SR_INTERLUDE_S + SR_TICK_S, false);
+  SR_CHECK_STR(sr_saga_season_name(sg), "Daylight");
+  SR_CHECK(g->pall_removed);
+  SR_CHECK(inbox_has(g, "rebuilding the machine"));
+  SR_CHECK(!(sr_saga_endings(&g->chess) & (1u << SR_END_SUNRISE)));
+  /* a reporter who trusts the runner opens Burn the Board without leaks */
+  st->leaks = 0;
+  st->hostile = -1;
+  sg->bond[SR_CAST_JOURNALIST] = 0;
+  SR_CHECK(!(sr_saga_endings(&g->chess) & (1u << SR_END_BURN)));
+  sg->bond[SR_CAST_JOURNALIST] = SR_BOND_FRIEND;
+  SR_CHECK(sr_saga_endings(&g->chess) & (1u << SR_END_BURN));
+  /* the other season titles */
+  sg->endings[(sg->season - 1) % SR_SAGA_HISTORY] = SR_END_DEFECTOR;
+  SR_CHECK_STR(sr_saga_season_name(sg), "Old Debts");
+  sg->endings[(sg->season - 1) % SR_SAGA_HISTORY] = SR_END_NONE;
+  SR_CHECK_STR(sr_saga_season_name(sg), "The Long Night");
+  sr_game_destroy(g);
+  /* a defector's ending opens a season too */
+  g = saga_game(62);
+  g->chess.story.act = SR_ACT_PROMOTION;
+  g->chess.story.finale_ready = true;
+  g->chess.story.first_patron = (int8_t)((g->chess.story.patron + 1) % g->city->factions.corp_count);
+  SR_CHECK_EQ(sr_game_choose_ending(g, SR_END_DEFECTOR), SR_OK);
+  sr_game_skip(g, SR_INTERLUDE_S + SR_TICK_S, false);
+  SR_CHECK_STR(sr_saga_season_name(&g->chess.saga), "Old Debts");
+  sr_game_destroy(g);
+}
+
+static void test_people_asks(void) {
+  SR_SPEC("story-campaign", "People ask for help");
+  SrGame *g = saga_game(63);
+  SrChess *ch = &g->chess;
+  SrStory *st = &ch->story;
+  SrSaga *sg = &ch->saga;
+  char label[96];
+  sr_saga_ask_label(ch, label, sizeof label);
+  SR_CHECK(label[0] == '\0');
+  SR_CHECK_EQ(sr_game_answer_ask(g, true), SR_ERR_INVALID);
+  SR_CHECK(!sr_saga_answer(ch, g->city, g->pop, true, sr_game_time(g)));
+  /* a request arrives within a week and waits on the terminal */
+  sr_game_skip(g, 6 * 86400, false);
+  SR_CHECK(sg->ask.open);
+  SR_CHECK(sg->asks == 1);
+  sr_saga_ask_label(ch, label, sizeof label);
+  SR_CHECK(label[0] != '\0');
+  g->term_tab = SR_TAB_PEOPLE;
+  SR_CHECK_EQ(sr_game_term_rows(g), 2);
+  char goal[160];
+  g->settings.guidance = true;
+  g->active_job = -1;
+  sr_guide_objective(g, goal, sizeof goal);
+  SR_CHECK(strstr(goal, "IS WAITING FOR AN ANSWER") != NULL);
+  /* silence is an answer: it expires as a no */
+  int refused = sg->refused;
+  sr_game_skip(g, SR_ASK_OPEN_S + SR_TICK_S, false);
+  SR_CHECK(sg->refused == refused + 1);
+  /* money: a yes costs, moves the bond and is remembered; too little cred is refused */
+  int64_t cash = g->player.cred;
+  force_ask(g, SR_ASK_DEBT, SR_CAST_NEIGHBOUR, -1, 1200);
+  sg->bond[SR_CAST_NEIGHBOUR] = 0;
+  sr_saga_ask_label(ch, label, sizeof label);
+  SR_CHECK(strstr(label, "1200 cred") != NULL);
+  SrActionState a;
+  memset(&a, 0, sizeof a);
+  a.pressed[SR_ACT_INTERACT] = true;
+  g->term_sel = 0;
+  sr_game_term_input(g, &a); /* the first row: help */
+  SR_CHECK_EQ(g->player.cred, cash - 1200);
+  SR_CHECK_EQ(sg->bond[SR_CAST_NEIGHBOUR], 25);
+  SR_CHECK(sg->flags[SR_CAST_NEIGHBOUR] & SR_TIE_OWES);
+  SR_CHECK(!sg->ask.open);
+  SR_CHECK(inbox_has(g, "I won't forget it"));
+  force_ask(g, SR_ASK_BAIL, SR_CAST_FIXER, -1, 999999);
+  SR_CHECK_EQ(sr_game_answer_ask(g, true), SR_ERR_DENIED);
+  SR_CHECK(sg->ask.open);
+  g->term_sel = 1;
+  sr_game_term_input(g, &a); /* the second row: refuse */
+  SR_CHECK(!sg->ask.open);
+  SR_CHECK_EQ(sg->bond[SR_CAST_FIXER], -25);
+  force_ask(g, SR_ASK_BAIL, SR_CAST_FIXER, -1, 500);
+  SR_CHECK_EQ(sr_game_answer_ask(g, true), SR_OK);
+  SR_CHECK_EQ(sg->bond[SR_CAST_FIXER], 0);
+  /* a leak for the reporter: the patron trusts less, Burn the Board comes closer */
+  int trust = st->trust, leaks = st->leaks, news = ch->news.count + ch->news.pending_count;
+  force_ask(g, SR_ASK_SOURCE, SR_CAST_JOURNALIST, st->patron, 0);
+  SR_CHECK_EQ(sr_game_answer_ask(g, true), SR_OK);
+  SR_CHECK_EQ(st->trust, trust - 8);
+  SR_CHECK_EQ(st->leaks, leaks + 1);
+  SR_CHECK(ch->news.count + ch->news.pending_count > news);
+  SR_CHECK_EQ(sg->bond[SR_CAST_JOURNALIST], 25);
+  force_ask(g, SR_ASK_SOURCE, SR_CAST_JOURNALIST, st->patron, 0);
+  sr_game_answer_ask(g, false);
+  SR_CHECK_EQ(sg->bond[SR_CAST_JOURNALIST], 10);
+  /* the handler wants the reporter's name: refusing costs trust and wins a friend */
+  SR_SPEC("story-campaign", "Loyalty against friendship");
+  trust = st->trust;
+  force_ask(g, SR_ASK_NAME, SR_CAST_HANDLER, st->patron, 0);
+  sr_game_answer_ask(g, false);
+  SR_CHECK_EQ(st->trust, trust - 10);
+  SR_CHECK_EQ(sg->bond[SR_CAST_JOURNALIST], 30);
+  SR_CHECK(inbox_has(g, "what you didn't do"));
+  /* giving the name: trust, and the reporter is dead */
+  char reporter[SR_NAME_LEN];
+  snprintf(reporter, sizeof reporter, "%s", st->cast[SR_CAST_JOURNALIST].name);
+  trust = st->trust;
+  int lost = sg->lost;
+  force_ask(g, SR_ASK_NAME, SR_CAST_HANDLER, st->patron, 0);
+  sr_game_answer_ask(g, true);
+  SR_CHECK_EQ(st->trust, trust + 15);
+  SR_CHECK(!st->cast[SR_CAST_JOURNALIST].alive);
+  SR_CHECK_EQ(sg->lost, lost + 1);
+  SR_CHECK(inbox_has(g, "the canal"));
+  /* a successor steps in two days later, a stranger */
+  sg->next_ask = sr_game_time(g) + 30 * 86400;
+  sr_game_skip(g, 2 * 86400 + SR_TICK_S, false);
+  SR_CHECK(st->cast[SR_CAST_JOURNALIST].alive);
+  SR_CHECK(strcmp(reporter, st->cast[SR_CAST_JOURNALIST].name) != 0);
+  SR_CHECK_EQ(sg->bond[SR_CAST_JOURNALIST], 0);
+  /* a truce pays the player's half; the Ghost's packet shows the Board */
+  cash = g->player.cred;
+  sg->bond[SR_CAST_RIVAL] = 0;
+  force_ask(g, SR_ASK_TRUCE, SR_CAST_RIVAL, -1, 0);
+  sr_game_answer_ask(g, true);
+  SR_CHECK(sg->refund > 0);
+  sr_game_skip(g, 120, false);
+  SR_CHECK(g->player.cred > cash);
+  SR_CHECK_EQ(sg->refund, 0);
+  force_ask(g, SR_ASK_TRUCE, SR_CAST_RIVAL, -1, 0);
+  sr_game_answer_ask(g, false);
+  SR_CHECK_EQ(sg->bond[SR_CAST_RIVAL], 8);
+  int depth = st->matrix_depth;
+  force_ask(g, SR_ASK_DEEP, SR_CAST_GHOST, -1, 0);
+  sr_game_answer_ask(g, true);
+  SR_CHECK_EQ(st->matrix_depth, depth + 3);
+  force_ask(g, SR_ASK_DEEP, SR_CAST_GHOST, -1, 0);
+  sr_game_answer_ask(g, false);
+  /* the landlord's lease, a place to hide */
+  force_ask(g, SR_ASK_LEASE, SR_CAST_LANDLORD, 1, 2000);
+  sr_game_answer_ask(g, true);
+  SR_CHECK(sg->flags[SR_CAST_LANDLORD] & SR_TIE_OWES);
+  force_ask(g, SR_ASK_LEASE, SR_CAST_LANDLORD, 1, 2000);
+  sr_game_answer_ask(g, false);
+  sg->bond[SR_CAST_RIVAL] = 0;
+  force_ask(g, SR_ASK_HIDE, SR_CAST_RIVAL, 1, 0);
+  sr_game_answer_ask(g, true);
+  SR_CHECK_EQ(sg->bond[SR_CAST_RIVAL], 30);
+  /* turned away, some do not make it */
+  int gone = 0;
+  for (int k = 0; k < 6; k++) {
+    sg->asks++;
+    if (!st->cast[SR_CAST_NEIGHBOUR].alive) break;
+    sg->bond[SR_CAST_NEIGHBOUR] = 40;
+    force_ask(g, SR_ASK_HIDE, SR_CAST_NEIGHBOUR, 1, 0);
+    sr_game_answer_ask(g, false);
+    gone += !st->cast[SR_CAST_NEIGHBOUR].alive;
+  }
+  SR_CHECK(gone == 1);
+  /* names of the requests, the standings */
+  for (int t = 0; t <= SR_ASK_COUNT; t++) SR_CHECK(sr_saga_ask_name((SrAskType)t)[0] != '\0');
+  SR_CHECK_STR(sr_saga_standing(-60), "ENEMY");
+  SR_CHECK_STR(sr_saga_standing(-20), "COLD");
+  SR_CHECK_STR(sr_saga_standing(0), "NEUTRAL");
+  SR_CHECK_STR(sr_saga_standing(20), "WARM");
+  SR_CHECK_STR(sr_saga_standing(40), "FRIEND");
+  SR_CHECK_STR(sr_saga_standing(70), "CLOSE");
+  sr_saga_bond(ch, SR_CAST_COUNT, 5); /* out of range: ignored */
+  sr_game_destroy(g);
+  /* over a season every kind of request comes up, and the test player answers them */
+  g = saga_game(64);
+  g->chess.story.matrix_depth = 30;
+  bool seen[SR_ASK_COUNT] = {false};
+  for (int day = 0; day < 200; day++) {
+    sr_game_skip(g, 86400, false);
+    g->player.cred = 50000;
+    if (g->chess.saga.ask.open) {
+      seen[g->chess.saga.ask.type] = true;
+      sr_bot_answer_ask(g, day % 2 == 0);
+      SR_CHECK(!g->chess.saga.ask.open);
+    }
+  }
+  int kinds = 0;
+  for (int t = 1; t < SR_ASK_COUNT; t++) kinds += seen[t];
+  printf("  request kinds seen in 200 days: %d, helped %d, refused %d, sold out by %d, lost %d\n", kinds,
+         g->chess.saga.helped, g->chess.saga.refused, g->chess.saga.betrayals, g->chess.saga.lost);
+  SR_CHECK(kinds >= 6);
+  SR_CHECK(g->chess.saga.asks >= 20);
+  sr_bot_answer_ask(g, true); /* nothing open: nothing happens */
+  sr_game_destroy(g);
+}
+
+static void test_people_drama(void) {
+  SR_SPEC("story-campaign", "Betrayal by someone let down");
+  SrGame *g = saga_game(65);
+  SrChess *ch = &g->chess;
+  SrStory *st = &ch->story;
+  SrSaga *sg = &ch->saga;
+  sg->next_ask = sr_game_time(g) + 400 * 86400; /* no requests in the way */
+  sg->next_perk = sr_game_time(g) + 400 * 86400;
+  /* a fixer let down twice sells the player out and skips town; hunters come */
+  char fixer[SR_NAME_LEN];
+  snprintf(fixer, sizeof fixer, "%s", st->cast[SR_CAST_FIXER].name);
+  sg->bond[SR_CAST_FIXER] = SR_BOND_ENEMY;
+  sr_game_skip(g, SR_TICK_S + 60, false);
+  SR_CHECK_EQ(sg->betrayals, 1);
+  SR_CHECK(inbox_has(g, "They pay better than you do"));
+  SR_CHECK(ch->camp.hunter >= 0 || g->enc.active);
+  SR_CHECK(!st->cast[SR_CAST_FIXER].alive);
+  char sold[72];
+  snprintf(sold, sizeof sold, "%s sold you out", fixer);
+  bool logged = false;
+  for (int i = 0; i < 8; i++) {
+    const SrLogEntry *e = sr_story_log_entry(ch, i);
+    logged |= e && strcmp(e->text, sold) == 0;
+  }
+  SR_CHECK(logged);
+  /* the others: the neighbour, the reporter, the handler, the rival, and the quiet ones */
+  ch->camp.hunter = -1;
+  g->enc.active = false;
+  int trust = st->trust, news = ch->news.count;
+  sg->bond[SR_CAST_NEIGHBOUR] = sg->bond[SR_CAST_JOURNALIST] = sg->bond[SR_CAST_HANDLER] = SR_BOND_ENEMY;
+  sg->bond[SR_CAST_RIVAL] = sg->bond[SR_CAST_LANDLORD] = sg->bond[SR_CAST_GHOST] = SR_BOND_ENEMY;
+  st->matrix_depth = 0;
+  sr_game_skip(g, SR_TICK_S + 60, false);
+  SR_CHECK(sg->betrayals >= 6);
+  SR_CHECK_EQ(st->trust, trust - 10 - 20 - 8);
+  SR_CHECK(ch->news.count > news); /* the reporter's story about the runner */
+  SR_CHECK(inbox_has(g, "which door is yours") && inbox_has(g, "You're the story now"));
+  SR_CHECK(inbox_has(g, "That stops today") && inbox_has(g, "Mine now"));
+  SR_CHECK(!st->cast[SR_CAST_NEIGHBOUR].alive);
+  SR_CHECK(sg->flags[SR_CAST_HANDLER] & SR_TIE_BETRAYED);
+  int before = sg->betrayals;
+  sr_game_skip(g, SR_TICK_S + 60, false);
+  SR_CHECK_EQ(sg->betrayals, before); /* once each */
+  sr_game_destroy(g);
+
+  /* friends: told once, then favours week by week */
+  SR_SPEC("story-campaign", "Friends stand up for the player");
+  g = saga_game(66);
+  ch = &g->chess;
+  st = &ch->story;
+  sg = &ch->saga;
+  sg->next_ask = sr_game_time(g) + 400 * 86400;
+  for (int r = 0; r < SR_CAST_COUNT; r++) sg->bond[r] = SR_BOND_CLOSE;
+  st->matrix_depth = 200;
+  sr_game_skip(g, SR_TICK_S + 60, false);
+  for (int r = 0; r < SR_CAST_COUNT; r++) SR_CHECK(sg->flags[r] & SR_TIE_CLOSE);
+  SR_CHECK(inbox_has(g, "You're the exception"));
+  SR_CHECK(inbox_has(g, "my notes go to you"));
+  /* a hunt put off, a bill lost, a story buried, a word upstairs, a debt repaid */
+  st->hostile = (int8_t)((st->patron + 1) % g->city->factions.corp_count);
+  st->next_hunt = sr_game_time(g) + 8 * 86400;
+  ch->camp.medical_debt = 700;
+  st->trust = 30;
+  sg->flags[SR_CAST_LANDLORD] |= SR_TIE_OWES;
+  sg->flags[SR_CAST_NEIGHBOUR] |= SR_TIE_OWES;
+  int64_t cash = g->player.cred;
+  for (int w = 0; w < 16; w++) {
+    sr_news_queue(ch, -1, st->patron, -1, false, false, "A pending story", sr_game_time(g) + 30 * 86400);
+    if (st->next_hunt < sr_game_time(g) + 2 * 86400) st->next_hunt = sr_game_time(g) + 2 * 86400;
+    g->player.cred = cash;
+    if (w < 8) ch->camp.medical_debt = 700;
+    g->player.health = g->player.max_health;
+    g->enc.active = false;
+    ch->camp.hunter = -1;
+    sr_game_skip(g, SR_WEEK_S, false);
+    for (int r = 0; r < SR_CAST_COUNT; r++) sg->bond[r] = SR_BOND_CLOSE;
+  }
+  SR_CHECK(inbox_has(g, "wrong district"));
+  SR_CHECK(inbox_has(g, "lost your bill") || inbox_has(g, "some of what I owe you"));
+  SR_CHECK(inbox_has(g, "died on my desk"));
+  SR_CHECK(inbox_has(g, "I vouched for you"));
+  SR_CHECK(inbox_has(g, "First instalment"));
+  /* the neighbour makes a clinic bill disappear */
+  for (int r = 0; r < SR_CAST_COUNT; r++) sg->bond[r] = 0, sg->flags[r] = 0;
+  sg->bond[SR_CAST_NEIGHBOUR] = SR_BOND_CLOSE;
+  ch->camp.medical_debt = 700;
+  sg->next_perk = sr_game_time(g);
+  sr_game_skip(g, SR_TICK_S + 60, false);
+  SR_CHECK(inbox_has(g, "lost your bill"));
+  SR_CHECK_EQ(ch->camp.medical_debt, 0);
+  sr_game_destroy(g);
+
+  /* someone close is taken: pay, or lose them */
+  SR_SPEC("story-campaign", "Someone close is taken");
+  g = saga_game(67);
+  ch = &g->chess;
+  st = &ch->story;
+  sg = &ch->saga;
+  st->hostile = (int8_t)((st->patron + 1) % g->city->factions.corp_count);
+  st->next_hunt = sr_game_time(g) + 400 * 86400;
+  sg->bond[SR_CAST_NEIGHBOUR] = 80;
+  sg->next_perk = sr_game_time(g) + 400 * 86400;
+  sr_game_skip(g, 6 * 86400, false);
+  SR_CHECK(sg->ask.open && sg->ask.type == SR_ASK_RANSOM && sg->ask.role == SR_CAST_NEIGHBOUR);
+  SR_CHECK(sg->flags[SR_CAST_NEIGHBOUR] & SR_TIE_TAKEN);
+  SR_CHECK(sg->ask.cost >= 2000 && sg->ask.cost <= g->player.cred / 2 + 1);
+  SR_CHECK(inbox_has(g, "or they send pieces"));
+  cash = g->player.cred;
+  SR_CHECK_EQ(sr_game_answer_ask(g, true), SR_OK);
+  SR_CHECK(g->player.cred < cash);
+  SR_CHECK(st->cast[SR_CAST_NEIGHBOUR].alive && !(sg->flags[SR_CAST_NEIGHBOUR] & SR_TIE_TAKEN));
+  SR_CHECK(inbox_has(g, "I know what that cost you"));
+  /* not paid: they die, and someone wants the corporation to pay for it */
+  sg->flags[SR_CAST_NEIGHBOUR] |= SR_TIE_TAKEN;
+  force_ask(g, SR_ASK_RANSOM, SR_CAST_NEIGHBOUR, st->hostile, 5000);
+  int arcs = st->arcs_started, lost = sg->lost;
+  for (int i = 0; i < SR_MAX_ARCS; i++) st->arcs[i].active = false;
+  sr_game_skip(g, SR_ASK_OPEN_S + SR_TICK_S, false); /* no answer */
+  SR_CHECK(sg->lost == lost + 1);
+  SR_CHECK(inbox_has(g, "They found"));
+  SR_CHECK(st->arcs_started > arcs);
+  sr_game_destroy(g);
+}
+
+static void test_story_fixes(void) {
+  /* another employer's suspicions do not follow the player, and nobody hires a burned runner overnight */
+  SR_SPEC("story-campaign", "No chain of betrayals");
+  SrGame *g = saga_game(68);
+  SrChess *ch = &g->chess;
+  SrStory *st = &ch->story;
+  int old = st->patron;
+  ch->camp.suspects[0] = (SrSuspect){sr_game_time(g) + 3600, 3, true};
+  st->trust = SR_BETRAYAL; /* one discovery drops them */
+  sr_story_discovered(ch, g->city, sr_game_time(g));
+  SR_CHECK_EQ(st->hostile, old);
+  SR_CHECK_EQ(st->patron, -1);
+  SR_CHECK(!ch->camp.suspects[0].active);
+  SR_CHECK(st->next_counter >= sr_game_time(g) + 2 * SR_WEEK_S); /* the first switch: two weeks of cold shoulders */
+  sr_game_skip(g, SR_WEEK_S, false);
+  SR_CHECK_EQ(st->rival_offer, -1);
+  sr_game_skip(g, SR_WEEK_S + 2 * SR_TICK_S, false);
+  SR_CHECK(st->rival_offer >= 0);
+  SR_CHECK_EQ(sr_game_accept_offer(g), SR_OK);
+  SR_CHECK_EQ(st->trust, SR_TRUST_DEFECT);
+  SR_CHECK(st->next_counter >= sr_game_time(g) + 3 * SR_WEEK_S); /* and longer every time */
+  SR_CHECK_EQ(ch->saga.bond[SR_CAST_HANDLER], 0);
+  sr_game_destroy(g);
+  /* the handler only briefs the patron's own operations */
+  SR_SPEC("story-campaign", "Briefings come from the right person");
+  g = saga_game(69);
+  ch = &g->chess;
+  st = &ch->story;
+  ch->saga.next_ask = sr_game_time(g) + 400 * 86400;
+  int other = (st->patron + 1) % g->city->factions.corp_count, third = (st->patron + 2) % g->city->factions.corp_count;
+  for (int i = 0; i < SR_MAX_ARCS; i++) st->arcs[i].active = false;
+  ch->camp.msg_count = 0;
+  SR_CHECK(sr_story_arc_between(ch, g->city, g->pop, SR_ARC_TAKEOVER, other, third, sr_game_time(g)) >= 0);
+  SR_CHECK_EQ(ch->camp.msg_count, 1);
+  SR_CHECK_EQ(ch->camp.msgs[0].role, SR_CAST_FIXER);
+  ch->camp.msg_count = 0;
+  SR_CHECK(sr_story_arc_between(ch, g->city, g->pop, SR_ARC_TAKEOVER, st->patron, third, sr_game_time(g)) >= 0);
+  SR_CHECK_EQ(ch->camp.msgs[0].role, SR_CAST_HANDLER);
+  /* two arcs of a kind in a row are not announced in the same words */
+  SR_CHECK(strcmp(ch->camp.msgs[0].text, "") != 0);
+  SR_CHECK(sr_saga_was_said(ch, ch->camp.msgs[0].text));
+  SR_CHECK(!sr_saga_was_said(ch, "never said"));
+  sr_game_destroy(g);
+  /* headlines about a site nobody owns read as sentences */
+  SR_SPEC("news-media", "Headlines without an owner");
+  g = game(70);
+  static const SrEventType kinds[4] = {SR_EV_SABOTAGE, SR_EV_THEFT, SR_EV_JOB_DONE, SR_EV_JOB_FAILED};
+  for (int k = 0; k < 4; k++)
+    for (int v = 0; v < 12; v++) {
+      SrWorldEvent e;
+      memset(&e, 0, sizeof e);
+      e.type = kinds[k];
+      e.victim_faction = -1;
+      e.district = 0;
+      e.building = v;
+      e.time = 1000 + v * 77;
+      char head[64];
+      for (int perp = -2; perp <= 0; perp++) {
+        sr_news_event_headline(head, sizeof head, g->city, &e, -1, perp);
+        SR_CHECK(strstr(head, "a firm") == NULL);
+        SR_CHECK(head[0] >= 'A' && head[0] <= 'Z');
+        SR_CHECK(strlen(head) <= 63);
+      }
+    }
+  sr_game_destroy(g);
+}
+
+static void test_save_v6(void) {
+  SR_SPEC("game-persistence", "The saga is saved");
+  SrGame *g = saga_game(71);
+  SrSaga *sg = &g->chess.saga;
+  sg->season = 2;
+  sg->endings[0] = SR_END_LOYAL;
+  sg->endings[1] = SR_END_BURN;
+  sg->bond[SR_CAST_FIXER] = 44;
+  sg->flags[SR_CAST_FIXER] = SR_TIE_OWES;
+  sg->helped = 7;
+  sg->sun_seen = true;
+  force_ask(g, SR_ASK_BAIL, SR_CAST_FIXER, -1, 900);
+  SrWriter w;
+  sr_writer_init(&w);
+  SR_CHECK_EQ(sr_save_write(g, &w, SR_SAVE_VERSION, 1), SR_OK);
+  SrGame *l = sr_game_create();
+  SR_CHECK_EQ(sr_save_read(l, w.data, w.len), SR_OK);
+  SR_CHECK_EQ(l->chess.saga.season, 2);
+  SR_CHECK_EQ(l->chess.saga.endings[1], SR_END_BURN);
+  SR_CHECK_EQ(l->chess.saga.bond[SR_CAST_FIXER], 44);
+  SR_CHECK_EQ(l->chess.saga.helped, 7);
+  SR_CHECK(l->chess.saga.ask.open && l->chess.saga.ask.cost == 900);
+  SR_CHECK(l->pall_removed); /* the sun stays out after loading */
+  SR_CHECK_STR(sr_saga_season_name(&l->chess.saga), "Ashes");
+  sr_writer_free(&w);
+  /* a version 5 save: no saga section, it starts empty */
+  sr_writer_init(&w);
+  SR_CHECK_EQ(sr_save_write(g, &w, 5, 1), SR_OK);
+  SrGame *m = sr_game_create();
+  SR_CHECK_EQ(sr_save_read(m, w.data, w.len), SR_OK);
+  SR_CHECK_EQ(m->chess.saga.season, 0);
+  SR_CHECK_EQ(m->chess.saga.bond[SR_CAST_FIXER], 0);
+  SR_CHECK(!m->chess.saga.ask.open);
+  SR_CHECK_EQ(m->chess.camp.blacklist, g->chess.camp.blacklist);
+  sr_writer_free(&w);
+  /* the terminal shows the season and the people */
+  SrUi ui;
+  sr_ui_init(&ui);
+  g->screen = SR_SCREEN_TERMINAL;
+  g->term_tab = SR_TAB_PEOPLE;
+  sg->flags[SR_CAST_NEIGHBOUR] = SR_TIE_TAKEN;
+  sg->flags[SR_CAST_RIVAL] = SR_TIE_BETRAYED;
+  sg->bond[SR_CAST_RIVAL] = -60;
+  g->chess.story.cast[SR_CAST_LANDLORD].alive = false;
+  sr_ui_begin(&ui, 1280, 720, 2);
+  sr_ui_build(&ui, g, NULL, false);
+  int with = ui.mesh.nv;
+  sg->ask.open = false;
+  sr_ui_begin(&ui, 1280, 720, 2);
+  sr_ui_build(&ui, g, NULL, false);
+  SR_CHECK(ui.mesh.nv > 0 && ui.mesh.nv != with);
+  g->term_tab = SR_TAB_STORY;
+  sr_ui_begin(&ui, 1280, 720, 2);
+  sr_ui_build(&ui, g, NULL, false);
+  SR_CHECK(ui.mesh.nv > 0);
+  sr_ui_free(&ui);
+  sr_game_destroy(m);
+  sr_game_destroy(l);
+  sr_game_destroy(g);
+}
+
 void suite_play(void) {
   SR_RUN(test_headlines);
   SR_RUN(test_patron_warning);
@@ -861,4 +1420,9 @@ void suite_play(void) {
   SR_RUN(test_nudge_and_epilogue);
   SR_RUN(test_notoriety);
   SR_RUN(test_save_v5);
+  SR_RUN(test_seasons);
+  SR_RUN(test_people_asks);
+  SR_RUN(test_people_drama);
+  SR_RUN(test_story_fixes);
+  SR_RUN(test_save_v6);
 }

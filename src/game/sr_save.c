@@ -510,6 +510,11 @@ SrResult sr_save_write(const SrGame *g, SrWriter *w, uint32_t version, int64_t c
   }
   if (version >= 4) put_chess(w, g);
   if (version >= 5) put_campaign(w, g);
+  if (version >= 6) { /* v6: the saga */
+    SecCtx sg = begin(w, SR_SEC_SAGA, 1);
+    put_blob(w, &g->chess.saga, sizeof g->chess.saga);
+    end(sg);
+  }
   s = begin(w, SR_SEC_DELTAS, 1);
   sr_put_u16(w, (uint16_t)g->deltas.count);
   for (int i = 0; i < g->deltas.count; i++) {
@@ -744,6 +749,7 @@ SrResult sr_save_read(SrGame *g, const void *data, size_t len) {
         g->last_raid = sr_get_i64(&s);
         g->flatlines = sr_get_i32(&s);
         break;
+      case SR_SEC_SAGA: get_blob(&s, &g->chess.saga, sizeof g->chess.saga); break;
       case SR_SEC_DELTAS: {
         int n = sr_get_u16(&s);
         for (int i = 0; i < n; i++) {

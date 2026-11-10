@@ -46,6 +46,8 @@ SrAutoplayStats sr_autoplay(SrGame *g, SrStrategy s, int days, int max_tier);
 /* Story bot: plays until the campaign reaches an ending or max_days pass; returns days played,
  * or -1 when no ending was reached. */
 int sr_campaign(SrGame *g, int max_days, SrAutoplayStats *out);
+/* A test player's answer to the open personal request (none open: nothing happens). */
+void sr_bot_answer_ask(SrGame *g, bool loyal);
 
 /* Runs a scenario script; returns 0 on success. On failure err holds "name:line: message". */
 int sr_script_run(const char *text, const char *name, char *err, size_t cap);

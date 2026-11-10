@@ -13,4 +13,6 @@ cash26_median             0        150000
 cash26_max                0        200000
 flatlines_total           1        9999
 reachable_endings         7        99
-approach_knight_spread    0        1.5
+# 1.75 since add-endless-saga: a hammer who used to be dropped by every patron and never made Knight
+# (and so was not counted) now gets there late, in the second season.
+approach_knight_spread    0        1.75

@@ -61,6 +61,10 @@ void sr_story_trust(SrStory *s, int delta) { s->trust = SR_CLAMP(s->trust + delt
 /* ---- the story log and the cast's lines ------------------------------------------------------ */
 
 void sr_story_log(SrChess *ch, int64_t now, const char *text) {
+  for (int i = 0; i < 6; i++) { /* the log tells each thing once, not every week */
+    const SrLogEntry *old = sr_story_log_entry(ch, i);
+    if (old && strcmp(old->text, text) == 0) return;
+  }
   SrLogEntry *e = &ch->camp.log[ch->camp.log_count % SR_STORY_LOG];
   e->time = now;
   snprintf(e->text, sizeof e->text, "%s", text);
@@ -75,6 +79,7 @@ const SrLogEntry *sr_story_log_entry(const SrChess *ch, int i) {
 
 void sr_story_say(SrChess *ch, SrCastRole role, const char *text) {
   SrCampaign *cp = &ch->camp;
+  if (sr_saga_said(ch, text)) return;    /* nobody says the same thing twice in a row */
   if (cp->msg_count >= SR_STORY_QUEUE) { /* the oldest unread line gives way */
     memmove(&cp->msgs[0], &cp->msgs[1], sizeof(SrStoryMsg) * (SR_STORY_QUEUE - 1));
     cp->msg_count--;
@@ -122,7 +127,7 @@ static const uint8_t ARC_OPS[SR_ARC_COUNT][3][2] = {
     {{SR_OP_THEFT, SR_OP_THEFT}, {SR_OP_BRIBE, SR_OP_SMEAR}, {SR_OP_THEFT, SR_OP_SMEAR}},                /* scandal */
 };
 
-static int rival_of(const SrCity *c, int a, uint64_t key) {
+int sr_story_rival_of(const SrCity *c, int a, uint64_t key) {
   int best = -1, bv = 1000;
   for (int k = 0; k < c->factions.corp_count; k++) {
     if (k == a) continue;
@@ -183,10 +188,16 @@ static void beat_start(SrChess *ch, SrCity *c, int idx, int64_t now) {
   const char *place =
       a->building >= 0 ? c->districts[c->blocks[c->buildings[a->building].block].district].name : "town";
   char line[112];
-  sr_story_beat_text(line, sizeof line, (SrArcType)a->type, a->beat, branch, an, bn, place,
-                     sr_mix64(sr_hash_combine(ch->seed, (uint64_t)a->started + a->beat)));
+  uint64_t vkey = sr_mix64(sr_hash_combine(ch->seed, (uint64_t)a->started + a->beat));
+  for (int v = 0; v < 3; v++) { /* another wording when this one was said lately */
+    sr_story_beat_text(line, sizeof line, (SrArcType)a->type, a->beat, branch, an, bn, place, vkey + (uint64_t)v);
+    if (!sr_saga_was_said(ch, line)) break;
+  }
   if (climax) snprintf(line, sizeof line, "This is it: %s against %s, and you are the one going in.", an, bn);
-  sr_story_say(ch, sr_story_teller((SrArcType)a->type), line);
+  /* the handler only briefs the patron's own operations; other people's wars come from the street */
+  SrCastRole teller = sr_story_teller((SrArcType)a->type);
+  if (teller == SR_CAST_HANDLER && a->a != ch->story.patron) teller = SR_CAST_FIXER;
+  sr_story_say(ch, teller, line);
   char entry[72];
   snprintf(entry, sizeof entry, "%s, step %d: %s", sr_arc_name((SrArcType)a->type), a->beat + 1, sr_op_name(t));
   sr_story_log(ch, now, entry);
@@ -210,14 +221,14 @@ static int arc_start(SrChess *ch, SrCity *c, const SrPopulation *pop, SrArcType 
     }
     if (b < 0) t = SR_ARC_SHORTAGE, a = -1;
   }
-  if (a >= 0 && b < 0) b = rival_of(c, a, key);
+  if (a >= 0 && b < 0) b = sr_story_rival_of(c, a, key);
   if (a < 0) {
     /* prefer the patron's arcs */
     if (s->patron >= 0 && sr_mix64(key) % 10u < 6u)
       a = s->patron;
     else
       a = (int)(sr_mix64(key + 1u) % (uint64_t)SR_MAX(1, c->factions.corp_count));
-    b = rival_of(c, a, key);
+    b = sr_story_rival_of(c, a, key);
   }
   if (b < 0) return -1; /* GCOVR_EXCL_LINE reason: cities have several corps */
   SrArc *arc = &s->arcs[idx];
@@ -239,6 +250,10 @@ static int arc_start(SrChess *ch, SrCity *c, const SrPopulation *pop, SrArcType 
   return idx;
 }
 
+int sr_story_arc_between(SrChess *ch, SrCity *c, const SrPopulation *pop, SrArcType t, int a, int b, int64_t now) {
+  return arc_start(ch, c, pop, t, a, b, now);
+}
+
 int sr_story_arc_start(SrChess *ch, SrCity *c, const SrPopulation *pop, SrArcType t, int64_t now) {
   return arc_start(ch, c, pop, t, -1, -1, now);
 }
@@ -248,11 +263,13 @@ void sr_story_beat_done(SrChess *ch, SrCity *c, int idx, bool success, bool offs
   SrArc *a = &ch->story.arcs[idx];
   if (success) a->path = (uint8_t)(a->path | (1u << a->beat));
   bool theirs = ch->story.patron >= 0 && (a->a == ch->story.patron || a->b == ch->story.patron);
-  if (offscreen && theirs) { /* the player let the patron's beat go: tell them how it went */
+  if (offscreen && theirs && (a->beat == 0 || a->beat == a->beats - 1)) { /* how it went without the player */
     char line[112];
     sr_story_skipped_text(line, sizeof line, success, a->a >= 0 ? c->factions.f[a->a].name : "someone",
                           a->b >= 0 ? c->factions.f[a->b].name : "someone");
-    sr_story_say(ch, sr_story_teller((SrArcType)a->type), line);
+    SrCastRole teller = sr_story_teller((SrArcType)a->type);
+    if (teller == SR_CAST_HANDLER && a->a != ch->story.patron) teller = SR_CAST_FIXER;
+    sr_story_say(ch, teller, line);
   }
   if (ch->story.act == SR_ACT_PROMOTION && idx == 0 && a->beat == a->beats - 1) ch->camp.set_piece_done = true;
   a->beat++;
@@ -286,7 +303,7 @@ static void turn_hostile(SrChess *ch, const SrCity *c, int64_t now) {
   s->patron = -1;
   s->retainer = false;
   s->next_hunt = now;
-  s->next_counter = now; /* rivals smell an opportunity */
+  sr_saga_patron_changed(ch, now); /* rivals smell an opportunity, but nobody hires a burned runner overnight */
   char msg[72];
   snprintf(msg, sizeof msg, "%s turns on the player", c->factions.f[s->hostile].name);
   sr_chess_note(ch, now, msg);
@@ -333,7 +350,12 @@ void sr_story_job_done(SrChess *ch, SrCity *c, int client, int target, bool succ
       }
     return;
   }
-  if (client == s->patron) sr_story_trust(s, success ? (evidence > 0 ? 3 : 6) : -8);
+  if (client == s->patron) {
+    sr_story_trust(s, success ? (evidence > 0 ? 3 : 6) : -8);
+    /* the handler's neck is on the line too; good work alone makes a colleague, not a friend */
+    if (!success || ch->saga.bond[SR_CAST_HANDLER] < SR_BOND_FRIEND)
+      sr_saga_bond(ch, SR_CAST_HANDLER, success ? 2 : -3);
+  }
 }
 
 /* The patron's people finish looking into the player's jobs against it. */
@@ -361,6 +383,9 @@ bool sr_story_defect(SrChess *ch, const SrCity *c, int corp, int64_t now) {
   s->rival_offer = -1;
   s->trust = SR_TRUST_DEFECT;
   s->next_hunt = now;
+  sr_saga_patron_changed(ch, now);
+  ch->saga.bond[SR_CAST_HANDLER] = 0; /* a new handler, a stranger */
+  ch->saga.flags[SR_CAST_HANDLER] = 0;
   s->cast[SR_CAST_HANDLER].generation++;
   s->cast[SR_CAST_HANDLER].alive = true;
   s->cast[SR_CAST_HANDLER].vacant_since = 0;
@@ -424,6 +449,17 @@ unsigned sr_story_endings(const SrStory *s) {
   return m;
 }
 
+unsigned sr_saga_endings(const SrChess *ch) {
+  const SrStory *s = &ch->story;
+  const SrSaga *g = &ch->saga;
+  unsigned m = sr_story_endings(s);
+  /* the people around the player open doors: a reporter who trusts them, a Ghost who listens */
+  if (g->bond[SR_CAST_JOURNALIST] >= SR_BOND_FRIEND && s->cast[SR_CAST_JOURNALIST].alive) m |= 1u << SR_END_BURN;
+  if (g->bond[SR_CAST_GHOST] >= SR_BOND_FRIEND) m |= 1u << SR_END_SUNRISE;
+  if (g->sun_seen) m &= ~(1u << SR_END_SUNRISE); /* the sun is already out */
+  return m;
+}
+
 static void boost(SrChess *ch, int f, int capital, int image) {
   if (f < 0) return;
   ch->f[f].res[SR_RES_CAPITAL] = (int16_t)SR_CLAMP(ch->f[f].res[SR_RES_CAPITAL] + capital, 0, 200);
@@ -479,6 +515,7 @@ void sr_story_end(SrChess *ch, SrCity *c, SrEnding e, int64_t now) {
   sr_chess_note(ch, now, head);
   sr_story_log(ch, now, sr_ending_name(e));
   ch->camp.ending_at = now;
+  sr_saga_ending(ch, c, e, now);
 }
 
 void sr_story_set_piece_abandoned(SrChess *ch, SrCity *c, int64_t now) {
@@ -504,6 +541,11 @@ static void begin_act3(SrChess *ch, SrCity *c, const SrPopulation *pop, int lead
   s->act = SR_ACT_PROMOTION;
   s->act_started = now;
   s->scenario = (uint8_t)sr_story_pick_scenario(ch, c, leader, &other);
+  if (ch->saga.season > 0) { /* no season climaxes the way the last one did */
+    uint8_t last = ch->saga.scenarios[(ch->saga.season - 1) % SR_SAGA_HISTORY];
+    for (int k = 0; k < 4 && (s->scenario == last || (s->scenario == SR_SC_PALL && ch->saga.sun_seen)); k++)
+      s->scenario = (uint8_t)(s->scenario % SR_SC_GHOST + 1);
+  }
   s->scenario_corp =
       (int8_t)(s->scenario == SR_SC_PALL && other >= 0 && energy(c, other) && !energy(c, leader) ? other : leader);
   s->scenario_other = (int8_t)(s->scenario_corp == leader ? other : leader);
@@ -537,7 +579,7 @@ static void stage_act(SrChess *ch, SrCity *c, int64_t now) {
     sr_headline(head, sizeof head, "%1 hires quietly, analysts puzzled", c->factions.f[s->patron].name, NULL, NULL);
     sr_news_publish(ch, c, -1, s->patron, -1, -1, SR_NEWS_STORY, false, head, now);
   }
-  int rival = s->patron >= 0 ? rival_of(c, s->patron, (uint64_t)now) : (leader + 1) % c->factions.corp_count;
+  int rival = s->patron >= 0 ? sr_story_rival_of(c, s->patron, (uint64_t)now) : (leader + 1) % c->factions.corp_count;
   sr_headline(head, sizeof head, "%1 vows to defend its interests", c->factions.f[rival].name, NULL, NULL);
   sr_news_publish(ch, c, -1, rival, -1, -1, SR_NEWS_STORY, false, head, now);
   if (s->act == SR_ACT_KNIGHT) { /* the streets tighten: a curfew where the gangs are */
@@ -573,29 +615,10 @@ void sr_story_tick(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_t now)
       cp->beat_at[i] = 0;
       beat_start(ch, c, i, now);
     }
-  if (s->act == SR_ACT_EPILOGUE) { /* the city goes on: a new cycle two weeks after the ending */
-    if (!cp->new_cycle && cp->ending_at > 0 && now >= cp->ending_at + 2 * SR_WEEK_S) {
-      cp->new_cycle = true;
-      if (s->patron < 0)
-        for (int k = 0; k < c->factions.corp_count && s->patron < 0; k++)
-          if (!sr_story_blacklisted(ch, k) && k != s->hostile) {
-            s->patron = (int8_t)k;
-            s->offer_open = true;
-          }
-      sr_story_say(ch, SR_CAST_FIXER, "The board has new players and new grudges. Work's back, if you want it.");
-      sr_story_log(ch, now, "A new cycle begins");
-    }
-    if (cp->new_cycle && now >= s->next_offer) {
-      int active = 0;
-      for (int i = 0; i < SR_MAX_ARCS; i++) active += s->arcs[i].active;
-      if (active < 1) sr_story_arc_start(ch, c, pop, (SrArcType)(sr_mix64((uint64_t)now) % SR_ARC_COUNT), now);
-      s->next_offer = now + SR_WEEK_S;
-    }
-    return;
-  }
+  if (s->act == SR_ACT_EPILOGUE) return; /* the interlude: the saga starts the next season */
   SrCredTier tier = sr_cred_tier(ch->street_cred);
   if (s->act == SR_ACT_PAWN && s->retainer && tier >= SR_CRED_RUNNER && s->trust >= SR_TRUST_ACT2 &&
-      now - s->act_started >= SR_ACT1_MIN_S) {
+      now - s->act_started >= (ch->saga.season > 0 ? SR_WEEK_S : SR_ACT1_MIN_S)) {
     s->act = SR_ACT_KNIGHT;
     s->act_started = now;
     s->next_counter = now + SR_WEEK_S;
@@ -607,7 +630,7 @@ void sr_story_tick(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_t now)
       s->retainer) { /* two weeks of nothing but street gigs */
     cp->nudged = true;
     sr_story_say(ch, SR_CAST_HANDLER, sr_story_nudge_text());
-    int rival = rival_of(c, s->patron, (uint64_t)now);
+    int rival = sr_story_rival_of(c, s->patron, (uint64_t)now);
     int b = pick_facility(c, rival, (uint64_t)now, false);
     int id = sr_chess_start_op(ch, c, SR_OP_THEFT, s->patron, rival, b, -1, now);
     SrOperation *op = sr_chess_op(ch, id);
@@ -666,7 +689,7 @@ void sr_story_tick(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_t now)
     }
     /* nobody chose: the board decides two weeks later */
     if (s->finale_ready && now >= cp->ready_at + SR_FINALE_S) {
-      unsigned m = sr_story_endings(s);
+      unsigned m = sr_saga_endings(ch);
       sr_story_end(ch, c, (m & (1u << SR_END_LOYAL)) ? SR_END_LOYAL : SR_END_KINGMAKER, now);
     }
   }

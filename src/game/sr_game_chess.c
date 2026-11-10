@@ -283,9 +283,10 @@ static void award_cred(SrGame *g, const SrJob *j, bool done, int64_t t) {
   if (gain > 0) {
     gain = SR_MIN(gain, SR_CRED_WEEK_CAP - cp->cred_gained);
     if (gain <= 0) return;
-    int cap = g->chess.story.act >= SR_ACT_PROMOTION || g->chess.story.ending != SR_END_NONE ? 100
-              : g->chess.story.act >= SR_ACT_KNIGHT                                          ? 89
-                                                                                             : 69;
+    int cap = g->chess.story.act >= SR_ACT_PROMOTION || g->chess.story.ending != SR_END_NONE || g->chess.saga.season > 0
+                  ? 100
+              : g->chess.story.act >= SR_ACT_KNIGHT ? 89
+                                                    : 69;
     gain = SR_MIN(gain, cap - pr->street_cred);
     if (gain <= 0) return;
     cp->cred_gained = (int8_t)(cp->cred_gained + gain);
@@ -391,7 +392,7 @@ static void sync_world(SrGame *g, int64_t t) {
   for (int d = 0; d < g->city->district_count && d < 16; d++)
     if (sr_politics_curfew_now(p, d, t)) mask = (uint16_t)(mask | (1u << d));
   g->crowd.curfew = mask;
-  if (g->chess.story.ending == SR_END_SUNRISE) g->pall_removed = true; /* the only daylight in the game */
+  if (g->chess.story.ending == SR_END_SUNRISE || g->chess.saga.sun_seen) g->pall_removed = true; /* daylight */
 }
 
 /* Police stop people on curfew streets. */
@@ -465,6 +466,13 @@ static void story_messages(SrGame *g) {
 void sr_game_chess_minute(SrGame *g, int64_t t) {
   SrChess *ch = &g->chess;
   ch->street_cred = g->player.prog.street_cred;
+  ch->saga.cash = g->player.cred;
+  if (ch->saga.refund > 0) { /* someone pays the player back */
+    char why[48];
+    snprintf(why, sizeof why, "from %s", ch->story.cast[ch->saga.refund_role % SR_CAST_COUNT].name);
+    sr_player_tx(&g->player, t, ch->saga.refund, why);
+    ch->saga.refund = 0;
+  }
   book_jobs(g, t);
   deliver_story(g);
   int handlers_before = ch->story.cast[SR_CAST_HANDLER].generation;
@@ -676,11 +684,27 @@ SrResult sr_game_accept_offer(SrGame *g) {
 
 SrResult sr_game_choose_ending(SrGame *g, SrEnding e) {
   SrStory *s = &g->chess.story;
-  if (!s->finale_ready || !(sr_story_endings(s) & (1u << e))) return SR_ERR_INVALID;
+  if (!s->finale_ready || !(sr_saga_endings(&g->chess) & (1u << e))) return SR_ERR_INVALID;
   sr_story_end(&g->chess, g->city, e, now_of(g));
   deliver_story(g);
   sync_world(g, now_of(g));
   g->autosave_requests++;
+  return SR_OK;
+}
+
+SrResult sr_game_answer_ask(SrGame *g, bool yes) {
+  SrSaga *sg = &g->chess.saga;
+  if (!sg->ask.open) return SR_ERR_INVALID;
+  if (yes && sg->ask.cost > 0) {
+    if (g->player.cred < sg->ask.cost) return SR_ERR_DENIED;
+    char why[48];
+    snprintf(why, sizeof why, "%s: %s", sr_saga_ask_name((SrAskType)sg->ask.type),
+             g->chess.story.cast[sg->ask.role % SR_CAST_COUNT].name);
+    sr_player_tx(&g->player, now_of(g), -sg->ask.cost, why);
+  }
+  sg->cash = g->player.cred;
+  sr_saga_answer(&g->chess, g->city, g->pop, yes, now_of(g));
+  deliver_story(g);
   return SR_OK;
 }
 
@@ -804,7 +828,7 @@ const char *sr_game_story_option(const SrGame *g, int i, int *kind) {
     }
   }
   if (s->finale_ready) {
-    unsigned m = sr_story_endings(s);
+    unsigned m = sr_saga_endings(&g->chess);
     for (int e = SR_END_LOYAL; e <= SR_END_SUNRISE; e++) {
       if (!(m & (1u << e))) continue;
       if (e == SR_END_KINGMAKER) { /* the player picks the king */
@@ -838,6 +862,7 @@ int sr_game_term_rows(const SrGame *g) {
       while (sr_game_story_option(g, n, &k)) n++;
       return n;
     }
+    case SR_TAB_PEOPLE: return g->chess.saga.ask.open ? 2 : 0; /* help, refuse */
     default: return 0;
   }
 }
@@ -877,6 +902,11 @@ void sr_game_term_input(SrGame *g, const SrActionState *a) {
       else if (r == SR_ERR_DENIED)
         sr_game_toast(g, "You are not ready for that one.");
     }
+  }
+  if (g->term_tab == SR_TAB_PEOPLE && rows > 0 && a->pressed[SR_ACT_INTERACT]) {
+    SrResult r = sr_game_answer_ask(g, SR_MIN(g->term_sel, rows - 1) == 0);
+    if (r == SR_ERR_DENIED) sr_game_toast(g, "You don't have the cred.");
+    g->term_sel = 0;
   }
   if (g->term_tab == SR_TAB_STORY && rows > 0 && a->pressed[SR_ACT_INTERACT]) {
     int kind = 0;

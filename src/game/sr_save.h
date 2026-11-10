@@ -7,7 +7,7 @@
 #include "core/sr_mem.h"
 #include "game/sr_game.h"
 
-#define SR_SAVE_VERSION   5u
+#define SR_SAVE_VERSION   6u
 #define SR_AUTOSAVE_SLOTS 3
 #define SR_MANUAL_SLOTS   3
 
@@ -28,7 +28,8 @@ typedef enum SrSection {
   SR_SEC_MARKET = 12,
   SR_SEC_NEWS = 13,
   SR_SEC_STORY = 14,
-  SR_SEC_CAMPAIGN = 15 /* v5: the playability pass (blacklist, story log, costs, ...); older saves start it fresh */
+  SR_SEC_CAMPAIGN = 15, /* v5: the playability pass (blacklist, story log, costs, ...); older saves start it fresh */
+  SR_SEC_SAGA = 16      /* v6: seasons and the people around the player; older saves start with an empty saga */
 } SrSection;
 
 typedef struct SrSaveInfo {

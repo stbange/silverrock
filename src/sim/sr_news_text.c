@@ -70,6 +70,12 @@ static const char *const k_break_in[3][3] = {
     {"Break-in at %1 site in %2", "Security scare at %1 in %2", "Intruders slip into %1 site in %2"},
     {"%1 tightens security in %2", "Attempted intrusion at %1 in %2 foiled", "%1 reviews guards after %2 incident"},
     {"%1 fortress in %2 not so tight", "Ghosts walk through %1 in %2", "%1 guards asleep in %2 again"}};
+/* When nobody knows whose place it was: [event 0 sabotage, 1 theft, 2 break-in, 3 failed][variant]; %2 place. */
+static const char *const k_anon[4][3] = {
+    {"Sabotage cripples a site in %2", "Unmarked facility in %2 hit by saboteurs", "Blast halts work at a %2 site"},
+    {"Data stolen in %2 break-in", "Breach confirmed at an unnamed %2 office", "Thieves raid offices in %2"},
+    {"Break-in at an unmarked site in %2", "Security scare in %2", "Intruders slip into a %2 site"},
+    {"Intruders repelled in %2", "Guards drive off a raid in %2", "Failed raid on a %2 site"}};
 static const char *const k_failed[3] = {"Intruders repelled at %1 in %2", "Guards drive off raid on %1 in %2",
                                         "Failed raid on %1 site in %2"};
 static const char *const k_gang_war[3] = {"Gang war in %2: %3 push out %1", "%3 seize %2 from %1",
@@ -93,28 +99,36 @@ void sr_news_event_headline(char *out, size_t cap, const SrCity *c, const SrWorl
   const char *place = e->district >= 0 && e->district < c->district_count ? c->districts[e->district].name : "the city";
   const char *who = perp >= 0 && perp < c->factions.count ? c->factions.f[perp].name : "";
   char base[96];
-  switch (e->type) {
-    case SR_EV_SABOTAGE: sr_headline(base, sizeof base, k_sabotage[voice][v], sub, place, who); break;
-    case SR_EV_THEFT: sr_headline(base, sizeof base, k_theft[voice][v], sub, place, who); break;
-    case SR_EV_JOB_DONE: sr_headline(base, sizeof base, k_break_in[voice][v], sub, place, who); break;
-    case SR_EV_JOB_FAILED: sr_headline(base, sizeof base, k_failed[v], sub, place, who); break;
-    case SR_EV_GUNFIRE:
-      if (subject < 0 && perp >= 0)
-        sr_headline(base, sizeof base, k_new_gang[v], sub, place, who);
-      else if (subject >= 0 && perp >= 0)
-        sr_headline(base, sizeof base, k_gang_war[v], sub, place, who);
-      else
-        sr_headline(base, sizeof base, k_shots[v], sub, place, who);
-      break;
-    case SR_EV_KILLING:
-      if (subject >= 0 && e->building < 0)
-        sr_headline(base, sizeof base, k_gang_end[v], sub, place, who);
-      else
-        sr_headline(base, sizeof base, k_killing[v], sub, place, who);
-      break;
-    case SR_EV_BLACKOUT: sr_headline(base, sizeof base, k_blackout[v], sub, place, who); break;
-    default: sr_headline(base, sizeof base, "%1", e->text, place, who); break;
-  }
+  bool anon = subject < 0 || subject >= c->factions.count;
+  int anon_kind = e->type == SR_EV_SABOTAGE ? 0 : e->type == SR_EV_THEFT ? 1 : e->type == SR_EV_JOB_DONE ? 2 : 3;
+  bool site_event =
+      e->type == SR_EV_SABOTAGE || e->type == SR_EV_THEFT || e->type == SR_EV_JOB_DONE || e->type == SR_EV_JOB_FAILED;
+  if (anon && site_event) { /* no owner to name: say what happened and where */
+    sr_headline(base, sizeof base, k_anon[anon_kind][v], sub, place, who);
+    sub = "a site";
+  } else
+    switch (e->type) {
+      case SR_EV_SABOTAGE: sr_headline(base, sizeof base, k_sabotage[voice][v], sub, place, who); break;
+      case SR_EV_THEFT: sr_headline(base, sizeof base, k_theft[voice][v], sub, place, who); break;
+      case SR_EV_JOB_DONE: sr_headline(base, sizeof base, k_break_in[voice][v], sub, place, who); break;
+      case SR_EV_JOB_FAILED: sr_headline(base, sizeof base, k_failed[v], sub, place, who); break;
+      case SR_EV_GUNFIRE:
+        if (subject < 0 && perp >= 0)
+          sr_headline(base, sizeof base, k_new_gang[v], sub, place, who);
+        else if (subject >= 0 && perp >= 0)
+          sr_headline(base, sizeof base, k_gang_war[v], sub, place, who);
+        else
+          sr_headline(base, sizeof base, k_shots[v], sub, place, who);
+        break;
+      case SR_EV_KILLING:
+        if (subject >= 0 && e->building < 0)
+          sr_headline(base, sizeof base, k_gang_end[v], sub, place, who);
+        else
+          sr_headline(base, sizeof base, k_killing[v], sub, place, who);
+        break;
+      case SR_EV_BLACKOUT: sr_headline(base, sizeof base, k_blackout[v], sub, place, who); break;
+      default: sr_headline(base, sizeof base, "%1", e->text, place, who); break;
+    }
   /* the culprit, as far as the evidence goes (gang news names the gangs already) */
   bool gang_news = e->type == SR_EV_GUNFIRE || e->type == SR_EV_KILLING;
   char tail[128];

@@ -118,6 +118,7 @@ void sr_chess_init(SrChess *ch, SrCity *c, uint64_t seed, int patron_choice, int
     if (c->factions.council[s].patron >= 0) add_link(ch, c->factions.council[s].patron, s, SR_LINK_BRIBES);
   sr_market_init(&ch->market, ch, c);
   sr_story_init(&ch->story, c, seed, patron_choice);
+  sr_saga_init(&ch->saga);
   ch->camp.hunter = -1;
   ch->camp.king = -1;
   ch->story.act_started = now;
@@ -813,6 +814,7 @@ void sr_chess_tick(SrChess *ch, SrCity *c, SrPopulation *pop, SrEventLog *log, i
   sr_market_tick(ch, c);
   sr_news_tick(ch, c, log, now);
   sr_story_tick(ch, c, pop, now);
+  sr_saga_tick(ch, c, pop, now);
 }
 
 void sr_chess_advance(SrChess *ch, SrCity *c, SrPopulation *pop, SrEventLog *log, int64_t now) {

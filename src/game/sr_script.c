@@ -571,17 +571,30 @@ static bool terminal_job(SrGame *g, SrStrategy s, int max_tier) {
 }
 
 /* The story bot's choices; true when it took a job. */
+/* How a test player answers a personal request: mostly yes when it can afford it; a loyal player
+ * gives the handler the name, the others protect the reporter. Varies by seed and request. */
+void sr_bot_answer_ask(SrGame *g, bool loyal) {
+  const SrSaga *sg = &g->chess.saga;
+  if (!sg->ask.open) return;
+  uint64_t h = sr_mix64(sr_hash_combine(g->seed, (uint64_t)sg->asks * 31u + sg->ask.type));
+  bool yes = h % 100u < 70u && (int64_t)sg->ask.cost * 3 <= g->player.cred;
+  if (sg->ask.type == SR_ASK_NAME) yes = loyal && h % 100u < 60u;
+  if (sg->ask.type == SR_ASK_RANSOM) yes = (int64_t)sg->ask.cost <= g->player.cred && h % 100u < 80u;
+  if (sr_game_answer_ask(g, yes) != SR_OK) sr_game_answer_ask(g, false);
+}
+
 static bool story_bot(SrGame *g, int max_tier) {
   SrStory *st = &g->chess.story;
+  sr_bot_answer_ask(g, true);
   if (st->ending != SR_END_NONE) return false;
   if (st->offer_open && !st->retainer) sr_game_accept_retainer(g);
   /* a rival's offer is taken when the patron turned or trust is low */
   if (st->rival_offer >= 0 && (st->hostile >= 0 || st->trust < 25)) sr_game_accept_offer(g);
-  if (st->finale_ready) { /* endings vary by seed */
-    unsigned m = sr_story_endings(st);
+  if (st->finale_ready) { /* endings vary by seed and season */
+    unsigned m = sr_saga_endings(&g->chess);
     int n = 0;
     for (int e = SR_END_LOYAL; e <= SR_END_SUNRISE; e++) n += (m >> e) & 1u;
-    int pick = (int)(g->seed % (uint64_t)SR_MAX(1, n));
+    int pick = (int)(sr_mix64(g->seed + g->chess.saga.season * 977u) % (uint64_t)SR_MAX(1, n));
     for (int e = SR_END_LOYAL; e <= SR_END_SUNRISE; e++)
       if (((m >> e) & 1u) && pick-- == 0) {
         sr_game_choose_ending(g, (SrEnding)e);

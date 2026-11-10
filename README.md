@@ -12,7 +12,8 @@ agenda.
 
 **Status:** milestones M0–M5 implemented (2026-11-06), followed by a playability pass, a pass on the city's atmosphere
 (2026-11-07), a pass on animation (2026-11-08) in-game help, guidance, navigation and a city map (2026-11-09,
-[screenshots](docs/screenshots/nav/)), and an inside for every building ([screenshots](docs/screenshots/interiors/)); see the [playtest notes](docs/reviews/playtest-2026-11-07-after.md),
+[screenshots](docs/screenshots/nav/)), an inside for every building ([screenshots](docs/screenshots/interiors/)), and a corporate game that never ends:
+seasons after each ending and people who ask, help, betray and die ([a year of test games](docs/reviews/playtest-stories-2026-11-10.md)); see the [playtest notes](docs/reviews/playtest-2026-11-07-after.md),
 the [visual review](docs/reviews/visuals-2026-11-07-after.md) and the
 [animation review](docs/reviews/animation-2026-11-08-after.md). You wake up in your apartment, walk a generated city at night
 among citizens, traffic and aerodynes, eat, sleep, pay (or miss) rent, move to a better place, ride the metro, buy
@@ -57,7 +58,7 @@ Then serve `build/web/` with any static web server and open `silverrock.html`.
 
 | Suite | Command |
 |---|---|
-| Unit tests (206 tests) | `./build/linux-gcc-debug/sr_tests` |
+| Unit tests (211 tests) | `./build/linux-gcc-debug/sr_tests` |
 | Platform and GL tests (needs a display or Xvfb) | `xvfb-run -a ./build/linux-gcc-debug/sr_platform_tests` |
 | Headless game scenarios | `ctest --test-dir build/linux-gcc-debug -R game_` |
 | World sweep / balance report | `./build/linux-gcc-debug/sr_headless --sweep 2000` / `--balance 20` |
@@ -103,6 +104,7 @@ and spec deltas (24 capabilities, 287 requirements, 496 scenarios). Implemented 
 | Animation | [`improve-animation`](openspec/changes/improve-animation) | retro-rendering, population-simulation, combat, player-life |
 | Navigation and guidance | [`add-navigation-guidance`](openspec/changes/add-navigation-guidance) | navigation, guidance |
 | Building interiors | [`add-building-interiors`](openspec/changes/add-building-interiors) | player-life, city-generation, retro-rendering, population-simulation |
+| Endless saga | [`add-endless-saga`](openspec/changes/add-endless-saga) | story-campaign, news-media, game-persistence |
 
 Validate the specs:
 

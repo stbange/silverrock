@@ -298,7 +298,7 @@ typedef struct SrStory {
 
 /* ---- campaign state added after M5 (its own save section; the M5 blobs stay unchanged) -------- */
 
-#define SR_TRUST_DEFECT 25 /* trust with a new patron after a defection */
+#define SR_TRUST_DEFECT 35 /* trust with a new patron after a defection */
 
 #define SR_MAX_SUSPECTS 8
 #define SR_STORY_LOG    32
@@ -355,6 +355,73 @@ typedef struct SrCampaign {
   int64_t ending_at;
 } SrCampaign;
 
+/* ---- the saga: seasons after the first ending, and the people around the player ---------------
+ * (its own save section from v6; older saves start with an empty saga) */
+
+#define SR_SAGA_HISTORY 8
+#define SR_INTERLUDE_S  (2 * SR_WEEK_S) /* between an ending and the next season */
+#define SR_ASK_OPEN_S   (4 * 86400)     /* a request waits this long for an answer */
+#define SR_BOND_CLOSE   60              /* a friend who will stand up for you */
+#define SR_BOND_FRIEND  35
+#define SR_BOND_COLD    (-15)
+#define SR_BOND_ENEMY   (-40) /* someone who will sell you out */
+
+/* What someone asks of the player. */
+typedef enum SrAskType {
+  SR_ASK_NONE,
+  SR_ASK_DEBT,   /* the neighbour is behind with a loan shark: money */
+  SR_ASK_BAIL,   /* the fixer was picked up: bail money */
+  SR_ASK_SOURCE, /* the journalist wants a leak from the patron's files */
+  SR_ASK_NAME,   /* the handler wants the journalist's name */
+  SR_ASK_TRUCE,  /* the rival runner offers to share a job */
+  SR_ASK_HIDE,   /* someone on the run needs a place to hide */
+  SR_ASK_DEEP,   /* the Ghost offers a look behind the board for a favour */
+  SR_ASK_LEASE,  /* the landlord is being squeezed and wants help buying the lease */
+  SR_ASK_RANSOM, /* someone close was taken: pay, or lose them */
+  SR_ASK_COUNT
+} SrAskType;
+
+enum SrTieFlags {
+  SR_TIE_CLOSE = 1,    /* told the player so */
+  SR_TIE_OWES = 2,     /* owes the player a favour */
+  SR_TIE_BETRAYED = 4, /* sold the player out (this generation) */
+  SR_TIE_TAKEN = 8,    /* held by a corporation */
+  SR_TIE_RANSOMED = 16 /* was taken once already: nobody is taken twice */
+};
+
+typedef struct SrAsk {
+  uint8_t type; /* SrAskType */
+  uint8_t role; /* who asks (SrCastRole) */
+  int8_t corp;  /* the corporation involved, -1 none */
+  bool open;
+  int32_t cost; /* cred a yes costs */
+  int64_t deadline;
+} SrAsk;
+
+typedef struct SrSaga {
+  uint8_t season;                   /* 0 the first campaign, then 1, 2, ... */
+  uint8_t endings[SR_SAGA_HISTORY]; /* how each finished season ended (ring by season) */
+  uint8_t scenarios[SR_SAGA_HISTORY];
+  int8_t kings[SR_SAGA_HISTORY]; /* who came out on top, -1 nobody */
+  int64_t season_started;
+  bool sun_seen;    /* a Sunrise ending happened: the Pall is gone for good */
+  uint8_t switches; /* patrons the player moved to this season (cooling off) */
+  /* the people */
+  int8_t bond[SR_CAST_COUNT];   /* -100..100 */
+  uint8_t flags[SR_CAST_COUNT]; /* SrTieFlags */
+  SrAsk ask;
+  uint8_t last_ask[3];           /* types of the last three requests (no repeats) */
+  int32_t ask_day[SR_ASK_COUNT]; /* day (+1) each kind of request was last made */
+  int64_t next_ask, next_perk, next_ransom;
+  int32_t refund; /* cred someone pays back (collected by the game) */
+  uint8_t refund_role;
+  int asks, helped, refused, betrayals, lost;
+  int64_t cash; /* the player's cred, set by the game before advancing */
+  /* lines said lately (hashes), so nobody repeats themselves */
+  uint32_t said[8];
+  uint8_t said_n;
+} SrSaga;
+
 /* ---- the whole corporate game ---------------------------------------------------------------- */
 
 typedef struct SrChess {
@@ -380,6 +447,7 @@ typedef struct SrChess {
   SrNewsDesk news;
   SrStory story;
   SrCampaign camp;
+  SrSaga saga;
   int32_t street_cred; /* the player's, set by the game before advancing */
   int ticks;
   int history_count;
@@ -543,5 +611,34 @@ void sr_story_cast_died(SrStory *s, SrCastRole r, int64_t now);
 /* Fills vacant cast roles whose successor is due. Returns roles filled. */
 int sr_story_succession(SrStory *s, uint64_t seed, int64_t now);
 bool sr_story_t4_allowed(const SrStory *s, int street_cred_tier);
+/* Starts an arc between two given factions (the saga's revenge and season openers). */
+int sr_story_arc_between(SrChess *ch, SrCity *c, const SrPopulation *pop, SrArcType t, int a, int b, int64_t now);
+/* The most hostile megacorp toward a (never a itself). */
+int sr_story_rival_of(const SrCity *c, int a, uint64_t key);
+
+/* ---- saga (sr_saga.c) ---- */
+void sr_saga_init(SrSaga *g);
+/* Each strategic tick: the next season after an ending, requests, favours, betrayals, losses. */
+void sr_saga_tick(SrChess *ch, SrCity *c, const SrPopulation *pop, int64_t now);
+/* An ending was chosen: the people around the player take it personally. */
+void sr_saga_ending(SrChess *ch, const SrCity *c, SrEnding e, int64_t now);
+/* The player moved to another patron (hired after being dropped, or a defection). */
+void sr_saga_patron_changed(SrChess *ch, int64_t now);
+/* Answers the open request; yes costs ask.cost (the caller has charged it). False when none is open. */
+bool sr_saga_answer(SrChess *ch, SrCity *c, const SrPopulation *pop, bool yes, int64_t now);
+void sr_saga_bond(SrChess *ch, SrCastRole r, int delta);
+/* "ENEMY", "COLD", "NEUTRAL", "WARM", "FRIEND", "CLOSE". */
+const char *sr_saga_standing(int bond);
+/* The title of a season by how the one before ended ("The Reckoning", ...); season 0: "The Climb". */
+const char *sr_saga_season_name(const SrSaga *g);
+/* One line for the open request's yes option, e.g. "Pay Ana Reyes's debt (1200 cred)"; "" when none. */
+void sr_saga_ask_label(const SrChess *ch, char *out, size_t cap);
+const char *sr_saga_ask_name(SrAskType t);
+/* Endings open at the climax: the story's own (sr_story_endings) plus the ones friends open. */
+unsigned sr_saga_endings(const SrChess *ch);
+/* True when a line with this text was said lately (and remembers it when not). */
+bool sr_saga_said(SrChess *ch, const char *text);
+/* The same check without remembering the line. */
+bool sr_saga_was_said(const SrChess *ch, const char *text);
 
 #endif

@@ -1,6 +1,7 @@
 /* Headless runner: scenario scripts, seed sweeps and autoplayer balance runs without a window,
  * GPU or audio device. Exit status 0 means every expectation held. */
 #include "core/sr_log.h"
+#include "core/sr_rng.h"
 #include "game/sr_script.h"
 
 #include <stdio.h>
@@ -184,9 +185,17 @@ static void pt_event(FILE *ev, int day, const char *what) {
   if (ev) fprintf(ev, "d%03d %s\n", day, what);
 }
 
-static void pt_story_choices(SrGame *g, FILE *ev, int day) {
+static void pt_story_choices(SrGame *g, FILE *ev, int day, bool loyal) {
   SrStory *st = &g->chess.story;
   char buf[160];
+  if (g->chess.saga.ask.open) { /* someone asks for something */
+    char label[96];
+    sr_saga_ask_label(&g->chess, label, sizeof label);
+    int helped = g->chess.saga.helped;
+    sr_bot_answer_ask(g, loyal);
+    snprintf(buf, sizeof buf, "asked: %s -> %s", label, g->chess.saga.helped > helped ? "yes" : "no");
+    pt_event(ev, day, buf);
+  }
   if (st->offer_open && !st->retainer && st->patron >= 0) {
     sr_game_accept_retainer(g);
     snprintf(buf, sizeof buf, "accepted the retainer from %s", g->city->factions.f[st->patron].name);
@@ -198,10 +207,10 @@ static void pt_story_choices(SrGame *g, FILE *ev, int day) {
     pt_event(ev, day, buf);
   }
   if (st->finale_ready && st->ending == SR_END_NONE) {
-    unsigned m = sr_story_endings(st);
+    unsigned m = sr_saga_endings(&g->chess);
     int n = 0;
     for (int e = SR_END_LOYAL; e <= SR_END_SUNRISE; e++) n += (m >> e) & 1u;
-    int pick = (int)(g->seed % (uint64_t)(n > 0 ? n : 1));
+    int pick = (int)(sr_mix64(g->seed + g->chess.saga.season * 977u) % (uint64_t)(n > 0 ? n : 1));
     for (int e = SR_END_LOYAL; e <= SR_END_SUNRISE; e++)
       if (((m >> e) & 1u) && pick-- == 0) {
         sr_game_choose_ending(g, (SrEnding)e);
@@ -241,7 +250,7 @@ static Playtest playtest(uint64_t seed, const char *strategy, int bg, int weeks,
   r.cash_min = r.cash_max = g->player.cred;
   int last_tier = -1, last_act = 0, last_jobs = 0, msgs0 = g->player.msg_count;
   bool was_evicted = false;
-  int hostile_seen = -1;
+  int hostile_seen = -1, log_seen = g->chess.camp.log_count;
   for (int day = 1; day <= weeks * 7; day++) {
     int tier = sr_max_tier_for_cred(g->player.prog.street_cred);
     if (sr_story_t4_allowed(&g->chess.story, sr_cred_tier(g->player.prog.street_cred))) tier = 4;
@@ -249,7 +258,13 @@ static Playtest playtest(uint64_t seed, const char *strategy, int bg, int weeks,
     r.jobs += st.jobs_done;
     r.failed += st.jobs_failed;
     if (st.jobs_done == 0) r.idle_days++;
-    pt_story_choices(g, ev, day);
+    pt_story_choices(g, ev, day, s == SR_STRAT_STORY);
+    /* what the story log recorded since yesterday: seasons, people, arcs */
+    for (int i = g->chess.camp.log_count - log_seen - 1; i >= 0 && ev; i--) {
+      const SrLogEntry *le = sr_story_log_entry(&g->chess, i);
+      if (le) fprintf(ev, "d%03d * %s\n", day, le->text);
+    }
+    log_seen = g->chess.camp.log_count;
     if (g->player.cred < 0) g->player.cred = 0;
     int gday = (int)(sr_game_time(g) / 86400) + 1; /* game days: an autoplayed day can run past midnight */
     /* events */
@@ -267,18 +282,18 @@ static Playtest playtest(uint64_t seed, const char *strategy, int bg, int weeks,
       char b[64];
       snprintf(b, sizeof b, "act %d begins (trust %d)", sy->act, sy->trust);
       pt_event(ev, day, b);
-      if (sy->act == SR_ACT_KNIGHT) {
+      if (sy->act == SR_ACT_KNIGHT && r.act2_day < 0) { /* the first season's */
         r.act2_day = (int)(sy->act_started / 86400) + 1;
         r.act2_cash = (int)SR_MIN(g->player.cred, 2000000000LL);
         r.act2_costs = sr_game_rent_for(g) + sr_game_weekly_upkeep(g) + 350; /* rent, upkeep, food */
       }
       if (sy->act == SR_ACT_PROMOTION) {
-        r.act3_day = (int)(sy->act_started / 86400) + 1; /* exact: when the act began */
+        if (r.act3_day < 0) r.act3_day = (int)(sy->act_started / 86400) + 1; /* exact: when the act first began */
         snprintf(b, sizeof b, "scenario %s around %s", sr_scenario_name((SrScenario)sy->scenario),
                  sy->scenario_corp >= 0 ? c->factions.f[sy->scenario_corp].name : "-");
         pt_event(ev, day, b);
       }
-      if (sy->act == SR_ACT_EPILOGUE) r.ending_day = (int)(g->chess.camp.ending_at / 86400) + 1;
+      if (sy->act == SR_ACT_EPILOGUE && r.ending_day < 0) r.ending_day = (int)(g->chess.camp.ending_at / 86400) + 1;
       last_act = sy->act;
     }
     if (sy->hostile != hostile_seen && sy->hostile >= 0) {
@@ -324,6 +339,16 @@ static Playtest playtest(uint64_t seed, const char *strategy, int bg, int weeks,
   r.cash_end = g->player.cred;
   r.defections = g->chess.camp.defections;
   r.ending = g->chess.story.ending;
+  if (r.ending == SR_END_NONE && g->chess.saga.season > 0) /* between endings: the last season's */
+    r.ending = g->chess.saga.endings[(g->chess.saga.season - 1) % SR_SAGA_HISTORY];
+  if (ev) {
+    fprintf(ev, "-- people (season %d: %s)\n", g->chess.saga.season + 1, sr_saga_season_name(&g->chess.saga));
+    for (int i = 0; i < SR_CAST_COUNT; i++)
+      fprintf(ev, "  %-12s %-20s %s (%d)\n", sr_cast_role_name((SrCastRole)i), g->chess.story.cast[i].name,
+              sr_saga_standing(g->chess.saga.bond[i]), g->chess.saga.bond[i]);
+    fprintf(ev, "  helped %d, refused %d, sold out by %d, lost %d\n", g->chess.saga.helped, g->chess.saga.refused,
+            g->chess.saga.betrayals, g->chess.saga.lost);
+  }
   r.act = g->chess.story.act;
   if (ev) {
     fprintf(ev, "-- story history (last %d notable outcomes)\n", SR_MAX_HISTORY);
@@ -370,7 +395,8 @@ static int playtests(int n, const char *dir, const char *bands) {
     int bg = k % SR_BG_COUNT;
     char name[64];
     snprintf(name, sizeof name, "run%02d_%s", k + 1, strat);
-    Playtest r = playtest(seed, strat, bg, 26, dir, name);
+    const char *wk = getenv("SR_PLAYTEST_WEEKS"); /* longer runs for reading the later seasons */
+    Playtest r = playtest(seed, strat, bg, wk && atoi(wk) > 0 ? atoi(wk) : 26, dir, name);
     printf("%d,%llu,%s,%s,%d,%d,%d,%d,%d,%d,%d,%d,%s,%d,%d,%d,%d,%lld,%lld,%lld,%d,%d,%d,%d\n", k + 1,
            (unsigned long long)seed, strat, sr_background_def(bg)->name, r.first_tier_day[1], r.first_tier_day[2],
            r.first_tier_day[3], r.first_tier_day[4], r.retainer_day, r.act2_day, r.act3_day, r.ending_day,

@@ -571,7 +571,16 @@ static void terminal_story(SrUi *ui, const SrGame *g, float x, float y, float li
   static const char *const acts[] = {"PROLOGUE", "ACT I: PAWN", "ACT II: KNIGHT", "ACT III: PROMOTION", "EPILOGUE"};
   char buf[160];
   const SrStory *st = &g->chess.story;
-  sr_ui_text(ui, x, y, acts[SR_MIN(st->act, 4)], k_amber, s);
+  const SrSaga *sg = &g->chess.saga;
+  if (sg->season > 0 || st->act == SR_ACT_EPILOGUE) { /* the game goes on: seasons */
+    snprintf(buf, sizeof buf, "SEASON %d: %s  //  %s", sg->season + 1, sr_saga_season_name(sg),
+             st->act == SR_ACT_EPILOGUE ? "INTERLUDE" : acts[SR_MIN(st->act, 4)]);
+    for (char *q = buf; *q; q++)
+      if (*q >= 'a' && *q <= 'z') *q = (char)(*q - 32);
+    text_fit(ui, x, y, buf, k_amber, s, (float)ui->w - 2 * x);
+  } else {
+    sr_ui_text(ui, x, y, acts[SR_MIN(st->act, 4)], k_amber, s);
+  }
   y += line;
   if (st->retainer && st->patron >= 0) {
     snprintf(buf, sizeof buf, "PATRON %s  HANDLER %s  TRUST %d", g->city->factions.f[st->patron].name,
@@ -585,7 +594,8 @@ static void terminal_story(SrUi *ui, const SrGame *g, float x, float y, float li
     y += line;
   }
   if (st->ending != SR_END_NONE) {
-    snprintf(buf, sizeof buf, "ENDING: %s. THE CITY GOES ON.", sr_ending_name((SrEnding)st->ending));
+    snprintf(buf, sizeof buf, "ENDING: %s. THE BOARD RESETS; A NEW SEASON STARTS IN TWO WEEKS.",
+             sr_ending_name((SrEnding)st->ending));
     sr_ui_text(ui, x, y, buf, k_cyan, s);
     y += line;
   }
@@ -597,8 +607,8 @@ static void terminal_story(SrUi *ui, const SrGame *g, float x, float y, float li
   }
   if (st->act >= SR_ACT_KNIGHT && st->ending == SR_END_NONE) {
     text_fit(ui, x, y,
-             "ENDINGS: LOYAL (STAY), DEFECTOR (SWITCH ONCE), BURN (LEAK OR BE HUNTED), KINGMAKER, SUNRISE (?)", k_cyan,
-             s, (float)ui->w - 2 * x);
+             "ENDINGS: LOYAL (STAY), DEFECTOR (SWITCH), BURN (LEAKS, A REPORTER FRIEND), KINGMAKER, SUNRISE (?)",
+             k_cyan, s, (float)ui->w - 2 * x);
     y += line;
   }
   int options = 0, okind = 0;
@@ -622,8 +632,56 @@ static void terminal_story(SrUi *ui, const SrGame *g, float x, float y, float li
   }
 }
 
+/* The people around the player: who they are, where they stand, what they want. */
+static void terminal_people(SrUi *ui, const SrGame *g, float x, float y, float line, int s) {
+  static const char *const roles[SR_CAST_COUNT] = {"LANDLORD", "FIXER",    "NEIGHBOUR", "HANDLER",
+                                                   "RIVAL",    "REPORTER", "THE GHOST"};
+  const SrStory *st = &g->chess.story;
+  const SrSaga *sg = &g->chess.saga;
+  char buf[200];
+  float w = (float)ui->w - 2 * x;
+  for (int r = 0; r < SR_CAST_COUNT; r++) {
+    const char *state = sr_saga_standing(sg->bond[r]);
+    const char *note = !st->cast[r].alive                 ? "GONE"
+                       : (sg->flags[r] & SR_TIE_TAKEN)    ? "TAKEN - THEY WANT A RANSOM"
+                       : (sg->flags[r] & SR_TIE_BETRAYED) ? "SOLD YOU OUT"
+                       : (sg->flags[r] & SR_TIE_OWES)     ? "OWES YOU"
+                                                          : "";
+    snprintf(buf, sizeof buf, "%-9s %-20s %-8s %s", roles[r], st->cast[r].alive ? st->cast[r].name : "-",
+             st->cast[r].alive ? state : "", note);
+    SrColor col = !st->cast[r].alive || sg->bond[r] <= SR_BOND_ENEMY ? k_red
+                  : sg->bond[r] >= SR_BOND_FRIEND                    ? k_cyan
+                                                                     : k_white;
+    text_fit(ui, x, y, buf, col, s, w);
+    y += line;
+  }
+  y += line * 0.5f;
+  snprintf(buf, sizeof buf, "HELPED %d  REFUSED %d  SOLD OUT BY %d  LOST %d", sg->helped, sg->refused, sg->betrayals,
+           sg->lost);
+  text_fit(ui, x, y, buf, k_amber, s, w);
+  y += line * 1.5f;
+  if (sg->ask.open) {
+    int64_t left = sg->ask.deadline - sr_game_time(g);
+    snprintf(buf, sizeof buf, "%s IS WAITING FOR AN ANSWER (%d H LEFT)", st->cast[sg->ask.role % SR_CAST_COUNT].name,
+             (int)SR_MAX(0, left / 3600));
+    for (char *q = buf; *q; q++)
+      if (*q >= 'a' && *q <= 'z') *q = (char)(*q - 32);
+    text_fit(ui, x, y, buf, k_amber, s, w);
+    y += line;
+    char label[96];
+    sr_saga_ask_label(&g->chess, label, sizeof label);
+    snprintf(buf, sizeof buf, "%s %s", g->term_sel == 0 ? ">" : " ", label);
+    text_fit(ui, x, y, buf, g->term_sel == 0 ? k_cyan : k_white, s, w);
+    y += line;
+    snprintf(buf, sizeof buf, "%s Refuse", g->term_sel == 1 ? ">" : " ");
+    text_fit(ui, x, y, buf, g->term_sel == 1 ? k_cyan : k_white, s, w);
+  } else {
+    text_fit(ui, x, y, "NOBODY IS ASKING FOR ANYTHING. THAT NEVER LASTS.", k_white, s, w);
+  }
+}
+
 static void terminal(SrUi *ui, const SrGame *g) {
-  static const char *const tabs[SR_TAB_COUNT] = {"HOME", "JOBS", "NEWS", "MARKET", "BOARD", "STORY"};
+  static const char *const tabs[SR_TAB_COUNT] = {"HOME", "JOBS", "NEWS", "MARKET", "BOARD", "STORY", "PEOPLE"};
   int s = ui->scale;
   float m = 10.0f * (float)s, line = 10.0f * (float)s;
   sr_ui_rect(ui, m, m, (float)ui->w - 2 * m, (float)ui->h - 2 * m, (SrColor){4, 14, 8, 235});
@@ -646,12 +704,14 @@ static void terminal(SrUi *ui, const SrGame *g) {
     case SR_TAB_MARKET: terminal_market(ui, g, x, y, line, s); break;
     case SR_TAB_BOARD: terminal_board(ui, g, x, y, line, s); break;
     case SR_TAB_STORY: terminal_story(ui, g, x, y, line, s); break;
+    case SR_TAB_PEOPLE: terminal_people(ui, g, x, y, line, s); break;
     default: terminal_home(ui, g, x, y, line, s); break;
   }
   const char *hint = g->term_tab == SR_TAB_JOBS
                          ? "LEFT/RIGHT TABS  UP/DOWN CHOOSE  [E] ACCEPT  [R] ABANDON  [ESC] CLOSE"
                      : g->term_tab == SR_TAB_MARKET ? "LEFT/RIGHT TABS  [E] BUY 10  [R] SELL 10  [ESC] CLOSE"
-                     : g->term_tab == SR_TAB_STORY  ? "LEFT/RIGHT TABS  UP/DOWN CHOOSE  [E] CONFIRM  [ESC] CLOSE"
+                     : g->term_tab == SR_TAB_STORY || g->term_tab == SR_TAB_PEOPLE
+                         ? "LEFT/RIGHT TABS  UP/DOWN CHOOSE  [E] CONFIRM  [ESC] CLOSE"
                      : g->term_tab == SR_TAB_HOME && g->site.active && g->site.in.apartment
                          ? "LEFT/RIGHT TABS  [E] APARTMENTS  [ESC] CLOSE"
                          : "LEFT/RIGHT TABS  [ESC] CLOSE";
